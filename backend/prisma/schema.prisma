@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Farmer {
+  id            Int      @id @default(autoincrement())
+  walletAddress String?  @unique
+  qrCode        String?  @unique
+  pinHash       String?
+  phoneNumber   String?
+  nationalId    String?
+  deposits      GrainDeposit[]
+  loans         Loan[]
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Agent {
+  id             Int      @id @default(autoincrement())
+  name           String
+  email          String   @unique
+  walletAddress  String?  @unique
+  location       String?
+  isActive       Boolean  @default(true)
+  commissionRate Decimal  @default(0.05)
+  deposits       GrainDeposit[]
+}
+
+model Pool {
+  id        Int      @id @default(autoincrement())
+  address   String   @unique
+  grainType String
+  apr       Decimal  @default(0)
+  liquidity Decimal  @default(0)
+  loans     Loan[]
+}
+
+model GrainDeposit {
+  id              Int      @id @default(autoincrement())
+  farmer          Farmer   @relation(fields: [farmerId], references: [id])
+  farmerId        Int
+  agent           Agent    @relation(fields: [agentId], references: [id])
+  agentId         Int
+  grainType       String
+  weightKg        Decimal
+  qualityGrade    String?
+  moisturePercent Decimal?
+  tokensMinted    Decimal   @default(0)
+  hederaTxId      String?
+  depositedAt     DateTime  @default(now())
+}
+
+model Loan {
+  id               Int      @id @default(autoincrement())
+  farmer           Farmer   @relation(fields: [farmerId], references: [id])
+  farmerId         Int
+  pool             Pool     @relation(fields: [poolId], references: [id])
+  poolId           Int
+  amount           Decimal
+  collateralTokens Decimal   @default(0)
+  interestRate     Decimal   @default(0)
+  status           String    @default("active")
+  createdAt        DateTime  @default(now())
+  repaidAt         DateTime?
+}
+
+model TxLog {
+  id        Int      @id @default(autoincrement())
+  kind      String
+  ref       String
+  entity    String?
+  meta      Json?
+  createdAt DateTime @default(now())
+}
