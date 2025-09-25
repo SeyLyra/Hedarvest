@@ -10,29 +10,29 @@ import {
   TokenId,
   AccountBalanceQuery,
   TokenInfoQuery,
-  TransactionReceipt,
-  TransactionResponse,
 } from '@hashgraph/sdk';
-import { env } from './env';
+import { ethers } from 'ethers';
+import { ContractService } from './contract.service';
+// Using process.env directly
 
 @Injectable()
 export class HederaService {
   private readonly logger = new Logger(HederaService.name);
   private client: Client;
 
-  constructor() {
+  constructor(private readonly contractService: ContractService) {
     this.initializeClient();
   }
 
   private initializeClient() {
     try {
-      const operatorId = AccountId.fromString(env.HEDERA_OPERATOR_ID);
-      const operatorKey = PrivateKey.fromString(env.HEDERA_OPERATOR_KEY);
+      const operatorId = AccountId.fromString(process.env.HEDERA_OPERATOR_ID!);
+      const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
 
-      this.client = Client.forName(env.HEDERA_NETWORK);
+      this.client = Client.forName(process.env.HEDERA_NETWORK! as any);
       this.client.setOperator(operatorId, operatorKey);
 
-      this.logger.log(`Hedera client initialized for ${env.HEDERA_NETWORK}`);
+      this.logger.log(`Hedera client initialized for ${process.env.HEDERA_NETWORK}`);
     } catch (error) {
       this.logger.error('Failed to initialize Hedera client:', error);
       throw new Error('Hedera client initialization failed');
@@ -257,5 +257,208 @@ export class HederaService {
     const operatorAccountId = this.client.operatorAccountId?.toString() || '';
     
     return this.transferHbar(operatorAccountId, agentAccountId, amount);
+  }
+
+  // ===================
+  // Contract Integration Methods
+  // ===================
+
+  async getAllDeployedPools(): Promise<string[]> {
+    try {
+      return await this.contractService.getAllPools();
+    } catch (error) {
+      this.logger.error('Failed to get deployed pools:', error);
+      throw new Error(`Failed to get deployed pools: ${error.message}`);
+    }
+  }
+
+  async getPoolInfo(grainType: string): Promise<{
+    grainType: string;
+    lendingToken: string;
+    collateralToken: string;
+    oracle: string;
+    baseLTV: number;
+    riskPremium: number;
+    debtCeiling: string;
+    protocolFee: number;
+    totalBorrows: string;
+    totalReserves: string;
+    availableLiquidity: string;
+    exchangeRate: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      return await this.contractService.getPoolInfo(poolAddress);
+    } catch (error) {
+      this.logger.error(`Failed to get pool info for ${grainType}:`, error);
+      throw new Error(`Failed to get pool info for ${grainType}: ${error.message}`);
+    }
+  }
+
+  async getPoolStats(grainType: string): Promise<{
+    availableLiquidity: string;
+    totalBorrows: string;
+    utilizationRate: number;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const balance = await this.contractService.getPoolBalance(poolAddress);
+      const totalLiquidity = BigInt(balance.availableLiquidity) + BigInt(balance.totalBorrows);
+      const utilizationRate = totalLiquidity > 0 
+        ? Number(BigInt(balance.totalBorrows) * 10000n / totalLiquidity) / 100 
+        : 0;
+
+      return {
+        availableLiquidity: balance.availableLiquidity,
+        totalBorrows: balance.totalBorrows,
+        utilizationRate
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get pool stats for ${grainType}:`, error);
+      throw new Error(`Failed to get pool stats for ${grainType}: ${error.message}`);
+    }
+  }
+
+  async getGrainPrice(grainType: string): Promise<string> {
+    try {
+       const oracleAddress = await this.contractService.getOracleAddress(grainType);
+      return await this.contractService.getPrice(oracleAddress);
+    } catch (error) {
+      this.logger.error(`Failed to get price for ${grainType}:`, error);
+      throw new Error(`Failed to get price for ${grainType}: ${error.message}`);
+    }
+  }
+
+  // Investor operations
+  async depositToPool(grainType: string, amount: string, investorAddress: string): Promise<{
+    transactionId: string;
+    contractTxHash: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const contractTxHash = await this.contractService.depositToPool(poolAddress, amount);
+      
+      // Log the operation in Hedera for audit trail
+      const operatorAccountId = this.client.operatorAccountId?.toString() || '';
+      
+      return {
+        transactionId: `pool-deposit-${Date.now()}`,
+        contractTxHash
+      };
+    } catch (error) {
+      this.logger.error(`Failed to deposit to ${grainType} pool:`, error);
+      throw new Error(`Failed to deposit to pool: ${error.message}`);
+    }
+  }
+
+  async withdrawFromPool(grainType: string, shares: string, investorAddress: string): Promise<{
+    transactionId: string;
+    contractTxHash: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const contractTxHash = await this.contractService.withdrawFromPool(poolAddress, shares);
+      
+      return {
+        transactionId: `pool-withdraw-${Date.now()}`,
+        contractTxHash
+      };
+    } catch (error) {
+      this.logger.error(`Failed to withdraw from ${grainType} pool:`, error);
+      throw new Error(`Failed to withdraw from pool: ${error.message}`);
+    }
+  }
+
+  // Farmer operations
+  async depositGrainCollateral(grainType: string, amount: string, farmerAddress: string): Promise<{
+    transactionId: string;
+    contractTxHash: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const contractTxHash = await this.contractService.depositCollateral(poolAddress, amount);
+      
+      return {
+        transactionId: `collateral-deposit-${Date.now()}`,
+        contractTxHash
+      };
+    } catch (error) {
+      this.logger.error(`Failed to deposit collateral for ${grainType}:`, error);
+      throw new Error(`Failed to deposit collateral: ${error.message}`);
+    }
+  }
+
+  async createFarmerLoan(grainType: string, farmerAddress: string, amount: string): Promise<{
+    transactionId: string;
+    contractTxHash: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const contractTxHash = await this.contractService.createLoan(poolAddress, farmerAddress, amount);
+      
+      return {
+        transactionId: `loan-create-${Date.now()}`,
+        contractTxHash
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create loan for farmer ${farmerAddress}:`, error);
+      throw new Error(`Failed to create loan: ${error.message}`);
+    }
+  }
+
+  async repayFarmerLoan(grainType: string, amount: string, farmerAddress: string): Promise<{
+    transactionId: string;
+    contractTxHash: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const contractTxHash = await this.contractService.repayLoan(poolAddress, amount);
+      
+      return {
+        transactionId: `loan-repay-${Date.now()}`,
+        contractTxHash
+      };
+    } catch (error) {
+      this.logger.error(`Failed to repay loan for farmer ${farmerAddress}:`, error);
+      throw new Error(`Failed to repay loan: ${error.message}`);
+    }
+  }
+
+  async getFarmerPosition(grainType: string, farmerAddress: string): Promise<{
+    collateral: string;
+    borrows: string;
+    collateralValueUSD: string;
+    maxBorrow: string;
+  }> {
+    try {
+       const poolAddress = await this.contractService.getPoolAddress(grainType);
+      const pool = new ethers.Contract(poolAddress, [
+        'function borrows(address) external view returns (uint256)',
+        'function collateral(address) external view returns (uint256)',
+        'function baseLTV() external view returns (uint256)',
+        'function priceOracle() external view returns (address)'
+      ], this.contractService['wallet']);
+      
+      const [collateral, borrows, baseLTV, oracleAddress] = await Promise.all([
+        pool.collateral(farmerAddress),
+        pool.borrows(farmerAddress),
+        pool.baseLTV(),
+        pool.priceOracle()
+      ]);
+
+      const price = await this.contractService.getPrice(oracleAddress);
+      const collateralValueUSD = (BigInt(collateral) * BigInt(price)) / BigInt(10**18);
+      const maxBorrow = (collateralValueUSD * BigInt(baseLTV)) / 10000n;
+
+      return {
+        collateral: collateral.toString(),
+        borrows: borrows.toString(),
+        collateralValueUSD: collateralValueUSD.toString(),
+        maxBorrow: maxBorrow.toString()
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get farmer position for ${farmerAddress}:`, error);
+      throw new Error(`Failed to get farmer position: ${error.message}`);
+    }
   }
 }

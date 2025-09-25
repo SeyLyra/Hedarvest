@@ -4,11 +4,12 @@ import { PoolController } from './pool.controller';
 import { PrismaService } from '../lib/prisma';
 import { TransactionModule } from '../transaction/transaction.module';
 import { HederaService } from '../lib/hedera.service';
+import { ContractService } from '../lib/contract.service';
 
 @Module({
   imports: [TransactionModule],
   controllers: [PoolController],
-  providers: [PoolService, PrismaService, HederaService],
+  providers: [PoolService, PrismaService, HederaService, ContractService],
   exports: [PoolService],
 })
 export class PoolModule {}
