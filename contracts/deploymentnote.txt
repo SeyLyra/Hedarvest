@@ -1,0 +1,22 @@
+�� Deployment Summary
+Core Contracts:
+Lending Token (mUSD): 0x68E54BC9638178aC4ef60Bb4106D2120Af4c032c
+PoolFactory: 0xA4AA84072CCC623727bdC7cdC241E09346d7AAdA
+Grain Pools Created:
+Rice Pool: 0x4C3d163f637170C88167e86997a75b1b976EB1d2
+Collateral Token: 0x2b6d4B780498edC79E0b38A50AC14533C761E13d
+Oracle: 0x6FC92c9c4C93ae304453a96a6B30e61dbba76246
+Corn Pool: 0x85d58f29fEeFE8501f2939e4fB09b46a4a858F0A
+Collateral Token: 0x146FF7A220f2955aCC3767Ec1F8D51164CC132E6
+Oracle: 0x4a42339Fd1711732C2FeD27eBe9c7e660898EfFe
+Wheat Pool: 0xa54430d2E64BA270243A34B102910b87bF6Cbd59
+Collateral Token: 0xcCE98cB67eDf128Ca90127bA3716Cf11b70BA680
+Oracle: 0x0657BF034b074d907E58B3e985fFf7C495f22C90
+Soybean Pool: 0x9A2E23229E3088474f4bD1d0b58B7B92003958a9
+Collateral Token: 0x3A45fBe95A80e21A9a10f1a1191e46F4a590eBBD
+Oracle: 0xcB25D2D04ecE179d2d28332FdcECd441fA5e7642
+All contracts have been successfully deployed to the Hedera testnet with the following configuration:
+Base LTV: 60%
+Risk Premium: 2%
+Debt Ceiling: 1M tokens per pool
+Protocol Fee: 5%
