@@ -22,6 +22,9 @@ const Header = () => {
             <a href="#for-agents" className="text-muted-foreground hover:text-foreground transition-colors">
               For Agents
             </a>
+            <a href="/investor-dashboard" className="text-muted-foreground hover:text-foreground transition-colors">
+              Investor Dashboard
+            </a>
           </nav>
           
           {/* CTA Button */}
