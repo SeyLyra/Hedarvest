@@ -1,0 +1,69 @@
+import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import { FarmerService } from './farmer.service';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto } from './dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { OtpService } from '../lib/otp.service';
+import { IsString } from 'class-validator';
+
+@Controller('farmers')
+class RequestOtpBody { @IsString() memberNumber: string }
+class VerifyOtpBody { @IsString() memberNumber: string; @IsString() otpCode: string }
+
+export class FarmerController {
+  constructor(private readonly farmerService: FarmerService, private otpService: OtpService) {}
+
+  @Post('register')
+  async registerFarmer(@Body() registerFarmerDto: RegisterFarmerDto) {
+    return this.farmerService.registerFarmer(registerFarmerDto);
+  }
+
+  @Post('deposits')
+  @UseGuards(JwtAuthGuard)
+  async depositGrain(@Body() depositGrainDto: DepositGrainDto) {
+    return this.farmerService.depositGrain(depositGrainDto);
+  }
+
+
+  @Post('redeem')
+  @UseGuards(JwtAuthGuard)
+  async redeem(@Body() redeemDto: RedeemDto) {
+    return this.farmerService.redeemTokens(redeemDto);
+  }
+
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  async getProfile(@Request() req) {
+    return this.farmerService.getFarmerProfile(req.user.sub);
+  }
+
+  @Get('deposits')
+  @UseGuards(JwtAuthGuard)
+  async getDeposits(@Request() req) {
+    return this.farmerService.getFarmerDeposits(req.user.sub);
+  }
+
+  @Get('loans')
+  @UseGuards(JwtAuthGuard)
+  async getLoans(@Request() req) {
+    return this.farmerService.getFarmerLoans(req.user.sub);
+  }
+
+  @Get(':id')
+  async getFarmerById(@Param('id', ParseIntPipe) id: number) {
+    return this.farmerService.getFarmerProfile(id);
+  }
+
+  @Post('request-otp')
+  @UseGuards(JwtAuthGuard)
+  async requestOtp(@Body() body: RequestOtpBody) {
+    const farmer = await this.farmerService.getFarmerByMemberNumber(body.memberNumber);
+    return this.otpService.requestOtpForFarmer(farmer.id, farmer.phoneNumber);
+  }
+
+  @Post('verify-otp')
+  @UseGuards(JwtAuthGuard)
+  async verifyOtp(@Body() body: VerifyOtpBody) {
+    const farmer = await this.farmerService.getFarmerByMemberNumber(body.memberNumber);
+    return this.otpService.verifyOtpForFarmer(farmer.id, body.otpCode);
+  }
+}

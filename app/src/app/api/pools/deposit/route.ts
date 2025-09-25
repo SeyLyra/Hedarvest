@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { backersDepositSchema } from "@/lib/validations"
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -8,25 +10,37 @@ export async function POST(request: NextRequest) {
     // Validate the request body
     const validatedData = backersDepositSchema.parse(body)
     
-    // TODO: Implement actual pool deposit logic
-    // - Connect to Hedera network
-    // - Create pool deposit transaction
-    // - Store in database
-    // - Return transaction ID
-    
-    // Mock response for now
-    const mockTxId = `POOL_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    // Forward to backend API
+    const response = await fetch(`${BACKEND_URL}/pools/deposit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': request.headers.get('Authorization') || '',
+      },
+      body: JSON.stringify({
+        poolId: validatedData.poolId || 1, // Default to pool 1 if not specified
+        amount: validatedData.depositAmount,
+        depositorAddress: validatedData.walletAddress,
+      }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.message || 'Backend request failed')
+    }
+
+    const data = await response.json()
     
     return NextResponse.json({
       success: true,
       data: {
-        txId: mockTxId,
-        status: "pending",
+        txId: data.transactionId,
+        status: "completed",
         amount: validatedData.depositAmount,
-        poolId: "AGRICULTURAL_POOL_001",
+        poolId: data.pool.id,
         timestamp: new Date().toISOString(),
       },
-      txId: mockTxId,
+      txId: data.transactionId,
     })
   } catch (error) {
     console.error("Pool deposit error:", error)
@@ -39,7 +53,7 @@ export async function POST(request: NextRequest) {
     }
     
     return NextResponse.json(
-      { success: false, error: "Internal server error" },
+      { success: false, error: error instanceof Error ? error.message : "Internal server error" },
       { status: 500 }
     )
   }

@@ -9,11 +9,10 @@ datasource db {
 
 model Farmer {
   id            Int      @id @default(autoincrement())
-  walletAddress String?  @unique
-  qrCode        String?  @unique
-  pinHash       String?
-  phoneNumber   String?
-  nationalId    String?
+  memberNumber  String   @unique
+  phoneNumber   String
+  walletAddress String   @unique
+  otpRequest    OtpRequest?
   deposits      GrainDeposit[]
   loans         Loan[]
   createdAt     DateTime @default(now())
@@ -24,11 +23,14 @@ model Agent {
   id             Int      @id @default(autoincrement())
   name           String
   email          String   @unique
+  passwordHash   String
   walletAddress  String?  @unique
   location       String?
   isActive       Boolean  @default(true)
   commissionRate Decimal  @default(0.05)
   deposits       GrainDeposit[]
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model Pool {
@@ -76,4 +78,14 @@ model TxLog {
   entity    String?
   meta      Json?
   createdAt DateTime @default(now())
+}
+
+model OtpRequest {
+  id         Int      @id @default(autoincrement())
+  farmerId   Int      @unique
+  code       String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+
+  farmer     Farmer   @relation(fields: [farmerId], references: [id])
 }
