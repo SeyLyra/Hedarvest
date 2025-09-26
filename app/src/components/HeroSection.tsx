@@ -44,8 +44,8 @@ const HeroSection = () => {
               <ArrowRight className="w-5 h-5" />
             </Button>
             <Button variant="agent" size="lg" className="text-lg px-8 py-4" asChild>
-              <a href="/investor-dashboard">
-                📈 Investor Dashboard
+              <a href="/investor-login">
+                📈 Login as Investor
                 <ArrowRight className="w-5 h-5" />
               </a>
             </Button>

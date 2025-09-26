@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { TrendingUp, DollarSign, Activity, BarChart3 } from "lucide-react";
+import { WalletConnectButton } from "@/components/auth/WalletConnectButton";
+import { useWallet } from "@/hooks/useWallet";
 
 interface PoolData {
   id: number;
@@ -27,12 +29,44 @@ export default function InvestorDashboard() {
   const [amounts, setAmounts] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
   const [poolsLoading, setPoolsLoading] = useState(true);
-  const [userAddress, setUserAddress] = useState<string>("0x1234...abcd"); // Mock user address
+  
+  // Wallet integration
+  const { address, isConnected, authenticateWithBackend } = useWallet();
+  const [userAddress, setUserAddress] = useState<string>("");
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Update user address when wallet connects
+  useEffect(() => {
+    if (address) {
+      setUserAddress(address);
+    }
+  }, [address]);
+
+  // Authenticate with backend when wallet connects
+  useEffect(() => {
+    if (isConnected && address && !isAuthenticated) {
+      handleWalletAuthentication();
+    }
+  }, [isConnected, address, isAuthenticated]);
 
   // Fetch pools on component mount
   useEffect(() => {
     fetchPools();
   }, []);
+
+  const handleWalletAuthentication = async () => {
+    try {
+      const result = await authenticateWithBackend(API_BASE_URL);
+      if (result.success) {
+        setIsAuthenticated(true);
+        toast.success('Wallet authenticated successfully');
+      } else {
+        toast.error(`Authentication failed: ${result.error}`);
+      }
+    } catch (error) {
+      toast.error('Failed to authenticate wallet');
+    }
+  };
 
   const fetchPools = async () => {
     setPoolsLoading(true);
@@ -91,7 +125,7 @@ export default function InvestorDashboard() {
         throw new Error(error.message || 'Deposit failed');
       }
     } catch (error) {
-      toast.error(`Failed to deposit to ${grainType} pool: ${error.message}`);
+      toast.error(`Failed to deposit to ${grainType} pool: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -128,7 +162,7 @@ export default function InvestorDashboard() {
         throw new Error(error.message || 'Withdrawal failed');
       }
     } catch (error) {
-      toast.error(`Failed to withdraw from ${grainType} pool: ${error.message}`);
+      toast.error(`Failed to withdraw from ${grainType} pool: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
     }
@@ -157,13 +191,21 @@ export default function InvestorDashboard() {
               <h1 className="text-3xl font-bold text-foreground">Investor Dashboard</h1>
               <p className="text-muted-foreground mt-1">Manage your grain pool investments</p>
             </div>
-            <div className="flex gap-2">
-              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
-                Live API Integration
-              </Badge>
-              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                USDT Staking
-              </Badge>
+            <div className="flex items-center gap-4">
+              <div className="flex gap-2">
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  Live API Integration
+                </Badge>
+                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                  USDT Staking
+                </Badge>
+                {isAuthenticated && (
+                  <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                    Wallet Connected
+                  </Badge>
+                )}
+              </div>
+              <WalletConnectButton />
             </div>
           </div>
         </div>
@@ -171,24 +213,43 @@ export default function InvestorDashboard() {
 
       {/* Main Content */}
       <div className="w-full px-8 py-8">
-        {/* User Address Section */}
-        <div className="mb-8 bg-card rounded-xl p-6 border">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-2">Wallet Address</h3>
-              <p className="text-sm text-muted-foreground">Enter your wallet address for USDT staking</p>
-            </div>
-            <div className="flex-1 max-w-md ml-6">
-              <Input
-                type="text"
-                placeholder="Enter your wallet address (0x...)"
-                value={userAddress}
-                onChange={(e) => setUserAddress(e.target.value)}
-                className="font-mono text-sm"
-              />
+        {/* Wallet Connection Status */}
+        {isConnected ? (
+          <div className="mb-8 bg-card rounded-xl p-6 border">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Connected Wallet</h3>
+                <p className="text-sm text-muted-foreground">
+                  {isAuthenticated ? 'Wallet authenticated and ready for transactions' : 'Authenticating wallet...'}
+                </p>
+                <p className="text-sm font-mono text-muted-foreground mt-1">
+                  {userAddress}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {isAuthenticated ? (
+                  <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                    ✓ Authenticated
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
+                    Authenticating...
+                  </Badge>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-8 bg-card rounded-xl p-6 border">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-foreground mb-2">Connect Your Wallet</h3>
+                <p className="text-sm text-muted-foreground">Connect your MetaMask or HashPack wallet to start investing</p>
+              </div>
+              <WalletConnectButton />
+            </div>
+          </div>
+        )}
 
         {/* Overview Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
