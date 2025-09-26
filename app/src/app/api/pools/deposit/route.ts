@@ -18,9 +18,12 @@ export async function POST(request: NextRequest) {
         'Authorization': request.headers.get('Authorization') || '',
       },
       body: JSON.stringify({
-        poolId: validatedData.poolId || 1, // Default to pool 1 if not specified
+        poolId: 1, // Default to pool 1 if not specified
         amount: validatedData.depositAmount,
-        depositorAddress: validatedData.walletAddress,
+        investmentDuration: validatedData.investmentDuration,
+        riskTolerance: validatedData.riskTolerance,
+        bankAccount: validatedData.bankAccount,
+        taxId: validatedData.taxId,
       }),
     })
 

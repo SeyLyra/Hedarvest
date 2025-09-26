@@ -1,0 +1,345 @@
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../lib/prisma';
+import { ContractService } from '../lib/contract.service';
+import { HcsService } from '../hcs/hcs.service';
+import { CreatePoolDto, UpdatePoolDto } from './dto';
+
+@Injectable()
+export class PoolsService {
+  private readonly logger = new Logger(PoolsService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly contractService: ContractService,
+    private readonly hcsService: HcsService,
+  ) {}
+
+  async createPoolRecord(createPoolDto: CreatePoolDto) {
+    try {
+      const pool = await this.prisma.pool.create({
+        data: {
+          grainType: createPoolDto.grainType,
+          poolAddress: createPoolDto.poolAddress,
+          oracleAddress: createPoolDto.oracleAddress,
+          lendingTokenAddress: createPoolDto.lendingTokenAddress,
+          baseLtv: createPoolDto.baseLtv,
+          riskPremium: createPoolDto.riskPremium,
+          debtCeiling: BigInt(createPoolDto.debtCeiling),
+          protocolFee: createPoolDto.protocolFee,
+        },
+      });
+
+      this.logger.log(`Created pool record for ${createPoolDto.grainType}: ${pool.id}`);
+
+      // Publish HCS event for pool creation
+      try {
+        await this.hcsService.publishEvent('PoolCreated', {
+          poolId: pool.id,
+          grainType: pool.grainType,
+          poolAddress: pool.poolAddress,
+          oracleAddress: pool.oracleAddress,
+          lendingTokenAddress: pool.lendingTokenAddress,
+          baseLtv: pool.baseLtv.toString(),
+          riskPremium: pool.riskPremium.toString(),
+          debtCeiling: pool.debtCeiling.toString(),
+          protocolFee: pool.protocolFee.toString(),
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for pool creation:', hcsError);
+      }
+
+      return pool;
+    } catch (error) {
+      this.logger.error('Failed to create pool record:', error);
+      throw new Error(`Failed to create pool: ${error.message}`);
+    }
+  }
+
+  async getAllPools() {
+    try {
+      const pools = await this.prisma.pool.findMany({
+        include: {
+          loans: {
+            where: { status: 'active' },
+            select: { amount: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      // Calculate derived fields
+      return pools.map(pool => ({
+        id: pool.id,
+        grainType: pool.grainType,
+        poolAddress: pool.poolAddress,
+        oracleAddress: pool.oracleAddress,
+        lendingTokenAddress: pool.lendingTokenAddress,
+        baseLtv: pool.baseLtv.toString(),
+        riskPremium: pool.riskPremium.toString(),
+        debtCeiling: pool.debtCeiling.toString(),
+        protocolFee: pool.protocolFee.toString(),
+        apr: pool.apr.toString(),
+        liquidity: pool.liquidity.toString(),
+        totalBorrows: pool.totalBorrows.toString(),
+        totalReserves: pool.totalReserves.toString(),
+        utilizationRate: pool.utilizationRate.toString(),
+        isActive: pool.isActive,
+        activeLoans: pool.loans.length,
+        createdAt: pool.createdAt,
+        updatedAt: pool.updatedAt,
+      }));
+    } catch (error) {
+      this.logger.error('Failed to fetch pools:', error);
+      throw new Error('Failed to fetch pools');
+    }
+  }
+
+  async getPoolByGrain(grainType: string) {
+    try {
+      const pool = await this.prisma.pool.findUnique({
+        where: { grainType },
+        include: {
+          loans: {
+            where: { status: 'active' },
+            include: { farmer: true },
+          },
+        },
+      });
+
+      if (!pool) {
+        throw new NotFoundException(`Pool not found for grain type: ${grainType}`);
+      }
+
+      return {
+        id: pool.id,
+        grainType: pool.grainType,
+        poolAddress: pool.poolAddress,
+        oracleAddress: pool.oracleAddress,
+        lendingTokenAddress: pool.lendingTokenAddress,
+        baseLtv: pool.baseLtv.toString(),
+        riskPremium: pool.riskPremium.toString(),
+        debtCeiling: pool.debtCeiling.toString(),
+        protocolFee: pool.protocolFee.toString(),
+        apr: pool.apr.toString(),
+        liquidity: pool.liquidity.toString(),
+        totalBorrows: pool.totalBorrows.toString(),
+        totalReserves: pool.totalReserves.toString(),
+        utilizationRate: pool.utilizationRate.toString(),
+        isActive: pool.isActive,
+        loans: pool.loans,
+        createdAt: pool.createdAt,
+        updatedAt: pool.updatedAt,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(`Failed to fetch pool by grain type ${grainType}:`, error);
+      throw new Error('Failed to fetch pool');
+    }
+  }
+
+  async getPoolById(id: number) {
+    try {
+      const pool = await this.prisma.pool.findUnique({
+        where: { id },
+        include: {
+          loans: {
+            include: { farmer: true },
+          },
+        },
+      });
+
+      if (!pool) {
+        throw new NotFoundException(`Pool not found with id: ${id}`);
+      }
+
+      return pool;
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      this.logger.error(`Failed to fetch pool ${id}:`, error);
+      throw new Error('Failed to fetch pool');
+    }
+  }
+
+  async updatePool(id: number, updatePoolDto: UpdatePoolDto) {
+    try {
+      const updateData: any = { ...updatePoolDto };
+      if (updatePoolDto.debtCeiling) {
+        updateData.debtCeiling = BigInt(updatePoolDto.debtCeiling);
+      }
+      
+      const pool = await this.prisma.pool.update({
+        where: { id },
+        data: updateData,
+      });
+
+      this.logger.log(`Updated pool ${id}`);
+
+      // Publish HCS event for pool update
+      try {
+        await this.hcsService.publishEvent('PoolUpdated', {
+          poolId: pool.id,
+          grainType: pool.grainType,
+          changes: updatePoolDto,
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for pool update:', hcsError);
+      }
+
+      return pool;
+    } catch (error) {
+      this.logger.error(`Failed to update pool ${id}:`, error);
+      throw new Error('Failed to update pool');
+    }
+  }
+
+  async syncFromFactory() {
+    this.logger.log('Starting sync from PoolFactory contract...');
+    
+    try {
+      // Get all pools from the factory contract
+      const factoryPools = await this.contractService.getAllPoolsFromFactory();
+      this.logger.log(`Found ${factoryPools.length} pools in factory contract`);
+
+      const syncResults = {
+        created: 0,
+        updated: 0,
+        errors: 0,
+      };
+
+      for (const factoryPool of factoryPools) {
+        try {
+          // Check if pool already exists in database
+          const existingPool = await this.prisma.pool.findUnique({
+            where: { poolAddress: factoryPool.poolAddress },
+          });
+
+          if (existingPool) {
+            // Update existing pool with latest contract data
+            await this.prisma.pool.update({
+              where: { id: existingPool.id },
+              data: {
+                oracleAddress: factoryPool.oracleAddress,
+                lendingTokenAddress: factoryPool.lendingTokenAddress,
+                baseLtv: factoryPool.baseLtv,
+                riskPremium: factoryPool.riskPremium,
+                debtCeiling: BigInt(factoryPool.debtCeiling),
+                protocolFee: factoryPool.protocolFee,
+                liquidity: factoryPool.availableLiquidity,
+                totalBorrows: factoryPool.totalBorrows,
+                totalReserves: factoryPool.totalReserves,
+                utilizationRate: factoryPool.utilizationRate,
+                updatedAt: new Date(),
+              },
+            });
+            syncResults.updated++;
+            this.logger.log(`Updated pool: ${factoryPool.grainType}`);
+          } else {
+            // Create new pool record
+            await this.createPoolRecord({
+              grainType: factoryPool.grainType,
+              poolAddress: factoryPool.poolAddress,
+              oracleAddress: factoryPool.oracleAddress,
+              lendingTokenAddress: factoryPool.lendingTokenAddress,
+              baseLtv: factoryPool.baseLtv,
+              riskPremium: factoryPool.riskPremium,
+              debtCeiling: factoryPool.debtCeiling.toString(),
+              protocolFee: factoryPool.protocolFee,
+            });
+            syncResults.created++;
+            this.logger.log(`Created pool: ${factoryPool.grainType}`);
+          }
+        } catch (poolError) {
+          syncResults.errors++;
+          this.logger.error(`Failed to sync pool ${factoryPool.grainType}:`, poolError);
+        }
+      }
+
+      // Publish HCS event for sync completion
+      try {
+        await this.hcsService.publishEvent('PoolSyncCompleted', {
+          totalPools: factoryPools.length,
+          created: syncResults.created,
+          updated: syncResults.updated,
+          errors: syncResults.errors,
+          timestamp: new Date().toISOString(),
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for sync completion:', hcsError);
+      }
+
+      this.logger.log(`Factory sync completed: ${syncResults.created} created, ${syncResults.updated} updated, ${syncResults.errors} errors`);
+      return syncResults;
+
+    } catch (error) {
+      this.logger.error('Failed to sync from factory:', error);
+      throw new Error(`Factory sync failed: ${error.message}`);
+    }
+  }
+
+  async getPoolStats(grainType: string) {
+    try {
+      const pool = await this.getPoolByGrain(grainType);
+      
+      // Get additional stats from contract if available
+      let contractStats: any = null;
+      try {
+        contractStats = await this.contractService.getPoolInfo(pool.poolAddress);
+      } catch (contractError) {
+        this.logger.warn(`Failed to get contract stats for ${grainType}:`, contractError);
+      }
+
+      return {
+        ...pool,
+        contractStats,
+        calculatedUtilization: this.calculateUtilizationRate(
+          pool.liquidity,
+          pool.totalBorrows
+        ),
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get pool stats for ${grainType}:`, error);
+      throw error;
+    }
+  }
+
+  private calculateUtilizationRate(liquidity: string, totalBorrows: string): number {
+    const liquidityNum = parseFloat(liquidity);
+    const borrowsNum = parseFloat(totalBorrows);
+    const totalSupply = liquidityNum + borrowsNum;
+    
+    return totalSupply > 0 ? (borrowsNum / totalSupply) * 100 : 0;
+  }
+
+  async handlePoolCreatedEvent(eventData: any) {
+    this.logger.log('Handling PoolCreated HCS event:', eventData);
+    
+    try {
+      // Check if pool already exists
+      const existingPool = await this.prisma.pool.findUnique({
+        where: { poolAddress: eventData.poolAddress },
+      });
+
+      if (!existingPool) {
+        await this.createPoolRecord({
+          grainType: eventData.grainType,
+          poolAddress: eventData.poolAddress,
+          oracleAddress: eventData.oracleAddress,
+          lendingTokenAddress: eventData.lendingTokenAddress,
+          baseLtv: parseFloat(eventData.baseLtv),
+          riskPremium: parseFloat(eventData.riskPremium),
+          debtCeiling: eventData.debtCeiling,
+          protocolFee: parseFloat(eventData.protocolFee),
+        });
+        this.logger.log(`Created pool from HCS event: ${eventData.grainType}`);
+      } else {
+        this.logger.log(`Pool already exists for HCS event: ${eventData.grainType}`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to handle PoolCreated HCS event:', error);
+    }
+  }
+}

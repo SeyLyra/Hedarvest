@@ -33,14 +33,6 @@ model Agent {
   updatedAt      DateTime @updatedAt
 }
 
-model Pool {
-  id        Int      @id @default(autoincrement())
-  address   String   @unique
-  grainType String
-  apr       Decimal  @default(0)
-  liquidity Decimal  @default(0)
-  loans     Loan[]
-}
 
 model GrainDeposit {
   id              Int      @id @default(autoincrement())
@@ -61,8 +53,7 @@ model Loan {
   id               Int      @id @default(autoincrement())
   farmer           Farmer   @relation(fields: [farmerId], references: [id])
   farmerId         Int
-  pool             Pool     @relation(fields: [poolId], references: [id])
-  poolId           Int
+  grainType        String   // Store grain type instead of pool relation
   amount           Decimal
   collateralTokens Decimal   @default(0)
   interestRate     Decimal   @default(0)

@@ -18,13 +18,15 @@ export async function POST(request: NextRequest) {
         'Authorization': request.headers.get('Authorization') || '',
       },
       body: JSON.stringify({
-        agentId: validatedData.agentId || 1, // Default agent ID
-        grainType: validatedData.grainType,
+        agentId: 1, // Default agent ID
+        grainType: validatedData.cropType,
         quantity: validatedData.quantity,
         estimatedValue: validatedData.estimatedValue,
         qualityGrade: validatedData.qualityGrade,
         storageLocation: validatedData.storageLocation,
-        agentAddress: validatedData.walletAddress,
+        farmerId: validatedData.farmerId,
+        farmerName: validatedData.farmerName,
+        farmerContact: validatedData.farmerContact,
       }),
     })
 

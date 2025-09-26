@@ -3,7 +3,7 @@ import { ArrowRight, Wheat, Lock, DollarSign, TrendingUp, BarChart3, RefreshCw }
 const DualPathwaySection = () => {
   return (
     <section className="py-20 bg-muted/30">
-      <div className="container mx-auto px-6">
+      <div className="w-full px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-4">
             Dual Pathways to{" "}

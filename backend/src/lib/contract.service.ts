@@ -4,32 +4,32 @@ import { ethers } from 'ethers';
 
 // Simplified contract ABIs
 const POOL_FACTORY_ABI = [
-  'function getAllPools() external view returns (address[])',
-  'function grainToPool(string) external view returns (address)',
+  'function getAllPools() external view returns (tuple(address poolAddress, address oracleAddress, string grainType)[])',
+  'function getPool(string) external view returns (tuple(address poolAddress, address oracleAddress, string grainType))',
+  'function getPoolStats() external view returns (tuple(address pool, string grainType, uint256 totalAssets, uint256 totalBorrows, uint256 availableLiquidity)[])',
 ];
 
 const GRAIN_POOL_ABI = [
   'function grainType() external view returns (string)',
   'function lendingToken() external view returns (address)',
-  'function collateralToken() external view returns (address)',
   'function priceOracle() external view returns (address)',
   'function baseLTV() external view returns (uint256)',
   'function riskPremium() external view returns (uint256)',
   'function debtCeiling() external view returns (uint256)',
   'function protocolFee() external view returns (uint256)',
+  'function totalAssets() external view returns (uint256)',
   'function totalBorrows() external view returns (uint256)',
   'function totalReserves() external view returns (uint256)',
   'function availableLiquidity() external view returns (uint256)',
-  'function getPoolBalance() external view returns (uint256, uint256)',
-  'function getExchangeRate() external view returns (uint256)',
+  'function exchangeRate() external view returns (uint256)',
+  'function borrows(address) external view returns (uint256)',
+  'function collateral(address) external view returns (uint256)',
   'function deposit(uint256 amount) external',
   'function withdraw(uint256 shares) external',
   'function depositCollateral(uint256 amount) external',
-  'function withdrawCollateral(uint256 amount) external',
-  'function createLoan(address farmer, uint256 amount) external',
+  'function createLoan(uint256 amount) external',
   'function repayLoan(uint256 amount) external',
-  'function borrows(address) external view returns (uint256)',
-  'function collateral(address) external view returns (uint256)',
+  'function repayFullLoan() external',
 ];
 
 const MOCK_TOKEN_ABI = [
@@ -74,19 +74,134 @@ export class ContractService {
     }
   }
 
+
   // PoolFactory interactions
-  async getAllPools(): Promise<string[]> {
+  async getAllPools(): Promise<Array<{poolAddress: string, oracleAddress: string, grainType: string}>> {
+    try {
+      const factoryAddress = process.env.POOL_FACTORY_ADDRESS;
+       console.log("factoryAddress", factoryAddress);
+      this.logger.log(`Attempting to get pools from factory at: ${factoryAddress}`);
+      
+      if (!factoryAddress || factoryAddress.includes('XXXX')) {
+        this.logger.warn('POOL_FACTORY_ADDRESS not set or using placeholder value');
+        return [];
+      }
+      
+      const factory = new ethers.Contract(
+        factoryAddress,
+        POOL_FACTORY_ABI,
+        this.wallet
+      );
+      
+      const pools = await factory.getAllPools();
+      this.logger.log(`Successfully retrieved ${pools.length} pools from factory`);
+      return pools;
+    } catch (error) {
+      this.logger.error('Failed to get all pools:', error);
+      throw new Error(`Failed to get all pools: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  // New method: Get all pools with stats directly from factory
+  async getAllPoolsWithStats(): Promise<Array<{
+    poolAddress: string;
+    grainType: string;
+    totalAssets: string;
+    totalBorrows: string;
+    availableLiquidity: string;
+  }>> {
     try {
       const factory = new ethers.Contract(
         process.env.POOL_FACTORY_ADDRESS!,
         POOL_FACTORY_ABI,
         this.wallet
       );
-      return await factory.getAllPools();
+      
+      const poolStats = await factory.getPoolStats();
+      
+      return poolStats.map((stat: any) => ({
+        poolAddress: stat.pool,
+        grainType: stat.grainType,
+        totalAssets: stat.totalAssets.toString(),
+        totalBorrows: stat.totalBorrows.toString(),
+        availableLiquidity: stat.availableLiquidity.toString(),
+      }));
     } catch (error) {
-      this.logger.error('Failed to get all pools:', error);
-      throw new Error(`Failed to get all pools: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error('Failed to get pools with stats:', error);
+      throw new Error(`Failed to get pools with stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  // Enhanced method: Get all pools with full details
+  async getAllPoolsFromFactory(): Promise<Array<{
+    grainType: string;
+    poolAddress: string;
+    oracleAddress: string;
+    lendingTokenAddress: string;
+    baseLtv: number;
+    riskPremium: number;
+    debtCeiling: string;
+    protocolFee: number;
+    availableLiquidity: string;
+    totalBorrows: string;
+    totalReserves: string;
+    utilizationRate: number;
+  }>> {
+    try {
+      const poolInfos = await this.getAllPools();
+      this.logger.log(`Fetching details for ${poolInfos.length} pools from blockchain`);
+      
+      const pools: any[] = [];
+      for (const poolInfo of poolInfos) {
+        try {
+          // Handle both array and object formats
+          const poolAddress = Array.isArray(poolInfo) ? poolInfo[0] : poolInfo.poolAddress;
+          const oracleAddress = Array.isArray(poolInfo) ? poolInfo[1] : poolInfo.oracleAddress;
+          const grainType = Array.isArray(poolInfo) ? poolInfo[2] : poolInfo.grainType;
+          
+          this.logger.log(`Processing pool: ${grainType} at ${poolAddress}`);
+          
+          const detailedPoolInfo = await this.getPoolInfo(poolAddress);
+          const poolBalance = await this.getPoolBalance(poolAddress);
+          
+          const utilizationRate = this.calculateUtilization(
+            poolBalance.availableLiquidity,
+            poolBalance.totalBorrows
+          );
+          
+          pools.push({
+            grainType: grainType,
+            poolAddress: poolAddress,
+            oracleAddress: oracleAddress,
+            lendingTokenAddress: detailedPoolInfo.lendingToken,
+            baseLtv: detailedPoolInfo.baseLTV,
+            riskPremium: detailedPoolInfo.riskPremium,
+            debtCeiling: detailedPoolInfo.debtCeiling,
+            protocolFee: detailedPoolInfo.protocolFee,
+            availableLiquidity: poolBalance.availableLiquidity,
+            totalBorrows: poolBalance.totalBorrows,
+            totalReserves: detailedPoolInfo.totalReserves,
+            utilizationRate,
+          });
+        } catch (poolError) {
+          const poolAddress = Array.isArray(poolInfo) ? poolInfo[0] : poolInfo.poolAddress;
+          this.logger.warn(`Failed to get info for pool ${poolAddress}:`, poolError);
+        }
+      }
+      
+      return pools;
+    } catch (error) {
+      this.logger.error('Failed to get pools from factory:', error);
+      throw new Error(`Failed to get pools from factory: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  private calculateUtilization(availableLiquidity: string, totalBorrows: string): number {
+    const liquidity = parseFloat(availableLiquidity);
+    const borrows = parseFloat(totalBorrows);
+    const totalSupply = liquidity + borrows;
+    
+    return totalSupply > 0 ? Math.round((borrows / totalSupply) * 100) : 0;
   }
 
   async getPoolByGrainType(grainType: string): Promise<string> {
@@ -103,7 +218,7 @@ export class ContractService {
     }
   }
 
-  // GrainPool interactions
+  // Get pool info directly from blockchain
   async getPoolInfo(poolAddress: string): Promise<{
     grainType: string;
     lendingToken: string;
@@ -113,6 +228,7 @@ export class ContractService {
     riskPremium: number;
     debtCeiling: string;
     protocolFee: number;
+    totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
     availableLiquidity: string;
@@ -124,12 +240,12 @@ export class ContractService {
       const [
         grainType,
         lendingToken,
-        collateralToken,
         oracle,
         baseLTV,
         riskPremium,
         debtCeiling,
         protocolFee,
+        totalAssets,
         totalBorrows,
         totalReserves,
         availableLiquidity,
@@ -137,17 +253,20 @@ export class ContractService {
       ] = await Promise.all([
         pool.grainType(),
         pool.lendingToken(),
-        pool.collateralToken(),
         pool.priceOracle(),
         pool.baseLTV(),
         pool.riskPremium(),
         pool.debtCeiling(),
         pool.protocolFee(),
+        pool.totalAssets(),
         pool.totalBorrows(),
         pool.totalReserves(),
         pool.availableLiquidity(),
-        pool.getExchangeRate()
+        pool.exchangeRate()
       ]);
+
+      // For now, use the pool address as collateral token (since the contract doesn't have a separate collateral token)
+      const collateralToken = poolAddress; // This is a placeholder - in a real implementation, you'd get this from the contract
 
       return {
         grainType,
@@ -158,6 +277,7 @@ export class ContractService {
         riskPremium: Number(riskPremium),
         debtCeiling: debtCeiling.toString(),
         protocolFee: Number(protocolFee),
+        totalAssets: totalAssets.toString(),
         totalBorrows: totalBorrows.toString(),
         totalReserves: totalReserves.toString(),
         availableLiquidity: availableLiquidity.toString(),
@@ -169,13 +289,17 @@ export class ContractService {
     }
   }
 
+  // Get pool balance directly from blockchain
   async getPoolBalance(poolAddress: string): Promise<{
     availableLiquidity: string;
     totalBorrows: string;
   }> {
     try {
       const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
-      const [availableLiquidity, totalBorrows] = await pool.getPoolBalance();
+      const [availableLiquidity, totalBorrows] = await Promise.all([
+        pool.availableLiquidity(),
+        pool.totalBorrows()
+      ]);
       
       return {
         availableLiquidity: availableLiquidity.toString(),
@@ -186,6 +310,54 @@ export class ContractService {
       throw new Error(`Failed to get pool balance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
+
+  // New method: Get pool stats by grain type
+  async getPoolStatsByGrainType(grainType: string): Promise<{
+    grainType: string;
+    poolAddress: string;
+    oracleAddress: string;
+    lendingTokenAddress: string;
+    baseLtv: number;
+    riskPremium: number;
+    debtCeiling: string;
+    protocolFee: number;
+    availableLiquidity: string;
+    totalBorrows: string;
+    totalReserves: string;
+    utilizationRate: number;
+    exchangeRate: string;
+  }> {
+    try {
+      const poolAddress = await this.getPoolByGrainType(grainType);
+      const poolInfo = await this.getPoolInfo(poolAddress);
+      const poolBalance = await this.getPoolBalance(poolAddress);
+      
+      const utilizationRate = this.calculateUtilization(
+        poolBalance.availableLiquidity,
+        poolBalance.totalBorrows
+      );
+      
+      return {
+        grainType: poolInfo.grainType,
+        poolAddress,
+        oracleAddress: poolInfo.oracle,
+        lendingTokenAddress: poolInfo.lendingToken,
+        baseLtv: poolInfo.baseLTV,
+        riskPremium: poolInfo.riskPremium,
+        debtCeiling: poolInfo.debtCeiling,
+        protocolFee: poolInfo.protocolFee,
+        availableLiquidity: poolBalance.availableLiquidity,
+        totalBorrows: poolBalance.totalBorrows,
+        totalReserves: poolInfo.totalReserves,
+        utilizationRate,
+        exchangeRate: poolInfo.exchangeRate,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get pool stats for ${grainType}:`, error);
+      throw new Error(`Failed to get pool stats for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
 
   // Investor functions
   async depositToPool(poolAddress: string, amount: string): Promise<string> {

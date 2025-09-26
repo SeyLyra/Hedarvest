@@ -13,6 +13,7 @@ import {
 } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 import { ContractService } from './contract.service';
+import { HcsService } from '../hcs/hcs.service';
 // Using process.env directly
 
 @Injectable()
@@ -20,7 +21,10 @@ export class HederaService {
   private readonly logger = new Logger(HederaService.name);
   private client: Client;
 
-  constructor(private readonly contractService: ContractService) {
+  constructor(
+    private readonly contractService: ContractService,
+    private readonly hcsService: HcsService
+  ) {
     this.initializeClient();
   }
 
@@ -265,7 +269,8 @@ export class HederaService {
 
   async getAllDeployedPools(): Promise<string[]> {
     try {
-      return await this.contractService.getAllPools();
+      const pools = await this.contractService.getAllPools();
+      return pools.map(pool => pool.poolAddress);
     } catch (error) {
       this.logger.error('Failed to get deployed pools:', error);
       throw new Error(`Failed to get deployed pools: ${error.message}`);
@@ -341,6 +346,19 @@ export class HederaService {
       // Log the operation in Hedera for audit trail
       const operatorAccountId = this.client.operatorAccountId?.toString() || '';
       
+      // Publish HCS event
+      try {
+        await this.hcsService.publishInvestorDeposit({
+          poolAddress,
+          grainType,
+          amount: parseFloat(amount),
+          depositorAddress: investorAddress,
+          contractTxHash,
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for investor deposit:', hcsError);
+      }
+      
       return {
         transactionId: `pool-deposit-${Date.now()}`,
         contractTxHash
@@ -358,6 +376,20 @@ export class HederaService {
     try {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
       const contractTxHash = await this.contractService.withdrawFromPool(poolAddress, shares);
+      
+      // Publish HCS event
+      try {
+        await this.hcsService.publishInvestorWithdraw({
+          poolAddress,
+          grainType,
+          shares: parseFloat(shares),
+          depositorAddress: investorAddress,
+          contractTxHash,
+          withdrawalAmount: parseFloat(shares), // Simplified - should calculate based on exchange rate
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for investor withdraw:', hcsError);
+      }
       
       return {
         transactionId: `pool-withdraw-${Date.now()}`,
@@ -378,6 +410,19 @@ export class HederaService {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
       const contractTxHash = await this.contractService.depositCollateral(poolAddress, amount);
       
+      // Publish HCS event
+      try {
+        await this.hcsService.publishCollateralDeposited({
+          poolAddress,
+          grainType,
+          farmerAddress,
+          collateralAmount: parseFloat(amount),
+          contractTxHash,
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for collateral deposit:', hcsError);
+      }
+      
       return {
         transactionId: `collateral-deposit-${Date.now()}`,
         contractTxHash
@@ -396,6 +441,20 @@ export class HederaService {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
       const contractTxHash = await this.contractService.createLoan(poolAddress, farmerAddress, amount);
       
+      // Publish HCS event
+      try {
+        await this.hcsService.publishLoanCreated({
+          poolAddress,
+          grainType,
+          farmerAddress,
+          loanAmount: parseFloat(amount),
+          collateralAmount: 0, // Would need to get actual collateral amount
+          contractTxHash,
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for loan creation:', hcsError);
+      }
+      
       return {
         transactionId: `loan-create-${Date.now()}`,
         contractTxHash
@@ -413,6 +472,19 @@ export class HederaService {
     try {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
       const contractTxHash = await this.contractService.repayLoan(poolAddress, amount);
+      
+      // Publish HCS event
+      try {
+        await this.hcsService.publishLoanRepaid({
+          poolAddress,
+          grainType,
+          farmerAddress,
+          repaymentAmount: parseFloat(amount),
+          contractTxHash,
+        });
+      } catch (hcsError) {
+        this.logger.warn('Failed to publish HCS event for loan repayment:', hcsError);
+      }
       
       return {
         transactionId: `loan-repay-${Date.now()}`,

@@ -9,53 +9,49 @@ import { toast } from "sonner";
 import { TrendingUp, DollarSign, Activity, BarChart3 } from "lucide-react";
 
 interface PoolData {
+  id: number;
   grainType: string;
-  poolAddress: string;
+  address: string;
   price: number;
   availableLiquidity: string;
   totalBorrows: string;
   utilizationRate: number;
+  apr: number;
 }
 
-const mockPoolData: PoolData[] = [
-  {
-    grainType: "Rice",
-    poolAddress: process.env.NEXT_PUBLIC_RICE_POOL_ADDRESS || "0x1234...5678",
-    price: 200,
-    availableLiquidity: "100000",
-    totalBorrows: "40000",
-    utilizationRate: 40,
-  },
-  {
-    grainType: "Corn",
-    poolAddress: process.env.NEXT_PUBLIC_CORN_POOL_ADDRESS || "0x2345...6789",
-    price: 180,
-    availableLiquidity: "85000",
-    totalBorrows: "35000",
-    utilizationRate: 41,
-  },
-  {
-    grainType: "Wheat",
-    poolAddress: process.env.NEXT_PUBLIC_WHEAT_POOL_ADDRESS || "0x3456...7890",
-    price: 220,
-    availableLiquidity: "120000",
-    totalBorrows: "50000",
-    utilizationRate: 42,
-  },
-  {
-    grainType: "Soybean",
-    poolAddress: process.env.NEXT_PUBLIC_SOYBEAN_POOL_ADDRESS || "0x4567...8901",
-    price: 190,
-    availableLiquidity: "95000",
-    totalBorrows: "38000",
-    utilizationRate: 40,
-  },
-];
+// API base URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export default function InvestorDashboard() {
-  const [pools, setPools] = useState<PoolData[]>(mockPoolData);
+  const [pools, setPools] = useState<PoolData[]>([]);
   const [amounts, setAmounts] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [poolsLoading, setPoolsLoading] = useState(true);
+  const [userAddress, setUserAddress] = useState<string>("0x1234...abcd"); // Mock user address
+
+  // Fetch pools on component mount
+  useEffect(() => {
+    fetchPools();
+  }, []);
+
+  const fetchPools = async () => {
+    setPoolsLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/investor/pools`);
+      if (response.ok) {
+        const poolsData = await response.json();
+        setPools(poolsData);
+      } else {
+        console.error('Failed to fetch pools');
+        toast.error('Failed to load pools');
+      }
+    } catch (error) {
+      console.error('Error fetching pools:', error);
+      toast.error('Error loading pools');
+    } finally {
+      setPoolsLoading(false);
+    }
+  };
 
   const handleAmountChange = (grainType: string, value: string) => {
     setAmounts(prev => ({
@@ -73,24 +69,29 @@ export default function InvestorDashboard() {
 
     setIsLoading(true);
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simulate API call
-      const response = await fetch('/api/investor/deposit', {
+      const response = await fetch(`${API_BASE_URL}/investor/deposit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grainType, amount })
+        body: JSON.stringify({ 
+          grainType, 
+          amount: parseFloat(amount),
+          depositorAddress: userAddress
+        })
       });
 
       if (response.ok) {
-        toast.success(`Successfully deposited ${amount} tokens to ${grainType} pool`);
+        const result = await response.json();
+        toast.success(`Successfully deposited ${amount} USDT to ${grainType} pool`);
+        toast.info(`Transaction Hash: ${result.transactions?.contractTxHash || 'Processing...'}`);
         setAmounts(prev => ({ ...prev, [grainType]: "" }));
+        // Refresh pools to get updated liquidity
+        fetchPools();
       } else {
-        throw new Error('Deposit failed');
+        const error = await response.json();
+        throw new Error(error.message || 'Deposit failed');
       }
     } catch (error) {
-      toast.error(`Failed to deposit to ${grainType} pool`);
+      toast.error(`Failed to deposit to ${grainType} pool: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -105,24 +106,29 @@ export default function InvestorDashboard() {
 
     setIsLoading(true);
     try {
-      // Mock API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      // Simulate API call
-      const response = await fetch('/api/investor/withdraw', {
+      const response = await fetch(`${API_BASE_URL}/investor/withdraw`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ grainType, shares: amount })
+        body: JSON.stringify({ 
+          grainType, 
+          shares: parseFloat(amount),
+          depositorAddress: userAddress
+        })
       });
 
       if (response.ok) {
+        const result = await response.json();
         toast.success(`Successfully withdrew ${amount} shares from ${grainType} pool`);
+        toast.info(`Transaction Hash: ${result.transactions?.contractTxHash || 'Processing...'}`);
         setAmounts(prev => ({ ...prev, [grainType]: "" }));
+        // Refresh pools to get updated liquidity
+        fetchPools();
       } else {
-        throw new Error('Withdrawal failed');
+        const error = await response.json();
+        throw new Error(error.message || 'Withdrawal failed');
       }
     } catch (error) {
-      toast.error(`Failed to withdraw from ${grainType} pool`);
+      toast.error(`Failed to withdraw from ${grainType} pool: ${error.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -145,21 +151,45 @@ export default function InvestorDashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b bg-card">
-        <div className="container mx-auto px-6 py-6">
+        <div className="w-full px-8 py-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-foreground">Investor Dashboard</h1>
               <p className="text-muted-foreground mt-1">Manage your grain pool investments</p>
             </div>
-            <Badge variant="secondary" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-              Demo Mode (Mock API)
-            </Badge>
+            <div className="flex gap-2">
+              <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                Live API Integration
+              </Badge>
+              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                USDT Staking
+              </Badge>
+            </div>
           </div>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-6 py-8">
+      <div className="w-full px-8 py-8">
+        {/* User Address Section */}
+        <div className="mb-8 bg-card rounded-xl p-6 border">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">Wallet Address</h3>
+              <p className="text-sm text-muted-foreground">Enter your wallet address for USDT staking</p>
+            </div>
+            <div className="flex-1 max-w-md ml-6">
+              <Input
+                type="text"
+                placeholder="Enter your wallet address (0x...)"
+                value={userAddress}
+                onChange={(e) => setUserAddress(e.target.value)}
+                className="font-mono text-sm"
+              />
+            </div>
+          </div>
+        </div>
+
         {/* Overview Stats */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card>
@@ -219,7 +249,44 @@ export default function InvestorDashboard() {
 
         {/* Pool Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {pools.map((pool) => (
+          {poolsLoading ? (
+            // Loading skeletons
+            Array.from({ length: 4 }).map((_, index) => (
+              <Card key={index} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-6 bg-muted rounded w-3/4 mb-2"></div>
+                  <div className="h-4 bg-muted rounded w-1/2"></div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    {Array.from({ length: 4 }).map((_, i) => (
+                      <div key={i}>
+                        <div className="h-4 bg-muted rounded w-full mb-2"></div>
+                        <div className="h-6 bg-muted rounded w-2/3"></div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-3 pt-4 border-t">
+                    <div className="h-10 bg-muted rounded"></div>
+                    <div className="flex gap-3">
+                      <div className="h-10 bg-muted rounded flex-1"></div>
+                      <div className="h-10 bg-muted rounded flex-1"></div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
+          ) : pools.length === 0 ? (
+            // No pools message
+            <div className="col-span-full text-center py-12">
+              <p className="text-muted-foreground text-lg mb-4">No pools available</p>
+              <Button onClick={fetchPools} variant="outline">
+                Retry Loading
+              </Button>
+            </div>
+          ) : (
+            // Actual pools
+            pools.map((pool) => (
             <Card key={pool.grainType} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -238,7 +305,7 @@ export default function InvestorDashboard() {
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground font-mono">
-                  {pool.poolAddress}
+                  {pool.address}
                 </p>
               </CardHeader>
               
@@ -275,15 +342,20 @@ export default function InvestorDashboard() {
                 <div className="space-y-4 pt-4 border-t">
                   <div>
                     <label className="text-sm font-medium text-foreground mb-2 block">
-                      Amount
+                      Amount (USDT)
                     </label>
                     <Input
                       type="number"
-                      placeholder="Enter amount"
+                      placeholder="Enter USDT amount"
                       value={amounts[pool.grainType] || ""}
                       onChange={(e) => handleAmountChange(pool.grainType, e.target.value)}
                       className="mb-3"
+                      min="0"
+                      step="0.01"
                     />
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Stake USDT to earn {pool.apr}% APR in {pool.grainType} pool
+                    </p>
                   </div>
                   
                   <div className="flex gap-3">
@@ -292,7 +364,7 @@ export default function InvestorDashboard() {
                       disabled={isLoading || !amounts[pool.grainType]}
                       className="flex-1 bg-agricultural-green hover:bg-agricultural-green/90"
                     >
-                      {isLoading ? "Processing..." : "Deposit"}
+                      {isLoading ? "Processing..." : "Stake USDT"}
                     </Button>
                     <Button
                       onClick={() => handleWithdraw(pool.grainType)}
@@ -306,7 +378,8 @@ export default function InvestorDashboard() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>

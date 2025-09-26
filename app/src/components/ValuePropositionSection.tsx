@@ -4,7 +4,7 @@ import { TrendingUp, Users, Shield, Zap } from "lucide-react";
 const ValuePropositionSection = () => {
   return (
     <section className="py-20">
-      <div className="container mx-auto px-6">
+      <div className="w-full px-8">
         {/* Bridge Between Physical and Digital Assets */}
         <div className="text-center mb-20">
           <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">

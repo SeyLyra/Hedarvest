@@ -39,7 +39,7 @@ const CallToActionSection = () => {
 
   return (
     <section className="py-20 bg-gradient-to-br from-background to-muted/20">
-      <div className="container mx-auto px-6">
+      <div className="w-full px-8">
         <div className="text-center mb-12">
           <h2 className="text-4xl md:text-5xl font-bold text-foreground mb-6">
             Join the Real-World Asset{" "}
@@ -47,13 +47,13 @@ const CallToActionSection = () => {
               Revolution
             </span>
           </h2>
-          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+          <p className="text-xl text-muted-foreground w-full">
             Whether you're farming the land or farming yields, start building the future of agriculture finance today
           </p>
         </div>
         
-        {/* Primary CTAs */}
-        <div className="grid md:grid-cols-2 gap-8 max-w-2xl mx-auto mb-16">
+        {/* All CTAs in one grid */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full mb-16">
           <div className="bg-gradient-to-br from-agricultural-green/10 to-golden-accent/10 rounded-3xl p-8 text-center">
             <div className="text-6xl mb-6">🚜</div>
             <h3 className="text-2xl font-bold text-foreground mb-4">Start Farming</h3>
@@ -71,24 +71,20 @@ const CallToActionSection = () => {
               View Investment Dashboard
             </Button>
           </div>
-        </div>
-        
-        {/* Secondary CTAs */}
-        <div className="grid md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-          <div className="bg-card rounded-2xl p-6 shadow-card border border-border/50 text-center">
-            <div className="text-3xl mb-3">🤝</div>
-            <h4 className="text-lg font-semibold text-foreground mb-2">Become an Agent</h4>
-            <p className="text-sm text-muted-foreground mb-4">Earn fees for connecting farmers to liquidity</p>
-            <Button variant="accent" className="w-full">
+          <div className="bg-gradient-to-br from-agricultural-green/10 to-golden-accent/10 rounded-3xl p-8 text-center">
+            <div className="text-6xl mb-6">🤝</div>
+            <h3 className="text-2xl font-bold text-foreground mb-4">Become an Agent</h3>
+            <p className="text-muted-foreground mb-6">Earn fees for connecting farmers to liquidity</p>
+            <Button variant="accent" size="lg" className="w-full">
               Join Agent Network
             </Button>
           </div>
           
-          <div className="bg-card rounded-2xl p-6 shadow-card border border-border/50 text-center">
-            <div className="text-3xl mb-3">🌾</div>
-            <h4 className="text-lg font-semibold text-foreground mb-2">Access Verified Grain</h4>
-            <p className="text-sm text-muted-foreground mb-4">Buy from transparent, certified sources</p>
-            <Button variant="outline" className="w-full">
+          <div className="bg-gradient-to-br from-agricultural-green/10 to-golden-accent/10 rounded-3xl p-8 text-center">
+            <div className="text-6xl mb-6">🌾</div>
+            <h3 className="text-2xl font-bold text-foreground mb-4">Access Verified Grain</h3>
+            <p className="text-muted-foreground mb-6">Buy from transparent, certified sources</p>
+            <Button variant="outline" size="lg" className="w-full">
               Browse Marketplace
             </Button>
           </div>
@@ -96,7 +92,7 @@ const CallToActionSection = () => {
         
         {/* Bottom CTA */}
         <div className="text-center mt-16">
-          <div className="bg-gradient-to-r from-agricultural-green/10 via-trust-blue/10 to-golden-accent/10 rounded-2xl p-8 max-w-4xl mx-auto">
+            <div className="bg-gradient-to-r from-agricultural-green/10 via-trust-blue/10 to-golden-accent/10 rounded-2xl p-8 w-full">
             <h3 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
               Questions? We're here to help
             </h3>

@@ -18,11 +18,15 @@ export async function POST(request: NextRequest) {
         'Authorization': request.headers.get('Authorization') || '',
       },
       body: JSON.stringify({
-        farmerId: validatedData.farmerId || 1, // Default farmer ID
+        farmerId: 1, // Default farmer ID
         amount: validatedData.requestedAmount,
-        grainType: validatedData.grainType,
+        grainType: validatedData.cropType,
         expectedHarvestDate: validatedData.expectedHarvestDate,
-        farmerAddress: validatedData.walletAddress,
+        farmLocation: validatedData.farmLocation,
+        farmSize: validatedData.farmSize,
+        previousHarvests: validatedData.previousHarvests,
+        bankAccount: validatedData.bankAccount,
+        idNumber: validatedData.idNumber,
       }),
     })
 

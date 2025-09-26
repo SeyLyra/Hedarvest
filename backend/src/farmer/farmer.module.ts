@@ -7,9 +7,10 @@ import { HederaService } from '../lib/hedera.service';
 import { ContractService } from '../lib/contract.service';
 import { OtpService } from '../lib/otp.service';
 import { AuthModule } from '../auth/auth.module';
+import { HcsModule } from '../hcs/hcs.module';
 
 @Module({
-  imports: [TransactionModule, AuthModule],
+  imports: [TransactionModule, AuthModule, HcsModule],
   controllers: [FarmerController],
   providers: [FarmerService, PrismaService, HederaService, ContractService, OtpService],
   exports: [FarmerService],

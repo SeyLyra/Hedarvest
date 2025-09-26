@@ -17,7 +17,7 @@ export class PoolService {
 
     // Check if pool already exists
     const existingPool = await this.prisma.pool.findUnique({
-      where: { address },
+      where: { poolAddress: address },
     });
 
     if (existingPool) {
@@ -30,8 +30,10 @@ export class PoolService {
     // Create pool in database
     const pool = await this.prisma.pool.create({
       data: {
-        address: tokenResult.tokenId, // Use token ID as address
+        poolAddress: tokenResult.tokenId, // Use token ID as address
         grainType,
+        oracleAddress: 'placeholder-oracle',
+        lendingTokenAddress: 'placeholder-lending',
         apr: apr || 0,
         liquidity: liquidity || 0,
       },
@@ -40,7 +42,7 @@ export class PoolService {
     // Update pool with correct token ID
     const updatedPool = await this.prisma.pool.update({
       where: { id: pool.id },
-      data: { address: tokenResult.tokenId },
+      data: { poolAddress: tokenResult.tokenId },
     });
 
     // Log transaction
@@ -115,7 +117,7 @@ export class PoolService {
 
     return {
       poolId: pool.id,
-      address: pool.address,
+      address: pool.poolAddress,
       grainType: pool.grainType,
       apr: pool.apr,
       liquidity: pool.liquidity,
@@ -141,7 +143,7 @@ export class PoolService {
 
     // Process deposit on Hedera blockchain
     const hederaResult = await this.hederaService.processPoolDeposit(
-      pool.address, // Token ID
+      pool.poolAddress, // Token ID
       depositorAddress,
       amount,
     );

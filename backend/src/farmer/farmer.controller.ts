@@ -5,10 +5,10 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OtpService } from '../lib/otp.service';
 import { IsString } from 'class-validator';
 
-@Controller('farmers')
 class RequestOtpBody { @IsString() memberNumber: string }
 class VerifyOtpBody { @IsString() memberNumber: string; @IsString() otpCode: string }
 
+@Controller('farmers')
 export class FarmerController {
   constructor(private readonly farmerService: FarmerService, private otpService: OtpService) {}
 

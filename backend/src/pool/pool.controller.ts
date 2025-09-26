@@ -2,7 +2,7 @@ import { Controller, Get, Post, Body, Param, Put, ParseIntPipe } from '@nestjs/c
 import { PoolService } from './pool.service';
 import { CreatePoolDto, DepositPoolDto } from './dto';
 
-@Controller('pools')
+@Controller('pool-management')
 export class PoolController {
   constructor(private readonly poolService: PoolService) {}
 

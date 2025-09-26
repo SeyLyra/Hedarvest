@@ -6,9 +6,10 @@ import { TransactionModule } from '../transaction/transaction.module';
 import { HederaService } from '../lib/hedera.service';
 import { ContractService } from '../lib/contract.service';
 import { AuthModule } from '../auth/auth.module';
+import { HcsModule } from '../hcs/hcs.module';
 
 @Module({
-  imports: [TransactionModule, AuthModule],
+  imports: [TransactionModule, AuthModule, HcsModule],
   controllers: [AgentController],
   providers: [AgentService, PrismaService, HederaService, ContractService],
   exports: [AgentService],
