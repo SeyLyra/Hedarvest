@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { TrendingUp, DollarSign, Activity, BarChart3, LogOut } from "lucide-react";
+import { TrendingUp, DollarSign, Activity, BarChart3, LogOut, Loader2 } from "lucide-react";
 // Logo import removed - using public path instead
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { useWallet } from "@/hooks/useWallet";
@@ -19,6 +19,7 @@ import { OverviewSection } from "@/components/dashboard/OverviewSection";
 import { PoolsSection } from "@/components/dashboard/PoolsSection";
 import { PortfolioSection } from "@/components/dashboard/PortfolioSection";
 import { ActivitySection } from "@/components/dashboard/ActivitySection";
+import { useWalletBalance } from "@/hooks/useWalletBalance";
 
 interface PoolData {
   id: number;
@@ -51,6 +52,7 @@ export default function InvestorDashboard() {
   
   // Wallet integration
   const { address, isConnected, disconnect } = useWallet();
+  const { hbarBalanceFormatted, usdtBalanceFormatted, loading: balanceLoading } = useWalletBalance(address);
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const router = useRouter();
@@ -152,20 +154,17 @@ export default function InvestorDashboard() {
         const data = await response.json();
         // Transform data for overview section
         const overviewData = {
-          totalTVL: data.reduce((sum: number, pool: any) => sum + parseFloat(pool.availableLiquidity), 0),
+          totalTVL: data.reduce((sum: number, pool: any) => sum + parseFloat(pool.availableLiquidity || "0") + parseFloat(pool.totalBorrows || "0"), 0),
           totalDeposits: 0, // This would come from user's portfolio
-          totalBorrows: data.reduce((sum: number, pool: any) => sum + parseFloat(pool.totalBorrows), 0),
+          totalBorrows: data.reduce((sum: number, pool: any) => sum + parseFloat(pool.totalBorrows || "0"), 0),
           currentYield: data.reduce((sum: number, pool: any) => sum + pool.apr, 0) / data.length,
-          yieldChange: 2.5, // Mock data
+          yieldChange: 0, // No mock data - real yield change from portfolio
           poolAllocation: data.map((pool: any, index: number) => ({
             name: pool.grainType,
-            value: parseFloat(pool.availableLiquidity),
+            value: parseFloat(pool.availableLiquidity || "0") + parseFloat(pool.totalBorrows || "0"),
             color: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'][index % 4]
           })),
-          yieldHistory: Array.from({ length: 30 }, (_, i) => ({
-            date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            yield: 8.2 + Math.random() * 2
-          }))
+          yieldHistory: [] // No mock data - real yield history from portfolio
         };
         setOverviewData(overviewData);
       } else {
@@ -180,7 +179,7 @@ export default function InvestorDashboard() {
     setPortfolioLoading(true);
     try {
       // Use the connected wallet address for portfolio data
-      const walletAddress = address || '0xA235741Ca138Ee7C34fEEf59E52c4Ca4d3aB4E16'; // fallback to test address
+      const walletAddress = address; // Only use connected wallet address
       const response = await fetch(`${API_BASE_URL}/investor/portfolio/${walletAddress}`);
       if (response.ok) {
         const data = await response.json();
@@ -192,63 +191,17 @@ export default function InvestorDashboard() {
         };
         setPortfolioData(portfolioDataWithDefaults);
       } else {
-        // Mock portfolio data for now
-        const mockPortfolio = {
-          totalDeposits: 10000,
-          totalValue: 10500,
-          totalYield: 500,
-          averageAPR: 8.5,
-          riskScore: 3,
-          positions: [
-            {
-              grainType: 'Rice',
-              depositedAmount: 3000,
-              currentValue: 3150,
-              accruedYield: 150,
-              shares: 15.5,
-              apr: 8.2,
-              riskScore: 2
-            },
-            {
-              grainType: 'Corn',
-              depositedAmount: 4000,
-              currentValue: 4200,
-              accruedYield: 200,
-              shares: 20.8,
-              apr: 9.1,
-              riskScore: 4
-            },
-            {
-              grainType: 'Wheat',
-              depositedAmount: 2000,
-              currentValue: 2100,
-              accruedYield: 100,
-              shares: 10.4,
-              apr: 7.8,
-              riskScore: 3
-            },
-            {
-              grainType: 'Soybean',
-              depositedAmount: 1000,
-              currentValue: 1050,
-              accruedYield: 50,
-              shares: 5.2,
-              apr: 8.9,
-              riskScore: 3
-            }
-          ],
-          allocation: [
-            { name: 'Rice', value: 3150, color: '#10b981' },
-            { name: 'Corn', value: 4200, color: '#3b82f6' },
-            { name: 'Wheat', value: 2100, color: '#f59e0b' },
-            { name: 'Soybean', value: 1050, color: '#ef4444' }
-          ],
-          yieldHistory: Array.from({ length: 30 }, (_, i) => ({
-            date: new Date(Date.now() - (29 - i) * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            yield: 8.5 + Math.random() * 2
-          }))
-        };
-        setPortfolioData(mockPortfolio);
+        // No mock data - show empty portfolio if API fails
+        setPortfolioData({
+          totalDeposits: 0,
+          totalValue: 0,
+          totalYield: 0,
+          averageAPR: 0,
+          riskScore: 0,
+          positions: [],
+          allocation: [],
+          yieldHistory: []
+        });
       }
     } catch (error) {
     } finally {
@@ -482,6 +435,33 @@ export default function InvestorDashboard() {
                     Connected
                   </Badge>
                 )}
+                
+                {/* Wallet Balance */}
+       {isConnected && address && (
+         <div className="flex items-center gap-4 text-sm">
+           <div className="text-right">
+             <div className="text-xs text-muted-foreground mb-1">
+               Wallet: {address.slice(0, 6)}...{address.slice(-4)}
+             </div>
+             {balanceLoading ? (
+               <div className="flex items-center gap-2">
+                 <Loader2 className="w-4 h-4 animate-spin" />
+                 <span className="text-muted-foreground">Loading...</span>
+               </div>
+             ) : (
+               <>
+                 <div className="font-medium text-sm">
+                   {parseFloat(hbarBalanceFormatted).toFixed(4)} HBAR
+                 </div>
+                 <div className="font-medium text-sm">
+                   {parseFloat(usdtBalanceFormatted).toFixed(2)} USDT
+                 </div>
+               </>
+             )}
+           </div>
+         </div>
+       )}
+                
                 <Button
                   variant="outline"
                   size="sm"
@@ -504,41 +484,7 @@ export default function InvestorDashboard() {
 
         {/* Main Content */}
         <div className="w-full px-8 py-8">
-          {/* Wallet Connection Status */}
-          {isConnected ? (
-            <div className="mb-8 bg-card rounded-xl p-6 border">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-foreground mb-2">Connected Wallet</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {isAuthenticated ? 'Wallet authenticated and ready for transactions' : 'Authenticating wallet...'}
-                  </p>
-                  <p className="text-sm font-mono text-muted-foreground mt-1">
-                    {userAddress}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {isAuthenticated ? (
-                    <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-                      ✓ Authenticated
-                    </Badge>
-                  ) : !isAuthenticated ? (
-                    <div className="flex items-center gap-2">
-                      <Loader size="sm" />
-                      <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-                        Authenticating...
-                      </Badge>
-                    </div>
-                  ) : (
-                    <Badge variant="outline" className="bg-yellow-100 text-yellow-800 border-yellow-200">
-                      Authenticating...
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          ) : null}
-
+  
           {/* Active Section Content */}
           {renderActiveSection()}
         </div>

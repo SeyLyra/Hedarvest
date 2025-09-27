@@ -22,7 +22,7 @@ interface PoolData {
 }
 
 // API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
 
 export default function InvestorDashboard() {
   const [pools, setPools] = useState<PoolData[]>([]);
@@ -258,7 +258,9 @@ export default function InvestorDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Total TVL</p>
-                  <p className="text-2xl font-bold">$400K</p>
+                  <p className="text-2xl font-bold">
+                    {formatCurrency(pools.reduce((sum, pool) => sum + parseFloat(pool.availableLiquidity || "0") + parseFloat(pool.totalBorrows || "0"), 0).toString())}
+                  </p>
                 </div>
                 <DollarSign className="h-8 w-8 text-agricultural-green" />
               </div>
@@ -270,7 +272,9 @@ export default function InvestorDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Average APY</p>
-                  <p className="text-2xl font-bold">8.2%</p>
+                  <p className="text-2xl font-bold">
+                    {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.apr, 0) / pools.length).toFixed(1) : '0'}%
+                  </p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-trust-blue" />
               </div>
@@ -282,7 +286,7 @@ export default function InvestorDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Active Pools</p>
-                  <p className="text-2xl font-bold">4</p>
+                  <p className="text-2xl font-bold">{pools.length}</p>
                 </div>
                 <Activity className="h-8 w-8 text-golden-accent" />
               </div>
@@ -294,7 +298,9 @@ export default function InvestorDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">Avg Utilization</p>
-                  <p className="text-2xl font-bold">41%</p>
+                  <p className="text-2xl font-bold">
+                    {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.utilizationRate, 0) / pools.length).toFixed(0) : '0'}%
+                  </p>
                 </div>
                 <BarChart3 className="h-8 w-8 text-foreground" />
               </div>

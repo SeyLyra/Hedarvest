@@ -262,8 +262,10 @@ export class InvestorService {
       return formattedPools;
       
     } catch (error) {
-      this.logger.warn('Failed to get pools from blockchain, using mock data:', error);
-      return this.getMockPools();
+      this.logger.error('Failed to get pools from blockchain:', error);
+      // Return empty pools array instead of throwing error
+      // This prevents 500 errors when RPC is rate limited
+      return [];
     }
   }
 
@@ -325,55 +327,6 @@ export class InvestorService {
     return totalSupply > 0 ? Math.round((borrows / totalSupply) * 100) : 0;
   }
 
-  private getMockPools() {
-    this.logger.log('Using mock pool data with real contract addresses');
-    return [
-      {
-        id: 1,
-        grainType: "Rice",
-        address: process.env.RICE_POOL_ADDRESS || "0x84565EEAE3ddD89325bB5726C912b5478B8078Af",
-        price: 200,
-        availableLiquidity: "100000",
-        totalBorrows: "40000",
-        utilizationRate: 40,
-        apr: 8.5,
-        createdAt: new Date(),
-      },
-      {
-        id: 2,
-        grainType: "Corn", 
-        address: process.env.CORN_POOL_ADDRESS || "0xE7CAc2F391BA5f839D4145219BA50D5D5635aB56",
-        price: 180,
-        availableLiquidity: "85000",
-        totalBorrows: "35000",
-        utilizationRate: 41,
-        apr: 8.2,
-        createdAt: new Date(),
-      },
-      {
-        id: 3,
-        grainType: "Wheat",
-        address: process.env.WHEAT_POOL_ADDRESS || "0xcC54Dd59FCC4dF32bb1e5C2390aD8e2d35bD6aF8",
-        price: 220,
-        availableLiquidity: "120000",
-        totalBorrows: "50000",
-        utilizationRate: 42,
-        apr: 8.8,
-        createdAt: new Date(),
-      },
-      {
-        id: 4,
-        grainType: "Soybean",
-        address: process.env.SOYBEAN_POOL_ADDRESS || "0x6cbB47e0cE71Ad3a7ef0d42B4B6b735583BF60c7",
-        price: 190,
-        availableLiquidity: "95000",
-        totalBorrows: "38000", 
-        utilizationRate: 40,
-        apr: 8.0,
-        createdAt: new Date(),
-      },
-    ];
-  }
 
   async getPoolStatsByGrainType(grainType: string) {
     try {

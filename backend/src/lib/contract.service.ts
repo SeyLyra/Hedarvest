@@ -121,28 +121,43 @@ export class ContractService {
 
   // PoolFactory interactions
   async getAllPools(): Promise<Array<{poolAddress: string, oracleAddress: string, grainType: string}>> {
-    try {
-      const factoryAddress = process.env.POOL_FACTORY_ADDRESS;
-      this.logger.log(`Attempting to get pools from factory at: ${factoryAddress}`);
-      
-      if (!factoryAddress || factoryAddress.includes('XXXX')) {
-        this.logger.warn('POOL_FACTORY_ADDRESS not set or using placeholder value');
-        return [];
+    const maxRetries = 3;
+    const baseDelay = 1000; // 1 second
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const factoryAddress = process.env.POOL_FACTORY_ADDRESS;
+        this.logger.log(`Attempt ${attempt}: Attempting to get pools from factory at: ${factoryAddress}`);
+        
+        if (!factoryAddress || factoryAddress.includes('XXXX')) {
+          this.logger.warn('POOL_FACTORY_ADDRESS not set or using placeholder value');
+          return [];
+        }
+        
+        const factory = new ethers.Contract(
+          factoryAddress,
+          POOL_FACTORY_ABI,
+          this.wallet
+        );
+        
+        const pools = await factory.getAllPools();
+        this.logger.log(`Successfully retrieved ${pools.length} pools from factory`);
+        return pools;
+      } catch (error) {
+        this.logger.error(`Attempt ${attempt} failed to get all pools:`, error);
+        
+        if (attempt === maxRetries) {
+          throw new Error(`Failed to get all pools after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+        
+        // Wait before retrying with exponential backoff
+        const delay = baseDelay * Math.pow(2, attempt - 1);
+        this.logger.log(`Waiting ${delay}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
-      
-      const factory = new ethers.Contract(
-        factoryAddress,
-        POOL_FACTORY_ABI,
-        this.wallet
-      );
-      
-      const pools = await factory.getAllPools();
-      this.logger.log(`Successfully retrieved ${pools.length} pools from factory`);
-      return pools;
-    } catch (error) {
-      this.logger.error('Failed to get all pools:', error);
-      throw new Error(`Failed to get all pools: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+    
+    return [];
   }
 
   // New method: Get all pools with stats directly from factory

@@ -300,75 +300,7 @@ export default function InvestorLoginPage() {
                         />
                         
                         {/* Direct MetaMask Connection Button */}
-                        <LoadingButton
-                          onClick={async () => {
-                            console.log('=== DIRECT METAMASK CONNECTION ===');
-                            console.log('Current state before connection:', { isConnected, isConnecting, address, error });
-                            
-                            setIsDirectConnecting(true);
-                            try {
-                              console.log('Calling connectMetaMask from hook...');
-                              await connectMetaMask();
-                              console.log('connectMetaMask completed');
-                              
-                              // Check state after connection
-                              console.log('State after connection:', { isConnected, isConnecting, address, error });
-                              
-                              // Force redirect if connected
-                              if (isConnected && address) {
-                                console.log('Force redirecting after direct connection...');
-                                setTimeout(() => {
-                                  window.location.href = '/dashboard/investor';
-                                }, 500);
-                              }
-                            } catch (err) {
-                              console.error('Direct connection failed:', err);
-                            } finally {
-                              setIsDirectConnecting(false);
-                            }
-                          }}
-                          variant="outline"
-                          className="w-full"
-                          isLoading={isDirectConnecting}
-                          loadingText="Connecting to MetaMask..."
-                        >
-                          🦊 Connect MetaMask Direct
-                        </LoadingButton>
-                        
-                        {/* Debug Info */}
-                        <div className="mt-4 p-4 bg-muted/50 rounded-lg">
-                          <h4 className="font-semibold mb-2">Debug Info:</h4>
-                          <div className="text-sm space-y-1">
-                            <p>isConnected: {isConnected ? '✅' : '❌'}</p>
-                            <p>isConnecting: {isConnecting ? '🔄' : '⏸️'}</p>
-                            <p>address: {address || 'None'}</p>
-                            <p>error: {error || 'None'}</p>
-                            <p>isRedirecting: {isRedirecting ? '🔄' : '⏸️'}</p>
-                          </div>
-                          <div className="flex gap-2 mt-2">
-                            <Button
-                              onClick={() => {
-                                console.log('Manual redirect triggered');
-                                window.location.href = '/dashboard/investor';
-                              }}
-                              variant="outline"
-                              size="sm"
-                            >
-                              🔄 Manual Redirect
-                            </Button>
-                            <Button
-                              onClick={() => {
-                                console.log('Force refresh triggered');
-                                setForceUpdate(prev => prev + 1);
-                              }}
-                              variant="outline"
-                              size="sm"
-                            >
-                              🔄 Force Refresh
-                            </Button>
-                          </div>
-                        </div>
-
+            
                         <div className="text-center space-y-2">
                           <p className="text-sm text-muted-foreground">
                             By connecting, you agree to our Terms of Service
