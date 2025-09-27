@@ -6,12 +6,15 @@ import { ethers } from 'ethers';
 const POOL_FACTORY_ABI = [
   'function getAllPools() external view returns (tuple(address poolAddress, address oracleAddress, string grainType)[])',
   'function getPool(string) external view returns (tuple(address poolAddress, address oracleAddress, string grainType))',
-  'function getPoolStats() external view returns (tuple(address pool, string grainType, uint256 totalAssets, uint256 totalBorrows, uint256 availableLiquidity)[])',
+  'function getPoolStats() external view returns (tuple(address pool, string grainType, uint256 totalAssets, uint256 totalBorrows, uint256 availableLiquidity, uint256 utilizationRate, uint256 currentAPR)[])',
+  'function getPoolUtilizationRates() external view returns (address[] pools, uint256[] utilizationRates)',
+  'function getAllPoolAPRs() external view returns (address[] pools, uint256[] aprs)',
 ];
 
 const GRAIN_POOL_ABI = [
   'function grainType() external view returns (string)',
   'function lendingToken() external view returns (address)',
+  'function collateralToken() external view returns (address)',
   'function priceOracle() external view returns (address)',
   'function baseLTV() external view returns (uint256)',
   'function riskPremium() external view returns (uint256)',
@@ -29,7 +32,23 @@ const GRAIN_POOL_ABI = [
   'function depositCollateral(uint256 amount) external',
   'function createLoan(uint256 amount) external',
   'function repayLoan(uint256 amount) external',
-  'function repayFullLoan() external',
+  'function liquidate(address farmer) external',
+  'function getBorrowerPosition(address farmer) external view returns (uint256 depositedCollateral, uint256 collateralUSD, uint256 borrowed, uint256 maxBorrow, uint256 healthFactor)',
+  // New investor dashboard functions
+  'function getInvestorShares(address investor) external view returns (uint256)',
+  'function getInvestorValue(address investor) external view returns (uint256)',
+  'function getInvestorYield(address investor) external view returns (uint256)',
+  'function utilizationRate() external view returns (uint256)',
+  'function currentAPR() external view returns (uint256)',
+  'function getTVL() external view returns (uint256)',
+  'function getPoolValueUSD() external view returns (uint256)',
+  'function getPoolHealthScore() external view returns (uint256)',
+  'function getEstimatedYield(address investor) external view returns (uint256)',
+  'function getInvestorDepositHistory(address investor) external view returns (tuple(address investor, uint256 amount, uint256 shares, uint256 timestamp)[])',
+  'function getInvestorTotalDeposits(address investor) external view returns (uint256)',
+  'function updateDailyStats() external',
+  'function getDailyStats(uint256 date) external view returns (tuple(uint256 date, uint256 totalAssets, uint256 totalBorrows, uint256 exchangeRate, uint256 utilizationRate))',
+  'function getCurrentPoolStats() external view returns (uint256 _totalAssets, uint256 _totalBorrows, uint256 _totalReserves, uint256 _availableLiquidity, uint256 _utilizationRate, uint256 _exchangeRate, uint256 _currentAPR, uint256 _healthScore)',
 ];
 
 const MOCK_TOKEN_ABI = [
@@ -58,6 +77,31 @@ export class ContractService {
     this.initializeProvider();
   }
 
+  // Get token addresses from environment
+  getLendingTokenAddress(): string {
+    return process.env.LENDING_TOKEN_ADDRESS || '';
+  }
+
+  // Get specific pool addresses
+  getPoolAddresses(): { [key: string]: string } {
+    return {
+      rice: process.env.RICE_POOL_ADDRESS || '',
+      corn: process.env.CORN_POOL_ADDRESS || '',
+      wheat: process.env.WHEAT_POOL_ADDRESS || '',
+      soybean: process.env.SOYBEAN_POOL_ADDRESS || '',
+    };
+  }
+
+  // Get specific oracle addresses
+  getOracleAddresses(): { [key: string]: string } {
+    return {
+      rice: process.env.RICE_ORACLE_ADDRESS || '',
+      corn: process.env.CORN_ORACLE_ADDRESS || '',
+      wheat: process.env.WHEAT_ORACLE_ADDRESS || '',
+      soybean: process.env.SOYBEAN_ORACLE_ADDRESS || '',
+    };
+  }
+
   private initializeProvider(): void {
     try {
       this.provider = new ethers.JsonRpcProvider(
@@ -79,7 +123,6 @@ export class ContractService {
   async getAllPools(): Promise<Array<{poolAddress: string, oracleAddress: string, grainType: string}>> {
     try {
       const factoryAddress = process.env.POOL_FACTORY_ADDRESS;
-       console.log("factoryAddress", factoryAddress);
       this.logger.log(`Attempting to get pools from factory at: ${factoryAddress}`);
       
       if (!factoryAddress || factoryAddress.includes('XXXX')) {
@@ -483,6 +526,24 @@ export class ContractService {
       this.logger.error(`Failed to get token balance for ${holderAddress}:`, error);
       throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
+  }
+
+  // Get lending token balance
+  async getLendingTokenBalance(userAddress: string): Promise<string> {
+    const lendingTokenAddress = this.getLendingTokenAddress();
+    if (!lendingTokenAddress) {
+      throw new Error('Lending token address not configured');
+    }
+    return this.getTokenBalance(lendingTokenAddress, userAddress);
+  }
+
+  // Get collateral token balance
+  async getCollateralTokenBalance(userAddress: string): Promise<string> {
+    const collateralTokenAddress = process.env.COLLATERAL_TOKEN_ADDRESS || '';
+    if (!collateralTokenAddress) {
+      throw new Error('Collateral token address not configured');
+    }
+    return this.getTokenBalance(collateralTokenAddress, userAddress);
   }
 
   // Oracle interactions

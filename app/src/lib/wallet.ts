@@ -1,5 +1,4 @@
 import { ethers } from 'ethers';
-import { HashConnect } from 'hashconnect';
 
 export type WalletType = 'metamask' | 'hashpack';
 
@@ -17,7 +16,7 @@ export interface WalletConnectionResult {
 
 export class WalletService {
   private static instance: WalletService;
-  private hashConnect: HashConnect | null = null;
+  private hashConnect: any | null = null; // HashConnect temporarily disabled
   private isHashConnectInitialized = false;
 
   private constructor() {}
@@ -34,29 +33,57 @@ export class WalletService {
    */
   public isMetaMaskAvailable(): boolean {
     if (typeof window === 'undefined') {
+      console.log('MetaMask check: window is undefined (SSR)');
       return false;
     }
     
-    const isAvailable = typeof window.ethereum !== 'undefined' && 
-           window.ethereum.isMetaMask;
-    console.log('MetaMask availability check:', {
-      hasWindow: typeof window !== 'undefined',
-      hasEthereum: typeof window.ethereum !== 'undefined',
-      isMetaMask: window.ethereum?.isMetaMask,
-      isAvailable
-    });
+    const hasEthereum = typeof window.ethereum !== 'undefined';
+    const isMetaMask = window.ethereum?.isMetaMask;
+    // Also check for MetaMask in the provider list
+    const hasMetaMaskProvider = window.ethereum?.providers?.some((provider: any) => provider.isMetaMask);
+    const isAvailable = hasEthereum && (isMetaMask || hasMetaMaskProvider);
+    
+    console.log('=== METAMASK AVAILABILITY CHECK ===');
+    console.log('hasWindow:', typeof window !== 'undefined');
+    console.log('hasEthereum:', hasEthereum);
+    console.log('isMetaMask:', isMetaMask);
+    console.log('hasMetaMaskProvider:', hasMetaMaskProvider);
+    console.log('window.ethereum:', window.ethereum);
+    console.log('window.ethereum.providers:', window.ethereum?.providers);
+    console.log('isAvailable:', isAvailable);
+    
     return isAvailable;
+  }
+
+  /**
+   * Force refresh MetaMask connection
+   */
+  public async refreshMetaMaskConnection(): Promise<boolean> {
+    try {
+      console.log('Refreshing MetaMask connection...');
+      
+      // Try to disconnect first
+      if (window.ethereum?.disconnect) {
+        await window.ethereum.disconnect();
+      }
+      
+      // Wait a bit for the disconnect to process
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      // Check if MetaMask is still available
+      return this.isMetaMaskAvailable();
+    } catch (error) {
+      console.error('Failed to refresh MetaMask connection:', error);
+      return false;
+    }
   }
 
   /**
    * Check if HashPack is available in the browser
    */
   public isHashPackAvailable(): boolean {
-    if (typeof window === 'undefined') {
-      return false;
-    }
-    
-    return typeof window.hashconnect !== 'undefined';
+    // Temporarily disable HashPack due to connection issues
+    return false;
   }
 
   /**
@@ -80,36 +107,91 @@ export class WalletService {
    */
   public async connectMetaMask(): Promise<WalletConnectionResult> {
     try {
+      console.log('=== METAMASK CONNECTION START ===');
       console.log('WalletService.connectMetaMask called');
+      
       if (!this.isMetaMaskAvailable()) {
-        console.log('MetaMask not available');
+        console.log('❌ MetaMask not available');
         return {
           success: false,
-          error: 'MetaMask is not installed or not available'
+          error: 'MetaMask is not installed or not available. Please install MetaMask browser extension.'
         };
       }
 
-      console.log('MetaMask is available, requesting accounts...');
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      const accounts = await provider.send('eth_requestAccounts', []);
-      console.log('Accounts received:', accounts);
+      console.log('✅ MetaMask is available, requesting accounts...');
+      console.log('window.ethereum:', window.ethereum);
       
+      // Check if MetaMask is locked
+      try {
+        const isUnlocked = await window.ethereum.request({ method: 'eth_accounts' });
+        if (isUnlocked.length === 0) {
+          console.log('MetaMask appears to be locked or no accounts available');
+        }
+      } catch (unlockCheckError) {
+        console.log('Could not check MetaMask unlock status:', unlockCheckError);
+      }
+      
+      // Use direct window.ethereum.request instead of ethers provider
+      console.log('Requesting accounts from MetaMask using window.ethereum.request...');
+      
+      let accounts;
+      try {
+        // First try the standard eth_requestAccounts method
+        console.log('Attempting eth_requestAccounts...');
+        accounts = await window.ethereum.request({ 
+          method: 'eth_requestAccounts' 
+        });
+        console.log('✅ Accounts received via eth_requestAccounts:', accounts);
+      } catch (requestError) {
+        console.log('eth_requestAccounts failed, trying alternative method...', requestError);
+        
+        // Check if it's a user rejection
+        if ((requestError as any).code === 4001) {
+          throw new Error('User rejected the connection request. Please try again and approve the connection in MetaMask.');
+        }
+        
+        // Fallback: try to get accounts if already connected
+        try {
+          console.log('Attempting eth_accounts fallback...');
+          accounts = await window.ethereum.request({ 
+            method: 'eth_accounts' 
+          });
+          console.log('✅ Accounts received via eth_accounts:', accounts);
+          
+          if (accounts.length === 0) {
+            throw new Error('No accounts available. Please unlock MetaMask and try again.');
+          }
+        } catch (fallbackError) {
+          console.error('Both connection methods failed:', fallbackError);
+          
+          // Provide more specific error messages
+          if ((fallbackError as any).code === 4001) {
+            throw new Error('User rejected the connection request.');
+          } else if ((fallbackError as any).code === -32002) {
+            throw new Error('MetaMask connection request is already pending. Please check MetaMask and approve the request.');
+          } else {
+            throw new Error('Failed to connect to MetaMask. Please make sure MetaMask is installed, unlocked, and try again.');
+          }
+        }
+      }
+    
       if (accounts.length === 0) {
-        console.log('No accounts found');
+        console.log('❌ No accounts found');
         return {
           success: false,
-          error: 'No accounts found'
+          error: 'No accounts found. Please make sure you have accounts in MetaMask.'
         };
       }
 
       // Check current chain ID and force Hedera network
-      const currentChainId = await provider.send('eth_chainId', []);
+      console.log('Checking current chain ID...');
+      const currentChainId = await window.ethereum.request({ method: 'eth_chainId' });
       console.log('Current chain ID:', currentChainId);
       const hederaTestnetChainId = '0x128'; // 296 decimal
       const hederaMainnetChainId = '0x127'; // 295 decimal
 
       if (currentChainId !== hederaTestnetChainId && currentChainId !== hederaMainnetChainId) {
-        console.log('Switching to Hedera network...');
+        console.log('🔄 Switching to Hedera network...');
         // Prompt user to switch to Hedera Testnet
         try {
           await window.ethereum.request({
@@ -126,9 +208,9 @@ export class WalletService {
               blockExplorerUrls: ['https://hashscan.io/testnet'],
             }]
           });
-          console.log('Network switch successful');
+          console.log('✅ Network switch successful');
         } catch (switchError) {
-          console.log('Network switch failed:', switchError);
+          console.log('❌ Network switch failed:', switchError);
           return {
             success: false,
             error: 'Please switch to Hedera Testnet in MetaMask to continue'
@@ -137,7 +219,7 @@ export class WalletService {
       }
 
       const address = accounts[0];
-      console.log('Wallet address:', address);
+      console.log('✅ Wallet address:', address);
       const walletInfo: WalletInfo = {
         walletType: 'metamask',
         address
@@ -145,14 +227,15 @@ export class WalletService {
 
       // Store in localStorage
       this.saveWalletInfo(walletInfo);
-      console.log('Wallet info saved to localStorage');
+      console.log('✅ Wallet info saved to localStorage');
 
+      console.log('=== METAMASK CONNECTION SUCCESS ===');
       return {
         success: true,
         walletInfo
       };
     } catch (error) {
-      console.error('MetaMask connection error:', error);
+      console.error('❌ MetaMask connection error:', error);
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to connect to MetaMask'

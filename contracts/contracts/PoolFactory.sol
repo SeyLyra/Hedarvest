@@ -12,6 +12,16 @@ contract PoolFactory is Ownable {
         string grainType;
     }
 
+    struct PoolStats {
+        address pool;
+        string grainType;
+        uint256 totalAssets;
+        uint256 totalBorrows;
+        uint256 availableLiquidity;
+        uint256 utilizationRate;
+        uint256 currentAPR;
+    }
+
     mapping(string => PoolInfo) public grainPools;
     string[] public allGrains;
 
@@ -20,6 +30,7 @@ contract PoolFactory is Ownable {
     function createPool(
         string calldata grainType,
         address lendingToken,
+        address collateralToken,
         uint256 baseLTV,
         uint256 riskPremium,
         uint256 debtCeiling,
@@ -37,6 +48,7 @@ contract PoolFactory is Ownable {
         GrainPool newPool = new GrainPool(
             grainType,
             lendingToken,
+            collateralToken,
             baseLTV,
             riskPremium,
             debtCeiling,
@@ -66,5 +78,54 @@ contract PoolFactory is Ownable {
             pools[i] = grainPools[allGrains[i]];
         }
         return pools;
+    }
+
+    function getPoolStats() external view returns (PoolStats[] memory) {
+        PoolStats[] memory stats = new PoolStats[](allGrains.length);
+        for (uint256 i = 0; i < allGrains.length; i++) {
+            GrainPool pool = GrainPool(grainPools[allGrains[i]].poolAddress);
+            stats[i] = PoolStats({
+                pool: grainPools[allGrains[i]].poolAddress,
+                grainType: allGrains[i],
+                totalAssets: pool.totalAssets(),
+                totalBorrows: pool.totalBorrows(),
+                availableLiquidity: pool.availableLiquidity(),
+                utilizationRate: pool.utilizationRate(),
+                currentAPR: pool.currentAPR()
+            });
+        }
+        return stats;
+    }
+
+    function getPoolUtilizationRates() external view returns (
+        address[] memory pools,
+        uint256[] memory utilizationRates
+    ) {
+        pools = new address[](allGrains.length);
+        utilizationRates = new uint256[](allGrains.length);
+        
+        for (uint256 i = 0; i < allGrains.length; i++) {
+            GrainPool pool = GrainPool(grainPools[allGrains[i]].poolAddress);
+            pools[i] = grainPools[allGrains[i]].poolAddress;
+            utilizationRates[i] = pool.utilizationRate();
+        }
+        
+        return (pools, utilizationRates);
+    }
+
+    function getAllPoolAPRs() external view returns (
+        address[] memory pools,
+        uint256[] memory aprs
+    ) {
+        pools = new address[](allGrains.length);
+        aprs = new uint256[](allGrains.length);
+        
+        for (uint256 i = 0; i < allGrains.length; i++) {
+            GrainPool pool = GrainPool(grainPools[allGrains[i]].poolAddress);
+            pools[i] = grainPools[allGrains[i]].poolAddress;
+            aprs[i] = pool.currentAPR();
+        }
+        
+        return (pools, aprs);
     }
 }

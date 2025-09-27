@@ -50,6 +50,20 @@ export class TransactionService {
     });
   }
 
+  async getTransactionsByEntityAndAddress(entity: string, address: string, limit: number = 10) {
+    return this.prisma.txLog.findMany({
+      where: { 
+        entity,
+        meta: {
+          path: ['depositorAddress'],
+          equals: address
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+  }
+
   async getAllTransactions(limit: number = 100, offset: number = 0) {
     return this.prisma.txLog.findMany({
       take: limit,

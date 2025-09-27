@@ -210,24 +210,56 @@ export class InvestorService {
       
       this.logger.log(`Retrieved ${pools.length} pools from blockchain`);
       
-      // Format pools for investor display
-      return pools.map((pool, index) => {
+      // Format pools for investor display with real smart contract data
+      const formattedPools: any[] = [];
+      for (let i = 0; i < pools.length; i++) {
+        const pool = pools[i];
         const poolAddress = Array.isArray(pool) ? pool[0] : pool.poolAddress;
         const oracleAddress = Array.isArray(pool) ? pool[1] : pool.oracleAddress;
         const grainType = Array.isArray(pool) ? pool[2] : pool.grainType;
         
-        return {
-          id: index + 1,
-          grainType: grainType,
-          address: poolAddress,
-          price: 200, // Default price
-          availableLiquidity: "100000", // Default values since we can't get detailed info
-          totalBorrows: "40000",
-          utilizationRate: 40,
-          apr: 8.5,
-          createdAt: new Date(),
-        };
-      });
+        try {
+          // Get real pool statistics from smart contract
+          this.logger.log(`Getting stats for ${grainType} pool at ${poolAddress}`);
+          const poolStats = await this.contractService.getPoolInfo(poolAddress);
+          const poolBalance = await this.contractService.getPoolBalance(poolAddress);
+          this.logger.log(`Got stats for ${grainType}:`, { riskPremium: poolStats.riskPremium, totalAssets: poolStats.totalAssets, totalBorrows: poolStats.totalBorrows });
+          
+          // Calculate utilization rate from actual data
+          const totalAssets = Number(poolStats.totalAssets);
+          const totalBorrows = Number(poolStats.totalBorrows);
+          const utilizationRate = totalAssets > 0 ? (totalBorrows / totalAssets) * 100 : 0;
+          
+          formattedPools.push({
+            id: i + 1,
+            grainType: grainType,
+            address: poolAddress,
+            price: 200, // Default price since oracle price might not be set
+            availableLiquidity: poolStats.availableLiquidity || "0",
+            totalBorrows: poolStats.totalBorrows || "0",
+            utilizationRate: Math.round(utilizationRate * 100) / 100, // Round to 2 decimal places
+            apr: Number(poolStats.riskPremium) / 100, // Convert basis points to percentage
+            createdAt: new Date(),
+          });
+        } catch (poolError) {
+          this.logger.error(`Failed to get stats for pool ${grainType}:`, poolError);
+          this.logger.error(`Pool address: ${poolAddress}`);
+          // Fallback to basic info if stats fail
+          formattedPools.push({
+            id: i + 1,
+            grainType: grainType,
+            address: poolAddress,
+            price: 200,
+            availableLiquidity: "0",
+            totalBorrows: "0",
+            utilizationRate: 0,
+            apr: 0,
+            createdAt: new Date(),
+          });
+        }
+      }
+      
+      return formattedPools;
       
     } catch (error) {
       this.logger.warn('Failed to get pools from blockchain, using mock data:', error);
@@ -367,13 +399,107 @@ export class InvestorService {
   }
 
   async getInvestorPortfolio(address: string) {
-    // For now, return a mock portfolio until transaction service is fully integrated
-    return {
-      investorAddress: address,
-      positions: [],
-      totalTransactions: 0,
-      recentTransactions: [],
-      message: 'Portfolio tracking will be available once transaction service is fully integrated'
-    };
+    this.logger.log(`Getting portfolio for investor: ${address}`);
+    
+    try {
+      // Get all pools from smart contracts
+      const pools = await this.contractService.getAllPoolsFromFactory();
+      
+      const positions: any[] = [];
+      let totalValue = 0;
+      let totalYield = 0;
+      let totalDeposits = 0;
+      
+      // Get investor's position in each pool
+      for (const pool of pools) {
+        try {
+          // Get investor's LP token balance (shares)
+          const lpTokenBalance = await this.contractService.getTokenBalance(
+            pool.poolAddress, // The pool contract itself is the LP token
+            address
+          );
+          
+          if (Number(lpTokenBalance) > 0) {
+            // Get current exchange rate to calculate value
+            const poolInfo = await this.contractService.getPoolInfo(pool.poolAddress);
+            const exchangeRate = Number(poolInfo.exchangeRate) / 1e18;
+            
+            // Calculate position value
+            const positionValue = (Number(lpTokenBalance) * exchangeRate) / 1e18;
+            const yieldEarned = positionValue - (Number(lpTokenBalance) / 1e18); // Simplified yield calculation
+            
+            positions.push({
+              grainType: pool.grainType,
+              poolAddress: pool.poolAddress,
+              shares: lpTokenBalance,
+              shareValue: exchangeRate,
+              positionValue: positionValue,
+              yieldEarned: yieldEarned,
+              apr: pool.riskPremium / 100, // Convert basis points to percentage
+              utilizationRate: pool.utilizationRate,
+              createdAt: new Date()
+            });
+            
+            totalValue += positionValue;
+            totalYield += yieldEarned;
+            totalDeposits += Number(lpTokenBalance) / 1e18;
+          }
+        } catch (poolError) {
+          this.logger.warn(`Failed to get position for ${pool.grainType}:`, poolError);
+        }
+      }
+      
+      // Calculate average APR
+      const averageAPR = positions.length > 0 
+        ? positions.reduce((sum, pos) => sum + pos.apr, 0) / positions.length 
+        : 0;
+      
+      // Calculate risk score (simplified - based on utilization rates)
+      const riskScore = positions.length > 0
+        ? Math.round(positions.reduce((sum, pos) => sum + pos.utilizationRate, 0) / positions.length)
+        : 0;
+      
+      // Get recent transactions from database
+      const recentTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
+        'Investor',
+        address,
+        10
+      );
+      
+      return {
+        investorAddress: address,
+        totalDeposits: totalDeposits,
+        totalValue: totalValue,
+        totalYield: totalYield,
+        averageAPR: averageAPR,
+        riskScore: riskScore,
+        positions: positions,
+        totalTransactions: recentTransactions.length,
+        recentTransactions: recentTransactions.map(tx => ({
+          id: tx.id,
+          kind: tx.kind,
+          ref: tx.ref,
+          createdAt: tx.createdAt,
+          meta: tx.meta
+        }))
+      };
+      
+    } catch (error) {
+      this.logger.error(`Failed to get portfolio for ${address}:`, error);
+      
+      // Return mock data as fallback
+      return {
+        investorAddress: address,
+        totalDeposits: 0,
+        totalValue: 0,
+        totalYield: 0,
+        averageAPR: 0,
+        riskScore: 0,
+        positions: [],
+        totalTransactions: 0,
+        recentTransactions: [],
+        message: 'Failed to fetch portfolio data from smart contracts. Please try again later.'
+      };
+    }
   }
 }

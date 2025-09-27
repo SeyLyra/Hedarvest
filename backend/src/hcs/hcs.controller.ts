@@ -1,0 +1,200 @@
+import { Controller, Get, Param, Query } from '@nestjs/common';
+import { HcsService } from './hcs.service';
+import { PrismaService } from '../lib/prisma';
+
+@Controller('hcs')
+export class HcsController {
+  constructor(
+    private readonly hcsService: HcsService,
+    private readonly prisma: PrismaService,
+  ) {}
+
+  @Get('events/stream')
+  async getEventStream(@Query('address') address?: string) {
+    // For now, return mock events since HCS is in mock mode
+    // In production, this would stream real-time HCS events
+    return {
+      success: true,
+      message: 'HCS event stream endpoint',
+      mode: 'mock',
+      topicId: this.hcsService.getTopicId(),
+      events: await this.getMockEvents(address)
+    };
+  }
+
+  @Get('events')
+  async getEvents(
+    @Query('address') address?: string,
+    @Query('limit') limit: string = '50',
+    @Query('offset') offset: string = '0'
+  ) {
+    try {
+      // Get events from database (transactions logged with HCS events)
+      const events = await this.prisma.txLog.findMany({
+        where: address ? {
+          OR: [
+            { meta: { path: ['depositorAddress'], equals: address } },
+            { meta: { path: ['farmerAddress'], equals: address } }
+          ]
+        } : {},
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit),
+        skip: parseInt(offset)
+      });
+
+      // Transform database events to HCS-like format
+      const hcsEvents = events.map(event => ({
+        id: event.id,
+        eventType: this.mapTransactionKindToEventType(event.kind),
+        payload: {
+          ...(event.meta as any || {}),
+          transactionId: event.ref,
+          timestamp: event.createdAt.toISOString()
+        },
+        timestamp: event.createdAt.toISOString(),
+        transactionId: event.ref
+      }));
+
+      return {
+        success: true,
+        events: hcsEvents,
+        total: events.length,
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        events: []
+      };
+    }
+  }
+
+  @Get('events/:eventType')
+  async getEventsByType(
+    @Param('eventType') eventType: string,
+    @Query('address') address?: string,
+    @Query('limit') limit: string = '50'
+  ) {
+    try {
+      const kindFilter = this.mapEventTypeToTransactionKind(eventType);
+      
+      const events = await this.prisma.txLog.findMany({
+        where: {
+          kind: kindFilter,
+          ...(address ? {
+            OR: [
+              { meta: { path: ['depositorAddress'], equals: address } },
+              { meta: { path: ['farmerAddress'], equals: address } }
+            ]
+          } : {})
+        },
+        orderBy: { createdAt: 'desc' },
+        take: parseInt(limit)
+      });
+
+      const hcsEvents = events.map(event => ({
+        id: event.id,
+        eventType: this.mapTransactionKindToEventType(event.kind),
+        payload: {
+          ...(event.meta as any || {}),
+          transactionId: event.ref,
+          timestamp: event.createdAt.toISOString()
+        },
+        timestamp: event.createdAt.toISOString(),
+        transactionId: event.ref
+      }));
+
+      return {
+        success: true,
+        eventType,
+        events: hcsEvents,
+        total: events.length
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        eventType,
+        events: []
+      };
+    }
+  }
+
+  @Get('status')
+  async getStatus() {
+    return {
+      success: true,
+      mode: this.hcsService.getTopicId() === 'MOCK_TOPIC_ID' ? 'mock' : 'live',
+      topicId: this.hcsService.getTopicId(),
+      status: 'operational'
+    };
+  }
+
+  private async getMockEvents(address?: string) {
+    // Return mock events for demonstration
+    const mockEvents = [
+      {
+        eventType: 'InvestorDeposit',
+        payload: {
+          poolAddress: '0x84565EEAE3ddD89325bB5726C912b5478B8078Af',
+          grainType: 'Rice',
+          amount: 1000,
+          depositorAddress: address || '0x1234567890123456789012345678901234567890',
+          contractTxHash: '0xabc123...',
+          timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString() // 30 minutes ago
+        },
+        timestamp: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
+        transactionId: 'mock_investor_deposit_1'
+      },
+      {
+        eventType: 'LoanCreated',
+        payload: {
+          poolAddress: '0xE7CAc2F391BA5f839D4145219BA50D5D5635aB56',
+          grainType: 'Corn',
+          farmerAddress: '0x9876543210987654321098765432109876543210',
+          loanAmount: 500,
+          collateralAmount: 750,
+          contractTxHash: '0xdef456...',
+          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() // 2 hours ago
+        },
+        timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
+        transactionId: 'mock_loan_created_1'
+      }
+    ];
+
+    return address ? mockEvents.filter(event => 
+      event.payload.depositorAddress === address || 
+      event.payload.farmerAddress === address
+    ) : mockEvents;
+  }
+
+  private mapTransactionKindToEventType(kind: string): string {
+    const mapping: Record<string, string> = {
+      'investor_deposit': 'InvestorDeposit',
+      'investor_withdraw': 'InvestorWithdraw',
+      'investor_deposit_failed': 'InvestorDepositFailed',
+      'investor_withdraw_failed': 'InvestorWithdrawFailed',
+      'farmer_deposit': 'CollateralDeposited',
+      'farmer_loan': 'LoanCreated',
+      'farmer_repay': 'LoanRepaid',
+      'farmer_redeem': 'CollateralWithdrawn'
+    };
+    return mapping[kind] || kind;
+  }
+
+  private mapEventTypeToTransactionKind(eventType: string): string {
+    const mapping: Record<string, string> = {
+      'InvestorDeposit': 'investor_deposit',
+      'InvestorWithdraw': 'investor_withdraw',
+      'InvestorDepositFailed': 'investor_deposit_failed',
+      'InvestorWithdrawFailed': 'investor_withdraw_failed',
+      'CollateralDeposited': 'farmer_deposit',
+      'LoanCreated': 'farmer_loan',
+      'LoanRepaid': 'farmer_repay',
+      'CollateralWithdrawn': 'farmer_redeem'
+    };
+    return mapping[eventType] || eventType.toLowerCase();
+  }
+}

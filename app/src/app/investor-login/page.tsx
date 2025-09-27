@@ -17,24 +17,52 @@ export default function InvestorLoginPage() {
   const [isRedirecting, setIsRedirecting] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'switching-network' | 'connected'>('idle');
   const [isDirectConnecting, setIsDirectConnecting] = useState(false);
+  const [forceUpdate, setForceUpdate] = useState(0);
 
   // Memoize the wallet state to prevent dependency array changes
   const walletState = useMemo(() => ({
     isConnected,
     isConnecting,
-    address
-  }), [isConnected, isConnecting, address]);
+    address,
+    forceUpdate
+  }), [isConnected, isConnecting, address, forceUpdate]);
+
+  // Check if wallet is already connected on page load
+  useEffect(() => {
+    console.log('=== PAGE LOAD WALLET CHECK ===');
+    console.log('Initial wallet state:', { isConnected, isConnecting, address });
+    
+    if (isConnected && address) {
+      console.log('Wallet already connected, redirecting...');
+      setTimeout(() => {
+        window.location.href = '/dashboard/investor';
+      }, 100);
+    }
+  }, []);
 
   // Auto-redirect if wallet is already connected
   useEffect(() => {
+    console.log('=== WALLET STATE EFFECT ===');
     console.log('Wallet state changed:', walletState);
-    if (walletState.isConnected && !walletState.isConnecting) {
+    console.log('isConnected:', walletState.isConnected);
+    console.log('isConnecting:', walletState.isConnecting);
+    console.log('address:', walletState.address);
+    
+    if (walletState.isConnected && !walletState.isConnecting && walletState.address) {
+      console.log('✅ Conditions met for redirect');
       console.log('Redirecting to dashboard...');
       setConnectionStatus('connected');
       setIsRedirecting(true);
       // Redirect immediately after wallet is connected
       console.log('Executing redirect...');
-      window.location.href = '/dashboard/investor';
+      setTimeout(() => {
+        window.location.href = '/dashboard/investor';
+      }, 100);
+    } else {
+      console.log('❌ Conditions not met for redirect');
+      console.log('isConnected:', walletState.isConnected);
+      console.log('isConnecting:', walletState.isConnecting);
+      console.log('address:', walletState.address);
     }
   }, [walletState]);
 
@@ -275,13 +303,24 @@ export default function InvestorLoginPage() {
                         <LoadingButton
                           onClick={async () => {
                             console.log('=== DIRECT METAMASK CONNECTION ===');
-                            console.log('Current state:', { isConnected, isConnecting, address, error });
+                            console.log('Current state before connection:', { isConnected, isConnecting, address, error });
                             
                             setIsDirectConnecting(true);
                             try {
                               console.log('Calling connectMetaMask from hook...');
                               await connectMetaMask();
                               console.log('connectMetaMask completed');
+                              
+                              // Check state after connection
+                              console.log('State after connection:', { isConnected, isConnecting, address, error });
+                              
+                              // Force redirect if connected
+                              if (isConnected && address) {
+                                console.log('Force redirecting after direct connection...');
+                                setTimeout(() => {
+                                  window.location.href = '/dashboard/investor';
+                                }, 500);
+                              }
                             } catch (err) {
                               console.error('Direct connection failed:', err);
                             } finally {
@@ -296,6 +335,40 @@ export default function InvestorLoginPage() {
                           🦊 Connect MetaMask Direct
                         </LoadingButton>
                         
+                        {/* Debug Info */}
+                        <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                          <h4 className="font-semibold mb-2">Debug Info:</h4>
+                          <div className="text-sm space-y-1">
+                            <p>isConnected: {isConnected ? '✅' : '❌'}</p>
+                            <p>isConnecting: {isConnecting ? '🔄' : '⏸️'}</p>
+                            <p>address: {address || 'None'}</p>
+                            <p>error: {error || 'None'}</p>
+                            <p>isRedirecting: {isRedirecting ? '🔄' : '⏸️'}</p>
+                          </div>
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              onClick={() => {
+                                console.log('Manual redirect triggered');
+                                window.location.href = '/dashboard/investor';
+                              }}
+                              variant="outline"
+                              size="sm"
+                            >
+                              🔄 Manual Redirect
+                            </Button>
+                            <Button
+                              onClick={() => {
+                                console.log('Force refresh triggered');
+                                setForceUpdate(prev => prev + 1);
+                              }}
+                              variant="outline"
+                              size="sm"
+                            >
+                              🔄 Force Refresh
+                            </Button>
+                          </div>
+                        </div>
+
                         <div className="text-center space-y-2">
                           <p className="text-sm text-muted-foreground">
                             By connecting, you agree to our Terms of Service

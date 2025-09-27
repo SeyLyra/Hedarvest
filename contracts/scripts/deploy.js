@@ -13,7 +13,12 @@ async function main() {
   await lendingToken.waitForDeployment();
   console.log("✅ Lending token deployed at:", await lendingToken.getAddress());
 
-  // 2. Deploy pool factory
+  // 2. Deploy mock collateral token (grain tokens for collateral)
+  const collateralToken = await Token.deploy("Mock Grain", "mGRAIN", (await ethers.getSigners())[0].address);
+  await collateralToken.waitForDeployment();
+  console.log("✅ Collateral token deployed at:", await collateralToken.getAddress());
+
+  // 3. Deploy pool factory
   const Factory = await ethers.getContractFactory("PoolFactory");
   const factory = await Factory.deploy();
   await factory.waitForDeployment();
@@ -52,6 +57,7 @@ async function main() {
       const tx = await factory.createPool(
         grain.name,
         await lendingToken.getAddress(),
+        await collateralToken.getAddress(), // collateral token
         6000, // baseLTV (60%)
         200,  // riskPremium (2%)
         ethers.parseEther("1000000"), // debt ceiling = 1M
@@ -91,6 +97,7 @@ async function main() {
 
   console.log("\n📋 Deployment Summary:");
   console.log(`Lending Token: ${await lendingToken.getAddress()}`);
+  console.log(`Collateral Token: ${await collateralToken.getAddress()}`);
   console.log(`Factory: ${await factory.getAddress()}`);
   console.log(`Total Pools: ${pools.length}`);
 }
