@@ -7,24 +7,22 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deploying contracts with:", deployer.address);
 
-  // 1. Deploy mock stablecoin (lending token for all pools)
-  const Token = await ethers.getContractFactory("MockToken");
-  const lendingToken = await Token.deploy("Mock USD", "mUSD", (await ethers.getSigners())[0].address);
-  await lendingToken.waitForDeployment();
-  console.log("✅ Lending token deployed at:", await lendingToken.getAddress());
+  // 1. Create mock token addresses (simulating HTS tokens)
+  // In a real deployment, these would be actual HTS token addresses
+  const lendingTokenAddress = ethers.Wallet.createRandom().address;
+  const collateralTokenAddress = ethers.Wallet.createRandom().address;
+  
+  console.log("✅ Mock lending token address:", lendingTokenAddress);
+  console.log("✅ Mock collateral token address:", collateralTokenAddress);
+  console.log("ℹ️  Note: In production, these would be actual Hedera HTS token addresses");
 
-  // 2. Deploy mock collateral token (grain tokens for collateral)
-  const collateralToken = await Token.deploy("Mock Grain", "mGRAIN", (await ethers.getSigners())[0].address);
-  await collateralToken.waitForDeployment();
-  console.log("✅ Collateral token deployed at:", await collateralToken.getAddress());
-
-  // 3. Deploy pool factory
-  const Factory = await ethers.getContractFactory("PoolFactory");
+  // 2. Deploy pool factory (for reference, but we'll deploy pools directly)
+  const Factory = await ethers.getContractFactory("LendingFactory");
   const factory = await Factory.deploy();
   await factory.waitForDeployment();
-  console.log("✅ PoolFactory deployed at:", await factory.getAddress());
+  console.log("✅ LendingFactory deployed at:", await factory.getAddress());
 
-  // Grain types with their initial prices (in USD, scaled to 1e18)
+  // 3. Deploy pools and oracles directly (bypassing HTS token creation)
   const grainConfigs = [
     { name: "Rice", price: ethers.parseEther("200") },    // $200 per unit
     { name: "Corn", price: ethers.parseEther("150") },    // $150 per unit
@@ -40,36 +38,29 @@ async function main() {
     console.log(`\n🌾 Creating ${grain.name} pool...`);
 
     try {
-      // Check if pool already exists
-      const existingPool = await factory.getPool(grain.name);
-      if (existingPool.poolAddress !== "0x0000000000000000000000000000000000000000") {
-        console.log(`⚠️  ${grain.name} pool already exists, skipping...`);
-        pools.push({ 
-          grain: grain.name, 
-          poolAddress: existingPool.poolAddress, 
-          oracleAddress: existingPool.oracleAddress,
-          price: ethers.formatEther(grain.price)
-        });
-        continue;
-      }
-
-      // Create pool using factory (this will deploy both pool and oracle)
-      const tx = await factory.createPool(
-        grain.name,
-        await lendingToken.getAddress(),
-        await collateralToken.getAddress(), // collateral token
-        6000, // baseLTV (60%)
-        200,  // riskPremium (2%)
-        ethers.parseEther("1000000"), // debt ceiling = 1M
-        500,  // protocol fee (5%)
-        grain.price // initial price
-      );
-      const receipt = await tx.wait();
+      // Deploy oracle first
+      const MockPriceOracle = await ethers.getContractFactory("MockPriceOracle");
+      const oracle = await MockPriceOracle.deploy();
+      await oracle.waitForDeployment();
+      const oracleAddress = await oracle.getAddress();
       
-      // Get pool info from factory
-      const poolInfo = await factory.getPool(grain.name);
-      const poolAddress = poolInfo.poolAddress;
-      const oracleAddress = poolInfo.oracleAddress;
+      // Set initial price
+      await oracle.setPrice(grain.name, grain.price);
+      
+      // Deploy LendingPool directly
+      const LendingPool = await ethers.getContractFactory("LendingPool");
+      const pool = await LendingPool.deploy(
+        grain.name,
+        lendingTokenAddress,
+        collateralTokenAddress,
+        lendingTokenAddress, // Use lending token as LP token
+        7500, // baseLTV (75%)
+        1000, // protocol fee (10%)
+        oracleAddress,
+        deployer.address
+      );
+      await pool.waitForDeployment();
+      const poolAddress = await pool.getAddress();
 
       pools.push({ 
         grain: grain.name, 
@@ -96,8 +87,8 @@ async function main() {
   })));
 
   console.log("\n📋 Deployment Summary:");
-  console.log(`Lending Token: ${await lendingToken.getAddress()}`);
-  console.log(`Collateral Token: ${await collateralToken.getAddress()}`);
+  console.log(`Lending Token: ${lendingTokenAddress}`);
+  console.log(`Collateral Token: ${collateralTokenAddress}`);
   console.log(`Factory: ${await factory.getAddress()}`);
   console.log(`Total Pools: ${pools.length}`);
 }
