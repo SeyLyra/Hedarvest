@@ -1,0 +1,1980 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { toast } from 'sonner';
+import Image from 'next/image';
+import { 
+  Building2, 
+  UserPlus, 
+  Package, 
+  DollarSign,
+  Users,
+  CheckCircle,
+  Clock,
+  AlertCircle,
+  Loader2,
+  Plus,
+  Eye,
+  Edit,
+  LogIn,
+  User,
+  Mail,
+  Lock,
+  Wallet
+} from 'lucide-react';
+
+// API base URL
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+
+// Types
+interface Agent {
+  id: number;
+  name: string;
+  email: string;
+  phoneNumber: string;
+  location?: string;
+  walletAddress?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  commissionRate?: number;
+  createdAt: string;
+}
+
+interface Farmer {
+  id: number;
+  walletAddress: string;
+  phoneNumber?: string;
+  nationalId?: string;
+  agentId: number;
+  agent?: Agent;
+  createdAt: string;
+}
+
+interface Loan {
+  id: number;
+  farmerId: number;
+  farmer?: Farmer;
+  amount: number;
+  interestRate: number;
+  status: 'pending' | 'approved' | 'rejected' | 'active' | 'repaid';
+  createdAt: string;
+  dueDate?: string;
+}
+
+interface RegisterAgentData {
+  name: string;
+  email: string;
+  phoneNumber: string;
+  location: string;
+  password: string;
+}
+
+interface LoginAgentData {
+  email: string;
+  password: string;
+}
+
+interface RegisterFarmerData {
+  farmerName: string;
+  nationalId: string;
+  phoneNumber: string;
+  email?: string;
+  address: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  country: string;
+  idCardNumber: string;
+  idCardType: string;
+  dateOfBirth: string;
+  gender: string;
+  maritalStatus: string;
+  farmSize: number;
+  farmType: string;
+  yearsOfExperience: number;
+  emergencyContact: string;
+  emergencyPhone: string;
+  bankAccountNumber?: string;
+  bankName?: string;
+  ifscCode?: string;
+}
+
+interface CreateLoanData {
+  farmerId: number;
+  amount: number;
+  interestRate: number;
+  dueDate: string;
+}
+
+interface CollateralData {
+  farmerId: number;
+  cropType: string;
+  quantity: number;
+  estimatedValue: number;
+}
+
+interface RepayLoanData {
+  loanId: number;
+  amount: number;
+}
+
+interface FarmerWithCollateral extends Farmer {
+  collateralBalance: number;
+  totalCollateralValue: number;
+  activeLoans: number;
+  healthFactor: number;
+}
+
+// API functions
+const fetchAgentProfile = async (): Promise<Agent | null> => {
+  // Use real backend endpoint
+  const response = await fetch(`${API_BASE_URL}/agents/profile`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error('Failed to fetch agent profile');
+  return await response.json();
+};
+
+const fetchFarmers = async (): Promise<Farmer[]> => {
+  const response = await fetch(`${API_BASE_URL}/farmers`);
+  if (!response.ok) throw new Error('Failed to fetch farmers');
+  return response.json();
+};
+
+const fetchLoans = async (): Promise<Loan[]> => {
+  const response = await fetch(`${API_BASE_URL}/loans`);
+  if (!response.ok) throw new Error('Failed to fetch loans');
+  return response.json();
+};
+
+const registerAgent = async (data: RegisterAgentData): Promise<Agent> => {
+  const response = await fetch(`${API_BASE_URL}/agents/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to register as agent');
+  }
+  return response.json();
+};
+
+const loginAgent = async (data: LoginAgentData): Promise<{ accessToken: string; agent: Agent }> => {
+  const response = await fetch(`${API_BASE_URL}/agents/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to login');
+  }
+  return response.json();
+};
+
+const updateAgentProfile = async (data: Partial<Agent>): Promise<Agent> => {
+  const response = await fetch(`${API_BASE_URL}/agents/profile`, {
+    method: 'PUT',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to update profile');
+  }
+  return response.json();
+};
+
+const changePassword = async (data: { currentPassword: string; newPassword: string }): Promise<{ message: string }> => {
+  const response = await fetch(`${API_BASE_URL}/agents/password`, {
+    method: 'PUT',
+    headers: { 
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to change password');
+  }
+  return response.json();
+};
+
+const registerFarmer = async (data: RegisterFarmerData): Promise<Farmer> => {
+  const response = await fetch(`${API_BASE_URL}/farmers/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      walletAddress: `0x${Math.random().toString(16).substr(2, 40)}`,
+      phoneNumber: data.phoneNumber,
+      nationalId: data.nationalId,
+      agentId: 1, // Current agent ID
+    }),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to register farmer');
+  }
+  return response.json();
+};
+
+const createLoan = async (data: CreateLoanData): Promise<Loan> => {
+  const response = await fetch(`${API_BASE_URL}/loans`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.message || 'Failed to create loan');
+  }
+  return response.json();
+};
+
+export default function AgentPage() {
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [activeSection, setActiveSection] = useState<'register' | 'dashboard' | 'profile' | 'farmers' | 'collateral' | 'loans'>('register');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loginForm, setLoginForm] = useState<LoginAgentData>({
+    email: '',
+    password: '',
+  });
+  const [registerAgentForm, setRegisterAgentForm] = useState<RegisterAgentData>({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    location: '',
+    password: '',
+  });
+  const [registerFarmerForm, setRegisterFarmerForm] = useState<RegisterFarmerData>({
+    farmerName: '',
+    nationalId: '',
+    phoneNumber: '',
+    email: '',
+    address: '',
+    city: '',
+    state: '',
+    postalCode: '',
+    country: 'India',
+    idCardNumber: '',
+    idCardType: 'Aadhaar',
+    dateOfBirth: '',
+    gender: '',
+    maritalStatus: '',
+    farmSize: 0,
+    farmType: '',
+    yearsOfExperience: 0,
+    emergencyContact: '',
+    emergencyPhone: '',
+    bankAccountNumber: '',
+    bankName: '',
+    ifscCode: '',
+  });
+  const [createLoanForm, setCreateLoanForm] = useState<CreateLoanData>({
+    farmerId: 0,
+    amount: 0,
+    interestRate: 0,
+    dueDate: '',
+  });
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    name: '',
+    phoneNumber: '',
+    location: '',
+    walletAddress: '',
+  });
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [collateralForm, setCollateralForm] = useState<CollateralData>({
+    farmerId: 0,
+    cropType: '',
+    quantity: 0,
+    estimatedValue: 0,
+  });
+  const [farmerSearch, setFarmerSearch] = useState('');
+  const [collateralFarmerSearch, setCollateralFarmerSearch] = useState('');
+  const [loanFarmerSearch, setLoanFarmerSearch] = useState('');
+  const [repayLoanForm, setRepayLoanForm] = useState<RepayLoanData>({
+    loanId: 0,
+    amount: 0,
+  });
+
+  const queryClient = useQueryClient();
+
+  // Helper function to filter farmers by search term
+  const getFilteredFarmers = (searchTerm: string) => {
+    if (!searchTerm) return farmers;
+    return farmers.filter(farmer => 
+      farmer.walletAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      farmer.id.toString().includes(searchTerm) ||
+      farmer.nationalId?.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  // Queries
+  const { data: agentProfile, isLoading: agentLoading, error: agentError } = useQuery({
+    queryKey: ['agent-profile'],
+    queryFn: fetchAgentProfile,
+  });
+
+  const { data: farmers = [], isLoading: farmersLoading } = useQuery({
+    queryKey: ['farmers'],
+    queryFn: fetchFarmers,
+    enabled: !!agentProfile && agentProfile.status === 'approved',
+  });
+
+  const { data: loans = [], isLoading: loansLoading } = useQuery({
+    queryKey: ['loans'],
+    queryFn: fetchLoans,
+    enabled: !!agentProfile && agentProfile.status === 'approved',
+  });
+
+  // Mutations
+  const loginAgentMutation = useMutation({
+    mutationFn: loginAgent,
+    onSuccess: (data) => {
+      localStorage.setItem('token', data.accessToken);
+      setIsAuthenticated(true);
+      queryClient.invalidateQueries({ queryKey: ['agent-profile'] });
+      toast.success('Login successful!');
+      setActiveSection('dashboard');
+    },
+    onError: (error: Error) => {
+      toast.error(`Login failed: ${error.message}`);
+    },
+  });
+
+  const registerAgentMutation = useMutation({
+    mutationFn: registerAgent,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['agent-profile'] });
+      setRegisterAgentForm({ name: '', email: '', phoneNumber: '', location: '', password: '' });
+      toast.success('Agent registration submitted! Awaiting approval.');
+      setAuthMode('login');
+    },
+    onError: (error: Error) => {
+      toast.error(`Registration failed: ${error.message}`);
+    },
+  });
+
+  const registerFarmerMutation = useMutation({
+    mutationFn: registerFarmer,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['farmers'] });
+      setRegisterFarmerForm({
+        farmerName: '',
+        nationalId: '',
+        phoneNumber: '',
+        email: '',
+        address: '',
+        city: '',
+        state: '',
+        postalCode: '',
+        country: 'India',
+        idCardNumber: '',
+        idCardType: 'Aadhaar',
+        dateOfBirth: '',
+        gender: '',
+        maritalStatus: '',
+        farmSize: 0,
+        farmType: '',
+        yearsOfExperience: 0,
+        emergencyContact: '',
+        emergencyPhone: '',
+        bankAccountNumber: '',
+        bankName: '',
+        ifscCode: '',
+      });
+      toast.success('Farmer registered successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to register farmer: ${error.message}`);
+    },
+  });
+
+  const createLoanMutation = useMutation({
+    mutationFn: createLoan,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['loans'] });
+      setCreateLoanForm({ farmerId: 0, amount: 0, interestRate: 0, dueDate: '' });
+      toast.success('Loan created successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Failed to create loan: ${error.message}`);
+    },
+  });
+
+  const updateProfileMutation = useMutation({
+    mutationFn: updateAgentProfile,
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['agent-profile'] });
+      setIsEditingProfile(false);
+      toast.success('Profile updated successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Profile update failed: ${error.message}`);
+    },
+  });
+
+  const changePasswordMutation = useMutation({
+    mutationFn: changePassword,
+    onSuccess: () => {
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password changed successfully!');
+    },
+    onError: (error: Error) => {
+      toast.error(`Password change failed: ${error.message}`);
+    },
+  });
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!loginForm.email || !loginForm.password) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    loginAgentMutation.mutate(loginForm);
+  };
+
+  const handleEditProfile = () => {
+    if (agentProfile) {
+      setProfileForm({
+        name: agentProfile.name || '',
+        phoneNumber: agentProfile.phoneNumber || '',
+        location: agentProfile.location || '',
+        walletAddress: agentProfile.walletAddress || '',
+      });
+      setIsEditingProfile(true);
+    }
+  };
+
+  const handleUpdateProfile = (e: React.FormEvent) => {
+    e.preventDefault();
+    updateProfileMutation.mutate(profileForm);
+  };
+
+  const handleChangePassword = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (passwordForm.newPassword.length < 8) {
+      toast.error('New password must be at least 8 characters long');
+      return;
+    }
+    changePasswordMutation.mutate({
+      currentPassword: passwordForm.currentPassword,
+      newPassword: passwordForm.newPassword,
+    });
+  };
+
+  const handleRegisterAgent = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registerAgentForm.name || !registerAgentForm.email || !registerAgentForm.phoneNumber || !registerAgentForm.location || !registerAgentForm.password) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    if (registerAgentForm.password.length < 8) {
+      toast.error('Password must be at least 8 characters long');
+      return;
+    }
+    registerAgentMutation.mutate(registerAgentForm);
+  };
+
+  const handleRegisterFarmer = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!registerFarmerForm.farmerName || !registerFarmerForm.nationalId || !registerFarmerForm.phoneNumber || 
+        !registerFarmerForm.address || !registerFarmerForm.city || !registerFarmerForm.state || 
+        !registerFarmerForm.idCardNumber || !registerFarmerForm.dateOfBirth || !registerFarmerForm.gender) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    registerFarmerMutation.mutate(registerFarmerForm);
+  };
+
+  const handleCreateLoan = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!createLoanForm.farmerId || createLoanForm.amount <= 0 || createLoanForm.interestRate <= 0 || !createLoanForm.dueDate) {
+      toast.error('Please fill in all required fields');
+      return;
+    }
+    createLoanMutation.mutate(createLoanForm);
+  };
+
+  // Check authentication status on mount
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      setIsAuthenticated(true);
+    }
+  }, []);
+
+  // Auto-navigate based on agent status
+  useEffect(() => {
+    if (agentProfile) {
+      if (agentProfile.status === 'pending') {
+        setActiveSection('dashboard');
+      } else if (agentProfile.status === 'approved') {
+        setActiveSection('dashboard');
+      }
+    }
+  }, [agentProfile]);
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'approved':
+        return <Badge className="bg-green-100 text-green-800 border-green-200"><CheckCircle className="h-3 w-3 mr-1" />Approved</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800 border-yellow-200"><Clock className="h-3 w-3 mr-1" />Pending</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-100 text-red-800 border-red-200"><AlertCircle className="h-3 w-3 mr-1" />Rejected</Badge>;
+      default:
+        return null;
+    }
+  };
+
+  // If not authenticated, show login/register forms
+  if (!isAuthenticated && !agentLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-md w-full space-y-8">
+          <div className="text-center">
+            <div className="mx-auto h-16 w-16 rounded-full bg-gradient-to-r from-agricultural-green to-golden-accent flex items-center justify-center mb-4">
+              <Image 
+                src="/logo.png" 
+                alt="Hedarvest Logo" 
+                width={32} 
+                height={32} 
+                className="h-8 w-8"
+              />
+            </div>
+            <h2 className="text-3xl font-bold text-foreground">
+              {authMode === 'login' ? 'Agent Login' : 'Register as Agent'}
+            </h2>
+            <p className="mt-2 text-muted-foreground">
+              {authMode === 'login' 
+                ? 'Sign in to your agent dashboard' 
+                : 'Join Hedarvest as an agricultural agent to help farmers access financing'
+              }
+            </p>
+          </div>
+          
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                {authMode === 'login' ? (
+                  <>
+                    <LogIn className="h-5 w-5 mr-2" />
+                    Login
+                  </>
+                ) : (
+                  <>
+                    <UserPlus className="h-5 w-5 mr-2" />
+                    Register
+                  </>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {authMode === 'login' ? (
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Email Address *
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="email"
+                        value={loginForm.email}
+                        onChange={(e) => setLoginForm(prev => ({ ...prev, email: e.target.value }))}
+                        placeholder="Enter your email"
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Password *
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        type="password"
+                        value={loginForm.password}
+                        onChange={(e) => setLoginForm(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Enter your password"
+                        className="pl-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={loginAgentMutation.isPending}
+                    className="w-full"
+                  >
+                    {loginAgentMutation.isPending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Signing in...
+                      </>
+                    ) : (
+                      <>
+                        <LogIn className="h-4 w-4 mr-2" />
+                        Sign In
+                      </>
+                    )}
+                  </Button>
+                </form>
+              ) : (
+              <form onSubmit={handleRegisterAgent} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Full Name *
+                  </label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="text"
+                    value={registerAgentForm.name}
+                    onChange={(e) => setRegisterAgentForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Enter your full name"
+                        className="pl-10"
+                    required
+                  />
+                    </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Email Address *
+                  </label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="email"
+                    value={registerAgentForm.email}
+                    onChange={(e) => setRegisterAgentForm(prev => ({ ...prev, email: e.target.value }))}
+                    placeholder="Enter your email"
+                        className="pl-10"
+                    required
+                  />
+                    </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Phone Number *
+                  </label>
+                  <Input
+                    type="tel"
+                    value={registerAgentForm.phoneNumber}
+                    onChange={(e) => setRegisterAgentForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                    placeholder="Enter your phone number"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location *
+                  </label>
+                  <Input
+                    type="text"
+                    value={registerAgentForm.location}
+                    onChange={(e) => setRegisterAgentForm(prev => ({ ...prev, location: e.target.value }))}
+                    placeholder="Enter your location"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Password *
+                  </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  <Input
+                    type="password"
+                    value={registerAgentForm.password}
+                    onChange={(e) => setRegisterAgentForm(prev => ({ ...prev, password: e.target.value }))}
+                    placeholder="Enter a secure password (min 8 characters)"
+                        className="pl-10"
+                    required
+                    minLength={8}
+                  />
+                    </div>
+                </div>
+                <Button
+                  type="submit"
+                  disabled={registerAgentMutation.isPending}
+                  className="w-full"
+                >
+                  {registerAgentMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Registering...
+                    </>
+                  ) : (
+                    <>
+                        <UserPlus className="h-4 w-4 mr-2" />
+                      Register as Agent
+                    </>
+                  )}
+                </Button>
+              </form>
+              )}
+              
+              <div className="mt-6 text-center">
+                {authMode === 'login' ? (
+                  <p className="text-sm text-gray-600">
+                    Haven't joined as agent?{' '}
+                    <button
+                      onClick={() => setAuthMode('register')}
+                      className="text-blue-600 hover:text-blue-500 font-medium"
+                    >
+                      Register
+                    </button>
+                  </p>
+                ) : (
+                  <p className="text-sm text-gray-600">
+                    Already have an account?{' '}
+                    <button
+                      onClick={() => setAuthMode('login')}
+                      className="text-blue-600 hover:text-blue-500 font-medium"
+                    >
+                      Sign in
+                    </button>
+                  </p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // If agent profile exists, show dashboard
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="w-full border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-50">
+        <div className="w-full px-8 py-4">
+          <div className="flex items-center justify-between">
+            {/* Logo */}
+            <div className="flex items-center space-x-2">
+              <Image 
+                src="/logo.png" 
+                alt="Hedarvest Logo" 
+                width={32} 
+                height={32} 
+                className="h-8 w-8"
+              />
+              <span className="text-2xl font-bold text-foreground">Hedarvest</span>
+            </div>
+            
+            {/* Agent Info */}
+            <div className="flex items-center space-x-4">
+              <div className="text-right">
+                <p className="text-sm font-medium text-foreground">{agentProfile?.name || 'Loading...'}</p>
+                <div className="flex items-center gap-2">
+                  {agentProfile && getStatusBadge(agentProfile.status)}
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  setIsAuthenticated(false);
+                  setActiveSection('register');
+                  toast.success('Logged out successfully');
+                }}
+                className="flex items-center"
+              >
+                <LogIn className="h-4 w-4 mr-2" />
+                Logout
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="w-full px-8 py-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex gap-8">
+          {/* Sidebar */}
+          <div className="w-64 flex-shrink-0">
+            <nav className="space-y-2">
+              <button
+                onClick={() => setActiveSection('dashboard')}
+                className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                  activeSection === 'dashboard'
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+              >
+                <Eye className="h-5 w-5 mr-3" />
+                Dashboard
+              </button>
+                <button
+                  onClick={() => setActiveSection('profile')}
+                  className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                    activeSection === 'profile'
+                      ? 'bg-primary/10 text-primary border border-primary/20'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                  }`}
+                >
+                  <User className="h-5 w-5 mr-3" />
+                  Agent Profile
+              </button>
+              {agentProfile?.status === 'approved' && (
+                <>
+                  <button
+                    onClick={() => setActiveSection('farmers')}
+                    className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      activeSection === 'farmers'
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <Users className="h-5 w-5 mr-3" />
+                      Farmer Management
+                    </button>
+                    <button
+                      onClick={() => setActiveSection('collateral')}
+                      className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                        activeSection === 'collateral'
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                      }`}
+                    >
+                      <Package className="h-5 w-5 mr-3" />
+                      Collateral Management
+                  </button>
+                  <button
+                    onClick={() => setActiveSection('loans')}
+                    className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-colors ${
+                      activeSection === 'loans'
+                          ? 'bg-primary/10 text-primary border border-primary/20'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                    }`}
+                  >
+                    <DollarSign className="h-5 w-5 mr-3" />
+                      Loan Management
+                  </button>
+                </>
+              )}
+            </nav>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1">
+            {activeSection === 'dashboard' && (
+              <div className="space-y-8">
+                {/* Welcome Section */}
+                <div className="bg-gradient-to-r from-primary/5 via-secondary/5 to-accent/5 border border-primary/20 rounded-xl p-8">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="h-12 w-12 rounded-full bg-gradient-to-r from-agricultural-green to-golden-accent flex items-center justify-center">
+                      <Building2 className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-3xl font-bold text-foreground">Welcome back, {agentProfile?.name}!</h2>
+                      <p className="text-muted-foreground text-lg">
+                        Manage your farmers, track loans, and monitor collateral from your agent dashboard.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {agentProfile?.status === 'pending' && (
+                  <Card className="border-accent/20 bg-accent/5">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center">
+                        <Clock className="h-5 w-5 text-accent mr-2" />
+                        <div>
+                          <h3 className="text-sm font-medium text-foreground">Registration Under Review</h3>
+                          <p className="text-sm text-muted-foreground mt-1">
+                            Your agent registration is being reviewed. You'll be notified once approved.
+                          </p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {agentProfile?.status === 'approved' && (
+                  <>
+                    {/* Stats Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                      <Card className="border-border shadow-card">
+                        <CardContent className="p-6">
+                          <div className="flex items-center">
+                            <div className="p-3 bg-secondary/10 rounded-xl">
+                              <Users className="h-6 w-6 text-secondary" />
+                            </div>
+                            <div className="ml-4">
+                              <p className="text-sm font-medium text-muted-foreground">Total Farmers</p>
+                              <p className="text-2xl font-bold text-foreground">{farmers.length}</p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border shadow-card">
+                        <CardContent className="p-6">
+                          <div className="flex items-center">
+                            <div className="p-3 bg-primary/10 rounded-xl">
+                              <DollarSign className="h-6 w-6 text-primary" />
+                            </div>
+                            <div className="ml-4">
+                              <p className="text-sm font-medium text-muted-foreground">Active Loans</p>
+                              <p className="text-2xl font-bold text-foreground">
+                                {loans.filter(l => l.status === 'active').length}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                      <Card className="border-border shadow-card">
+                        <CardContent className="p-6">
+                          <div className="flex items-center">
+                            <div className="p-3 bg-accent/10 rounded-xl">
+                              <Package className="h-6 w-6 text-accent" />
+                            </div>
+                            <div className="ml-4">
+                              <p className="text-sm font-medium text-muted-foreground">Total Loan Value</p>
+                              <p className="text-2xl font-bold text-foreground">
+                                ${loans.reduce((sum, loan) => sum + loan.amount, 0).toLocaleString()}
+                              </p>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    </div>
+
+                    {/* Recent Activity */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Recent Activity</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          {farmers.slice(0, 3).map((farmer) => (
+                            <div key={farmer.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center space-x-3">
+                                <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
+                                  <UserPlus className="h-4 w-4 text-green-600" />
+                                </div>
+                                <div>
+                                  <p className="text-sm font-medium text-gray-900">New farmer registered</p>
+                                  <p className="text-sm text-gray-500">{farmer.walletAddress.slice(0, 8)}...</p>
+                                </div>
+                              </div>
+                              <span className="text-sm text-gray-500">
+                                {new Date(farmer.createdAt).toLocaleDateString()}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
+            )}
+
+            {activeSection === 'profile' && (
+              <div className="space-y-6">
+                {/* Agent Profile Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <User className="h-5 w-5 mr-2" />
+                      Agent Profile
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Manage your agent details and wallet connection</p>
+                  </CardHeader>
+                  <CardContent className="space-y-6">
+                    {/* Basic Information */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Name</label>
+                            <p className="text-sm text-gray-900">{agentProfile?.name || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Email</label>
+                            <p className="text-sm text-gray-900">{agentProfile?.email || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Phone</label>
+                            <p className="text-sm text-gray-900">{agentProfile?.phoneNumber || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Location</label>
+                            <p className="text-sm text-gray-900">{agentProfile?.location || 'Not provided'}</p>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Commission Rate</label>
+                            <p className="text-sm text-gray-900">{agentProfile?.commissionRate ? `${(agentProfile.commissionRate * 100).toFixed(2)}%` : 'Not set'}</p>
+                          </div>
+                        </div>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900">Status & Wallet</h3>
+                        <div className="space-y-3">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Status</label>
+                            <div className="mt-1">
+                              {getStatusBadge(agentProfile?.status || 'pending')}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Wallet Address</label>
+                            <div className="flex items-center space-x-2">
+                              <p className="text-sm text-gray-900 font-mono">
+                                {agentProfile?.walletAddress || 'Not connected'}
+                              </p>
+                              {!agentProfile?.walletAddress && (
+                                <Button size="sm" variant="outline">
+                                  <Wallet className="h-4 w-4 mr-1" />
+                                  Connect
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700">Registration Date</label>
+                            <p className="text-sm text-gray-900">
+                              {agentProfile?.createdAt ? new Date(agentProfile.createdAt).toLocaleDateString() : 'Not available'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Wallet Connect */}
+                    <div className="border-t pt-6">
+                      <h3 className="text-lg font-medium text-gray-900 mb-4">Wallet Connection</h3>
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="text-sm font-medium text-blue-900">Connect Wallet</h4>
+                            <p className="text-sm text-blue-700">Connect your wallet to manage transactions and HTS tokens</p>
+                          </div>
+                          <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100">
+                            <Wallet className="h-4 w-4 mr-2" />
+                            Connect Wallet
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Update Profile Button */}
+                    <div className="border-t pt-6">
+                      <Button onClick={handleEditProfile} className="w-full">
+                        <Edit className="h-4 w-4 mr-2" />
+                        Update Profile Information
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Password Change Card */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Lock className="h-5 w-5 mr-2" />
+                      Change Password
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Update your account password</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleChangePassword} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Current Password</label>
+                        <Input
+                          type="password"
+                          value={passwordForm.currentPassword}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
+                          placeholder="Enter current password"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">New Password</label>
+                        <Input
+                          type="password"
+                          value={passwordForm.newPassword}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
+                          placeholder="Enter new password"
+                          required
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Confirm New Password</label>
+                        <Input
+                          type="password"
+                          value={passwordForm.confirmPassword}
+                          onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
+                          placeholder="Confirm new password"
+                          required
+                        />
+                      </div>
+                      <Button type="submit" disabled={changePasswordMutation.isPending}>
+                        {changePasswordMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Lock className="h-4 w-4 mr-2" />
+                        )}
+                        Change Password
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeSection === 'farmers' && agentProfile?.status === 'approved' && (
+              <div className="space-y-6">
+                {/* Register Farmer Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <UserPlus className="h-5 w-5 mr-2" />
+                      Register New Farmer
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Complete farmer registration with comprehensive information</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleRegisterFarmer} className="space-y-6">
+                      {/* Personal Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Personal Information</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Full Name *
+                          </label>
+                          <Input
+                            type="text"
+                            value={registerFarmerForm.farmerName}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, farmerName: e.target.value }))}
+                              placeholder="Enter full name"
+                            required
+                          />
+                        </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Email Address
+                            </label>
+                            <Input
+                              type="email"
+                              value={registerFarmerForm.email}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, email: e.target.value }))}
+                              placeholder="Enter email address"
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Phone Number *
+                            </label>
+                            <Input
+                              type="tel"
+                              value={registerFarmerForm.phoneNumber}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, phoneNumber: e.target.value }))}
+                              placeholder="Enter phone number"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Date of Birth *
+                            </label>
+                            <Input
+                              type="date"
+                              value={registerFarmerForm.dateOfBirth}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, dateOfBirth: e.target.value }))}
+                              required
+                            />
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Gender *
+                            </label>
+                            <select
+                              value={registerFarmerForm.gender}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, gender: e.target.value }))}
+                              className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                              required
+                            >
+                              <option value="">Select Gender</option>
+                              <option value="Male">Male</option>
+                              <option value="Female">Female</option>
+                              <option value="Other">Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Marital Status
+                            </label>
+                            <select
+                              value={registerFarmerForm.maritalStatus}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, maritalStatus: e.target.value }))}
+                              className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="">Select Status</option>
+                              <option value="Single">Single</option>
+                              <option value="Married">Married</option>
+                              <option value="Divorced">Divorced</option>
+                              <option value="Widowed">Widowed</option>
+                            </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            National ID *
+                          </label>
+                          <Input
+                            type="text"
+                            value={registerFarmerForm.nationalId}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, nationalId: e.target.value }))}
+                            placeholder="Enter national ID"
+                            required
+                          />
+                        </div>
+                      </div>
+                      </div>
+
+                      {/* Address Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Address Information</h3>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Street Address *
+                        </label>
+                        <Input
+                            type="text"
+                            value={registerFarmerForm.address}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, address: e.target.value }))}
+                            placeholder="Enter street address"
+                          required
+                        />
+                      </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              City *
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.city}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, city: e.target.value }))}
+                              placeholder="Enter city"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              State *
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.state}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, state: e.target.value }))}
+                              placeholder="Enter state"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Postal Code
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.postalCode}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, postalCode: e.target.value }))}
+                              placeholder="Enter postal code"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Country
+                          </label>
+                          <Input
+                            type="text"
+                            value={registerFarmerForm.country}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, country: e.target.value }))}
+                            placeholder="Enter country"
+                          />
+                        </div>
+                      </div>
+
+                      {/* ID Card Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">ID Card Information</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              ID Card Type
+                            </label>
+                            <select
+                              value={registerFarmerForm.idCardType}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, idCardType: e.target.value }))}
+                              className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                              <option value="Aadhaar">Aadhaar Card</option>
+                              <option value="PAN">PAN Card</option>
+                              <option value="Voter ID">Voter ID</option>
+                              <option value="Driving License">Driving License</option>
+                              <option value="Passport">Passport</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              ID Card Number *
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.idCardNumber}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, idCardNumber: e.target.value }))}
+                              placeholder="Enter ID card number"
+                              required
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Farm Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Farm Information</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Farm Size (acres)
+                            </label>
+                            <Input
+                              type="number"
+                              value={registerFarmerForm.farmSize}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, farmSize: parseFloat(e.target.value) || 0 }))}
+                              placeholder="Enter farm size in acres"
+                              min="0"
+                              step="0.1"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Years of Experience
+                            </label>
+                            <Input
+                              type="number"
+                              value={registerFarmerForm.yearsOfExperience}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, yearsOfExperience: parseInt(e.target.value) || 0 }))}
+                              placeholder="Enter years of farming experience"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Farm Type
+                          </label>
+                          <select
+                            value={registerFarmerForm.farmType}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, farmType: e.target.value }))}
+                            className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          >
+                            <option value="">Select Farm Type</option>
+                            <option value="Crop Farming">Crop Farming</option>
+                            <option value="Livestock">Livestock</option>
+                            <option value="Mixed Farming">Mixed Farming</option>
+                            <option value="Organic Farming">Organic Farming</option>
+                            <option value="Dairy">Dairy</option>
+                            <option value="Poultry">Poultry</option>
+                            <option value="Horticulture">Horticulture</option>
+                          </select>
+                        </div>
+                      </div>
+
+                      {/* Emergency Contact */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Emergency Contact</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Emergency Contact Name
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.emergencyContact}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, emergencyContact: e.target.value }))}
+                              placeholder="Enter emergency contact name"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Emergency Contact Phone
+                            </label>
+                            <Input
+                              type="tel"
+                              value={registerFarmerForm.emergencyPhone}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, emergencyPhone: e.target.value }))}
+                              placeholder="Enter emergency contact phone"
+                            />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Banking Information */}
+                      <div className="space-y-4">
+                        <h3 className="text-lg font-medium text-gray-900 border-b pb-2">Banking Information (Optional)</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Bank Account Number
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.bankAccountNumber}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, bankAccountNumber: e.target.value }))}
+                              placeholder="Enter bank account number"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              Bank Name
+                            </label>
+                            <Input
+                              type="text"
+                              value={registerFarmerForm.bankName}
+                              onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, bankName: e.target.value }))}
+                              placeholder="Enter bank name"
+                            />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            IFSC Code
+                          </label>
+                          <Input
+                            type="text"
+                            value={registerFarmerForm.ifscCode}
+                            onChange={(e) => setRegisterFarmerForm(prev => ({ ...prev, ifscCode: e.target.value }))}
+                            placeholder="Enter IFSC code"
+                          />
+                        </div>
+                      </div>
+
+                      <Button
+                        type="submit"
+                        disabled={registerFarmerMutation.isPending}
+                        className="w-full"
+                      >
+                        {registerFarmerMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Registering Farmer...
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Register Farmer
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Farmers List */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Users className="h-5 w-5 mr-2" />
+                      Registered Farmers ({farmers.length})
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {farmersLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+                        <span className="ml-2 text-gray-500">Loading farmers...</span>
+                      </div>
+                    ) : farmers.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        No farmers registered yet
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {farmers.map((farmer) => (
+                          <div key={farmer.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                                <UserPlus className="h-5 w-5 text-green-600" />
+                              </div>
+                              <div>
+                                <h3 className="font-medium text-gray-900">
+                                  {farmer.walletAddress.slice(0, 8)}...{farmer.walletAddress.slice(-6)}
+                                </h3>
+                                <p className="text-sm text-gray-500">
+                                  ID: {farmer.nationalId} | Phone: {farmer.phoneNumber}
+                                </p>
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-green-600 border-green-200">
+                              <CheckCircle className="h-3 w-3 mr-1" />
+                              Active
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeSection === 'collateral' && agentProfile?.status === 'approved' && (
+              <div className="space-y-6">
+                {/* Add Collateral Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Package className="h-5 w-5 mr-2" />
+                      Add Collateral
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Add crop collateral (1 kg = 1 HTS token)</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Select Farmer *
+                        </label>
+                          <div className="relative">
+                            <Input
+                              type="text"
+                              value={collateralFarmerSearch}
+                              onChange={(e) => setCollateralFarmerSearch(e.target.value)}
+                              placeholder="Search by name, ID, or wallet address..."
+                              className="w-full"
+                            />
+                            {collateralFarmerSearch && (
+                              <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                                {getFilteredFarmers(collateralFarmerSearch).map((farmer) => (
+                                  <div
+                                    key={farmer.id}
+                                    onClick={() => {
+                                      setCollateralForm(prev => ({ ...prev, farmerId: farmer.id }));
+                                      setCollateralFarmerSearch(`${farmer.walletAddress.slice(0, 8)}...${farmer.walletAddress.slice(-6)} (ID: ${farmer.id})`);
+                                    }}
+                                    className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                  >
+                                    <div className="font-medium text-gray-900">
+                                      {farmer.walletAddress.slice(0, 8)}...{farmer.walletAddress.slice(-6)}
+                                    </div>
+                                    <div className="text-sm text-gray-500">ID: {farmer.id} | National ID: {farmer.nationalId}</div>
+                                  </div>
+                                ))}
+                                {getFilteredFarmers(collateralFarmerSearch).length === 0 && (
+                                  <div className="px-4 py-2 text-gray-500 text-sm">No farmers found</div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Crop Type *
+                        </label>
+                        <select
+                            value={collateralForm.cropType}
+                            onChange={(e) => setCollateralForm(prev => ({ ...prev, cropType: e.target.value }))}
+                          className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        >
+                            <option value="">Select crop type</option>
+                            <option value="Wheat">Wheat</option>
+                            <option value="Rice">Rice</option>
+                            <option value="Corn">Corn</option>
+                            <option value="Soybean">Soybean</option>
+                            <option value="Cotton">Cotton</option>
+                            <option value="Sugarcane">Sugarcane</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Quantity (kg) *
+                          </label>
+                          <Input
+                            type="number"
+                            value={collateralForm.quantity}
+                            onChange={(e) => setCollateralForm(prev => ({ ...prev, quantity: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Enter quantity in kg"
+                            min="0"
+                            step="0.1"
+                            required
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Estimated Value ($)
+                          </label>
+                          <Input
+                            type="number"
+                            value={collateralForm.estimatedValue}
+                            onChange={(e) => setCollateralForm(prev => ({ ...prev, estimatedValue: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Enter estimated value"
+                            min="0"
+                            step="0.01"
+                          />
+                        </div>
+                      </div>
+                      <Button type="submit" className="w-full">
+                        <Package className="h-4 w-4 mr-2" />
+                        Add Collateral
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Collateral Overview */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Package className="h-5 w-5 mr-2" />
+                      Tokenized Crop Balances
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">HTS token balances per farmer</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                          {farmers.map((farmer) => (
+                        <div key={farmer.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                              <Package className="h-5 w-5 text-green-600" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium text-gray-900">
+                                {farmer.walletAddress.slice(0, 8)}...{farmer.walletAddress.slice(-6)}
+                              </h3>
+                              <p className="text-sm text-gray-500">Farmer ID: {farmer.id}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-lg font-semibold text-green-600">1,250 HTS</p>
+                            <p className="text-sm text-gray-500">~$1,250 value</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            {activeSection === 'loans' && agentProfile?.status === 'approved' && (
+              <div className="space-y-6">
+                {/* Current APY Display */}
+                <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 border-blue-200">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="text-lg font-semibold text-blue-900">Current Pool APY</h3>
+                        <p className="text-sm text-blue-700">Interest rates for different loan pools</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-2xl font-bold text-blue-900">12.5%</p>
+                        <p className="text-sm text-blue-600">Wheat Pool</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* Loan Management Table */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <DollarSign className="h-5 w-5 mr-2" />
+                      Loan Management
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Track farmer loans, collateral, and health factors</p>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b">
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Farmer Name</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Collateral Value</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Loan Taken</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Interest Accrued</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Health Factor</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                            <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {farmers.map((farmer) => {
+                            const collateralValue = 1250; // Mock data
+                            const loanAmount = 800; // Mock data
+                            const interestAccrued = 45.50; // Mock data
+                            const healthFactor = (collateralValue / (loanAmount + interestAccrued)).toFixed(2);
+                            const isHealthy = parseFloat(healthFactor) > 1.2;
+                            
+                            return (
+                              <tr key={farmer.id} className="border-b hover:bg-gray-50">
+                                <td className="py-3 px-4">
+                                  <div>
+                                    <p className="font-medium text-gray-900">
+                                      {farmer.walletAddress.slice(0, 8)}...{farmer.walletAddress.slice(-6)}
+                                    </p>
+                                    <p className="text-sm text-gray-500">ID: {farmer.id}</p>
+                                  </div>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <p className="text-green-600 font-semibold">${collateralValue.toLocaleString()}</p>
+                                  <p className="text-sm text-gray-500">1,250 HTS</p>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <p className="text-gray-900 font-semibold">${loanAmount.toLocaleString()}</p>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <p className="text-orange-600 font-semibold">${interestAccrued}</p>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                    isHealthy 
+                                      ? 'bg-green-100 text-green-800' 
+                                      : 'bg-red-100 text-red-800'
+                                  }`}>
+                                    {healthFactor}x
+                                  </span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  {isHealthy ? (
+                                    <Badge className="bg-green-100 text-green-800 border-green-200">
+                                      <CheckCircle className="h-3 w-3 mr-1" />
+                                      Healthy
+                                    </Badge>
+                                  ) : (
+                                    <Badge className="bg-red-100 text-red-800 border-red-200">
+                                      <AlertCircle className="h-3 w-3 mr-1" />
+                                      At Risk
+                                    </Badge>
+                                  )}
+                                </td>
+                                <td className="py-3 px-4">
+                                  <div className="flex space-x-2">
+                                    <Button size="sm" variant="outline">
+                                      <Edit className="h-4 w-4 mr-1" />
+                                      Manage
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* New Loan Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <Plus className="h-5 w-5 mr-2" />
+                      Create New Loan
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Create loan against farmer's HTS token collateral</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form onSubmit={handleCreateLoan} className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Select Farmer *
+                        </label>
+                        <div className="relative">
+                          <Input
+                            type="text"
+                            value={loanFarmerSearch}
+                            onChange={(e) => setLoanFarmerSearch(e.target.value)}
+                            placeholder="Search by name, ID, or wallet address..."
+                            className="w-full"
+                          />
+                          {loanFarmerSearch && (
+                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                              {getFilteredFarmers(loanFarmerSearch).map((farmer) => (
+                                <div
+                                  key={farmer.id}
+                                  onClick={() => {
+                                    setCreateLoanForm(prev => ({ ...prev, farmerId: farmer.id }));
+                                    setLoanFarmerSearch(`${farmer.walletAddress.slice(0, 8)}...${farmer.walletAddress.slice(-6)} (Collateral: $1,250)`);
+                                  }}
+                                  className="px-4 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                                >
+                                  <div className="font-medium text-gray-900">
+                                    {farmer.walletAddress.slice(0, 8)}...{farmer.walletAddress.slice(-6)}
+                                  </div>
+                                  <div className="text-sm text-gray-500">ID: {farmer.id} | Collateral: $1,250</div>
+                                </div>
+                              ))}
+                              {getFilteredFarmers(loanFarmerSearch).length === 0 && (
+                                <div className="px-4 py-2 text-gray-500 text-sm">No farmers found</div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Loan Amount ($) *
+                          </label>
+                          <Input
+                            type="number"
+                            value={createLoanForm.amount}
+                            onChange={(e) => setCreateLoanForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Enter loan amount"
+                            min="0"
+                            step="0.01"
+                            required
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Max: $1,000 (80% of collateral)</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Interest Rate (%) *
+                          </label>
+                          <Input
+                            type="number"
+                            value={createLoanForm.interestRate}
+                            onChange={(e) => setCreateLoanForm(prev => ({ ...prev, interestRate: parseFloat(e.target.value) || 0 }))}
+                            placeholder="Enter interest rate"
+                            min="0"
+                            max="100"
+                            step="0.1"
+                            required
+                          />
+                          <p className="text-xs text-gray-500 mt-1">Current APY: 12.5%</p>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Due Date *
+                        </label>
+                        <Input
+                          type="date"
+                          value={createLoanForm.dueDate}
+                          onChange={(e) => setCreateLoanForm(prev => ({ ...prev, dueDate: e.target.value }))}
+                          required
+                        />
+                      </div>
+                      <Button
+                        type="submit"
+                        disabled={createLoanMutation.isPending || farmers.length === 0}
+                        className="w-full"
+                      >
+                        {createLoanMutation.isPending ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Creating...
+                          </>
+                        ) : (
+                          <>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Create Loan
+                          </>
+                        )}
+                      </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+
+                {/* Repay Loan Form */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <DollarSign className="h-5 w-5 mr-2" />
+                      Repay Loan
+                    </CardTitle>
+                    <p className="text-sm text-gray-600">Make loan repayments to update balances</p>
+                  </CardHeader>
+                  <CardContent>
+                    <form className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Select Loan *
+                        </label>
+                        <select
+                          value={repayLoanForm.loanId}
+                          onChange={(e) => setRepayLoanForm(prev => ({ ...prev, loanId: parseInt(e.target.value) }))}
+                          className="w-full h-10 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          required
+                        >
+                          <option value={0}>Select a loan</option>
+                        {loans.map((loan) => (
+                            <option key={loan.id} value={loan.id}>
+                              ${loan.amount} - {loan.farmer?.walletAddress.slice(0, 8)}... (Due: {loan.dueDate})
+                            </option>
+                          ))}
+                        </select>
+                              </div>
+                              <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Repayment Amount ($) *
+                        </label>
+                        <Input
+                          type="number"
+                          value={repayLoanForm.amount}
+                          onChange={(e) => setRepayLoanForm(prev => ({ ...prev, amount: parseFloat(e.target.value) || 0 }))}
+                          placeholder="Enter repayment amount"
+                          min="0"
+                          step="0.01"
+                          required
+                        />
+                              </div>
+                      <Button type="submit" className="w-full">
+                        <DollarSign className="h-4 w-4 mr-2" />
+                        Process Repayment
+                              </Button>
+                    </form>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </div>
+          </div>
+        </div>
+      </main>
+    </div>
+  );
+}

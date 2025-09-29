@@ -1,54 +1,38 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ethers } from 'ethers';
-// Using process.env directly
 
-// Simplified contract ABIs
-const POOL_FACTORY_ABI = [
-  'function getAllPools() external view returns (tuple(address poolAddress, address oracleAddress, string grainType)[])',
-  'function getPool(string) external view returns (tuple(address poolAddress, address oracleAddress, string grainType))',
-  'function getPoolStats() external view returns (tuple(address pool, string grainType, uint256 totalAssets, uint256 totalBorrows, uint256 availableLiquidity, uint256 utilizationRate, uint256 currentAPR)[])',
-  'function getPoolUtilizationRates() external view returns (address[] pools, uint256[] utilizationRates)',
-  'function getAllPoolAPRs() external view returns (address[] pools, uint256[] aprs)',
+// Updated contract ABIs for LendingFactory and LendingPool
+const LENDING_FACTORY_ABI = [
+  'function getAllPools() external view returns (tuple(address poolAddress, address oracleAddress, string assetType)[])',
+  'function getPool(string) external view returns (tuple(address poolAddress, address oracleAddress, string assetType))',
 ];
 
-const GRAIN_POOL_ABI = [
-  'function grainType() external view returns (string)',
+const LENDING_POOL_ABI = [
+  'function assetType() external view returns (string)',
   'function lendingToken() external view returns (address)',
   'function collateralToken() external view returns (address)',
+  'function lpToken() external view returns (address)',
   'function priceOracle() external view returns (address)',
   'function baseLTV() external view returns (uint256)',
-  'function riskPremium() external view returns (uint256)',
-  'function debtCeiling() external view returns (uint256)',
   'function protocolFee() external view returns (uint256)',
   'function totalAssets() external view returns (uint256)',
   'function totalBorrows() external view returns (uint256)',
   'function totalReserves() external view returns (uint256)',
   'function availableLiquidity() external view returns (uint256)',
   'function exchangeRate() external view returns (uint256)',
+  'function utilizationRate() external view returns (uint256)',
+  'function currentAPR() external view returns (uint256)',
   'function borrows(address) external view returns (uint256)',
   'function collateral(address) external view returns (uint256)',
+  'function lpShares(address) external view returns (uint256)',
   'function deposit(uint256 amount) external',
   'function withdraw(uint256 shares) external',
   'function depositCollateral(uint256 amount) external',
   'function createLoan(uint256 amount) external',
   'function repayLoan(uint256 amount) external',
-  'function liquidate(address farmer) external',
-  'function getBorrowerPosition(address farmer) external view returns (uint256 depositedCollateral, uint256 collateralUSD, uint256 borrowed, uint256 maxBorrow, uint256 healthFactor)',
-  // New investor dashboard functions
-  'function getInvestorShares(address investor) external view returns (uint256)',
-  'function getInvestorValue(address investor) external view returns (uint256)',
-  'function getInvestorYield(address investor) external view returns (uint256)',
-  'function utilizationRate() external view returns (uint256)',
-  'function currentAPR() external view returns (uint256)',
-  'function getTVL() external view returns (uint256)',
-  'function getPoolValueUSD() external view returns (uint256)',
-  'function getPoolHealthScore() external view returns (uint256)',
-  'function getEstimatedYield(address investor) external view returns (uint256)',
-  'function getInvestorDepositHistory(address investor) external view returns (tuple(address investor, uint256 amount, uint256 shares, uint256 timestamp)[])',
-  'function getInvestorTotalDeposits(address investor) external view returns (uint256)',
-  'function updateDailyStats() external',
-  'function getDailyStats(uint256 date) external view returns (tuple(uint256 date, uint256 totalAssets, uint256 totalBorrows, uint256 exchangeRate, uint256 utilizationRate))',
-  'function getCurrentPoolStats() external view returns (uint256 _totalAssets, uint256 _totalBorrows, uint256 _totalReserves, uint256 _availableLiquidity, uint256 _utilizationRate, uint256 _exchangeRate, uint256 _currentAPR, uint256 _healthScore)',
+  'function liquidate(address borrower) external',
+  'function getCurrentBorrowBalance(address borrower) external view returns (uint256)',
+  'function accrueInterest() external',
 ];
 
 const MOCK_TOKEN_ABI = [
@@ -63,9 +47,7 @@ const MOCK_TOKEN_ABI = [
   'function allowance(address owner, address spender) external view returns (uint256)',
 ];
 
-const ORACLE_ABI = [
-  'function getPrice() external view returns (uint256)',
-];
+const ORACLE_ABI = ['function getPrice() external view returns (uint256)'];
 
 @Injectable()
 export class ContractService {
@@ -118,232 +100,168 @@ export class ContractService {
     }
   }
 
-
-  // PoolFactory interactions
-  async getAllPools(): Promise<Array<{poolAddress: string, oracleAddress: string, grainType: string}>> {
+  // LendingFactory interactions
+  async getAllPools(): Promise<
+    Array<{ poolAddress: string; oracleAddress: string; assetType: string }>
+  > {
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
-    
+
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const factoryAddress = process.env.POOL_FACTORY_ADDRESS;
-        this.logger.log(`Attempt ${attempt}: Attempting to get pools from factory at: ${factoryAddress}`);
-        
+        const factoryAddress = process.env.LENDING_FACTORY_ADDRESS;
+        this.logger.log(
+          `Attempt ${attempt}: Attempting to get pools from factory at: ${factoryAddress}`,
+        );
+
         if (!factoryAddress || factoryAddress.includes('XXXX')) {
-          this.logger.warn('POOL_FACTORY_ADDRESS not set or using placeholder value');
+          this.logger.warn(
+            'LENDING_FACTORY_ADDRESS not set or using placeholder value',
+          );
           return [];
         }
-        
+
         const factory = new ethers.Contract(
           factoryAddress,
-          POOL_FACTORY_ABI,
-          this.wallet
+          LENDING_FACTORY_ABI,
+          this.wallet,
         );
-        
+
         const pools = await factory.getAllPools();
-        this.logger.log(`Successfully retrieved ${pools.length} pools from factory`);
+        this.logger.log(
+          `Successfully retrieved ${pools.length} pools from factory`,
+        );
         return pools;
       } catch (error) {
         this.logger.error(`Attempt ${attempt} failed to get all pools:`, error);
-        
+
         if (attempt === maxRetries) {
-          throw new Error(`Failed to get all pools after ${maxRetries} attempts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          throw new Error(
+            `Failed to get all pools after ${maxRetries} attempts: ${
+              error instanceof Error ? error.message : 'Unknown error'
+            }`,
+          );
         }
-        
+
         // Wait before retrying with exponential backoff
         const delay = baseDelay * Math.pow(2, attempt - 1);
         this.logger.log(`Waiting ${delay}ms before retry...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
-    
+
     return [];
   }
 
-  // New method: Get all pools with stats directly from factory
-  async getAllPoolsWithStats(): Promise<Array<{
-    poolAddress: string;
-    grainType: string;
-    totalAssets: string;
-    totalBorrows: string;
-    availableLiquidity: string;
-  }>> {
-    try {
-      const factory = new ethers.Contract(
-        process.env.POOL_FACTORY_ADDRESS!,
-        POOL_FACTORY_ABI,
-        this.wallet
-      );
-      
-      const poolStats = await factory.getPoolStats();
-      
-      return poolStats.map((stat: any) => ({
-        poolAddress: stat.pool,
-        grainType: stat.grainType,
-        totalAssets: stat.totalAssets.toString(),
-        totalBorrows: stat.totalBorrows.toString(),
-        availableLiquidity: stat.availableLiquidity.toString(),
-      }));
-    } catch (error) {
-      this.logger.error('Failed to get pools with stats:', error);
-      throw new Error(`Failed to get pools with stats: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  // Enhanced method: Get all pools with full details
-  async getAllPoolsFromFactory(): Promise<Array<{
-    grainType: string;
-    poolAddress: string;
-    oracleAddress: string;
-    lendingTokenAddress: string;
-    baseLtv: number;
-    riskPremium: number;
-    debtCeiling: string;
-    protocolFee: number;
-    availableLiquidity: string;
-    totalBorrows: string;
-    totalReserves: string;
-    utilizationRate: number;
-  }>> {
-    try {
-      const poolInfos = await this.getAllPools();
-      this.logger.log(`Fetching details for ${poolInfos.length} pools from blockchain`);
-      
-      const pools: any[] = [];
-      for (const poolInfo of poolInfos) {
-        try {
-          // Handle both array and object formats
-          const poolAddress = Array.isArray(poolInfo) ? poolInfo[0] : poolInfo.poolAddress;
-          const oracleAddress = Array.isArray(poolInfo) ? poolInfo[1] : poolInfo.oracleAddress;
-          const grainType = Array.isArray(poolInfo) ? poolInfo[2] : poolInfo.grainType;
-          
-          this.logger.log(`Processing pool: ${grainType} at ${poolAddress}`);
-          
-          const detailedPoolInfo = await this.getPoolInfo(poolAddress);
-          const poolBalance = await this.getPoolBalance(poolAddress);
-          
-          const utilizationRate = this.calculateUtilization(
-            poolBalance.availableLiquidity,
-            poolBalance.totalBorrows
-          );
-          
-          pools.push({
-            grainType: grainType,
-            poolAddress: poolAddress,
-            oracleAddress: oracleAddress,
-            lendingTokenAddress: detailedPoolInfo.lendingToken,
-            baseLtv: detailedPoolInfo.baseLTV,
-            riskPremium: detailedPoolInfo.riskPremium,
-            debtCeiling: detailedPoolInfo.debtCeiling,
-            protocolFee: detailedPoolInfo.protocolFee,
-            availableLiquidity: poolBalance.availableLiquidity,
-            totalBorrows: poolBalance.totalBorrows,
-            totalReserves: detailedPoolInfo.totalReserves,
-            utilizationRate,
-          });
-        } catch (poolError) {
-          const poolAddress = Array.isArray(poolInfo) ? poolInfo[0] : poolInfo.poolAddress;
-          this.logger.warn(`Failed to get info for pool ${poolAddress}:`, poolError);
-        }
-      }
-      
-      return pools;
-    } catch (error) {
-      this.logger.error('Failed to get pools from factory:', error);
-      throw new Error(`Failed to get pools from factory: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
-
-  private calculateUtilization(availableLiquidity: string, totalBorrows: string): number {
+  private calculateUtilization(
+    availableLiquidity: string,
+    totalBorrows: string,
+  ): number {
     const liquidity = parseFloat(availableLiquidity);
     const borrows = parseFloat(totalBorrows);
     const totalSupply = liquidity + borrows;
-    
+
     return totalSupply > 0 ? Math.round((borrows / totalSupply) * 100) : 0;
   }
 
-  async getPoolByGrainType(grainType: string): Promise<string> {
+  async getPoolByAssetType(assetType: string): Promise<string> {
     try {
       const factory = new ethers.Contract(
-        process.env.POOL_FACTORY_ADDRESS!,
-        POOL_FACTORY_ABI,
-        this.wallet
+        process.env.LENDING_FACTORY_ADDRESS!,
+        LENDING_FACTORY_ABI,
+        this.wallet,
       );
-      return await factory.grainToPool(grainType);
+      const poolInfo = await factory.getPool(assetType);
+      return poolInfo.poolAddress;
     } catch (error) {
-      this.logger.error(`Failed to get pool for ${grainType}:`, error);
-      throw new Error(`Failed to get pool for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(`Failed to get pool for ${assetType}:`, error);
+      throw new Error(
+        `Failed to get pool for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
   // Get pool info directly from blockchain
   async getPoolInfo(poolAddress: string): Promise<{
-    grainType: string;
+    assetType: string;
     lendingToken: string;
     collateralToken: string;
+    lpToken: string;
     oracle: string;
     baseLTV: number;
-    riskPremium: number;
-    debtCeiling: string;
     protocolFee: number;
     totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
     availableLiquidity: string;
     exchangeRate: string;
+    utilizationRate: string;
+    currentAPR: string;
   }> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
-      
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+
       const [
-        grainType,
+        assetType,
         lendingToken,
+        collateralToken,
+        lpToken,
         oracle,
         baseLTV,
-        riskPremium,
-        debtCeiling,
         protocolFee,
         totalAssets,
         totalBorrows,
         totalReserves,
         availableLiquidity,
-        exchangeRate
+        exchangeRate,
+        utilizationRate,
+        currentAPR,
       ] = await Promise.all([
-        pool.grainType(),
+        pool.assetType(),
         pool.lendingToken(),
+        pool.collateralToken(),
+        pool.lpToken(),
         pool.priceOracle(),
         pool.baseLTV(),
-        pool.riskPremium(),
-        pool.debtCeiling(),
         pool.protocolFee(),
         pool.totalAssets(),
         pool.totalBorrows(),
         pool.totalReserves(),
         pool.availableLiquidity(),
-        pool.exchangeRate()
+        pool.exchangeRate(),
+        pool.utilizationRate(),
+        pool.currentAPR(),
       ]);
 
-      // For now, use the pool address as collateral token (since the contract doesn't have a separate collateral token)
-      const collateralToken = poolAddress; // This is a placeholder - in a real implementation, you'd get this from the contract
-
       return {
-        grainType,
+        assetType,
         lendingToken,
         collateralToken,
+        lpToken,
         oracle,
         baseLTV: Number(baseLTV),
-        riskPremium: Number(riskPremium),
-        debtCeiling: debtCeiling.toString(),
         protocolFee: Number(protocolFee),
         totalAssets: totalAssets.toString(),
         totalBorrows: totalBorrows.toString(),
         totalReserves: totalReserves.toString(),
         availableLiquidity: availableLiquidity.toString(),
-        exchangeRate: exchangeRate.toString()
+        exchangeRate: exchangeRate.toString(),
+        utilizationRate: utilizationRate.toString(),
+        currentAPR: currentAPR.toString(),
       };
     } catch (error) {
       this.logger.error(`Failed to get pool info for ${poolAddress}:`, error);
-      throw new Error(`Failed to get pool info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to get pool info: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
@@ -353,153 +271,283 @@ export class ContractService {
     totalBorrows: string;
   }> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       const [availableLiquidity, totalBorrows] = await Promise.all([
         pool.availableLiquidity(),
-        pool.totalBorrows()
+        pool.totalBorrows(),
       ]);
-      
+
       return {
         availableLiquidity: availableLiquidity.toString(),
-        totalBorrows: totalBorrows.toString()
+        totalBorrows: totalBorrows.toString(),
       };
     } catch (error) {
-      this.logger.error(`Failed to get pool balance for ${poolAddress}:`, error);
-      throw new Error(`Failed to get pool balance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to get pool balance for ${poolAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get pool balance: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  // New method: Get pool stats by grain type
-  async getPoolStatsByGrainType(grainType: string): Promise<{
-    grainType: string;
+  // Get pool stats by asset type
+  async getPoolStatsByAssetType(assetType: string): Promise<{
+    assetType: string;
     poolAddress: string;
     oracleAddress: string;
     lendingTokenAddress: string;
     baseLtv: number;
-    riskPremium: number;
-    debtCeiling: string;
     protocolFee: number;
     availableLiquidity: string;
     totalBorrows: string;
     totalReserves: string;
-    utilizationRate: number;
+    utilizationRate: string;
     exchangeRate: string;
+    currentAPR: string;
   }> {
     try {
-      const poolAddress = await this.getPoolByGrainType(grainType);
+      const poolAddress = await this.getPoolByAssetType(assetType);
       const poolInfo = await this.getPoolInfo(poolAddress);
-      const poolBalance = await this.getPoolBalance(poolAddress);
-      
-      const utilizationRate = this.calculateUtilization(
-        poolBalance.availableLiquidity,
-        poolBalance.totalBorrows
-      );
-      
+
       return {
-        grainType: poolInfo.grainType,
+        assetType: poolInfo.assetType,
         poolAddress,
         oracleAddress: poolInfo.oracle,
         lendingTokenAddress: poolInfo.lendingToken,
         baseLtv: poolInfo.baseLTV,
-        riskPremium: poolInfo.riskPremium,
-        debtCeiling: poolInfo.debtCeiling,
         protocolFee: poolInfo.protocolFee,
-        availableLiquidity: poolBalance.availableLiquidity,
-        totalBorrows: poolBalance.totalBorrows,
+        availableLiquidity: poolInfo.availableLiquidity,
+        totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,
-        utilizationRate,
+        utilizationRate: poolInfo.utilizationRate,
         exchangeRate: poolInfo.exchangeRate,
+        currentAPR: poolInfo.currentAPR,
       };
     } catch (error) {
-      this.logger.error(`Failed to get pool stats for ${grainType}:`, error);
-      throw new Error(`Failed to get pool stats for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(`Failed to get pool stats for ${assetType}:`, error);
+      throw new Error(
+        `Failed to get pool stats for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
-
 
   // Investor functions
   async depositToPool(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       const tx = await pool.deposit(amount);
       await tx.wait();
-      
+
       this.logger.log(`Deposited ${amount} to pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(`Failed to deposit to pool ${poolAddress}:`, error);
-      throw new Error(`Failed to deposit: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to deposit: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
   async withdrawFromPool(poolAddress: string, shares: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       const tx = await pool.withdraw(shares);
       await tx.wait();
-      
+
       this.logger.log(`Withdrew ${shares} shares from pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(`Failed to withdraw from pool ${poolAddress}:`, error);
-      throw new Error(`Failed to withdraw: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to withdraw: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
   // Farmer functions
-  async depositCollateral(poolAddress: string, amount: string): Promise<string> {
+  async depositCollateral(
+    poolAddress: string,
+    amount: string,
+  ): Promise<string> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       const tx = await pool.depositCollateral(amount);
       await tx.wait();
-      
+
       this.logger.log(`Deposited ${amount} collateral to pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
-      this.logger.error(`Failed to deposit collateral to pool ${poolAddress}:`, error);
-      throw new Error(`Failed to deposit collateral: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to deposit collateral to pool ${poolAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to deposit collateral: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  async withdrawCollateral(poolAddress: string, amount: string): Promise<string> {
+  async createLoan(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
-      const tx = await pool.withdrawCollateral(amount);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const tx = await pool.createLoan(amount);
       await tx.wait();
-      
-      this.logger.log(`Withdrew ${amount} collateral from pool ${poolAddress}`);
-      return tx.hash;
-    } catch (error) {
-      this.logger.error(`Failed to withdraw collateral from pool ${poolAddress}:`, error);
-      throw new Error(`Failed to withdraw collateral: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  }
 
-  async createLoan(poolAddress: string, farmerAddress: string, amount: string): Promise<string> {
-    try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
-      const tx = await pool.createLoan(farmerAddress, amount);
-      await tx.wait();
-      
-      this.logger.log(`Created loan of ${amount} for farmer ${farmerAddress}`);
+      this.logger.log(`Created loan of ${amount} in pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
-      this.logger.error(`Failed to create loan for farmer ${farmerAddress}:`, error);
-      throw new Error(`Failed to create loan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(`Failed to create loan in pool ${poolAddress}:`, error);
+      throw new Error(
+        `Failed to create loan: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
   async repayLoan(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       const tx = await pool.repayLoan(amount);
       await tx.wait();
-      
+
       this.logger.log(`Repaid loan of ${amount} in pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(`Failed to repay loan in pool ${poolAddress}:`, error);
-      throw new Error(`Failed to repay loan: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to repay loan: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  async liquidate(
+    poolAddress: string,
+    borrowerAddress: string,
+  ): Promise<string> {
+    try {
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const tx = await pool.liquidate(borrowerAddress);
+      await tx.wait();
+
+      this.logger.log(
+        `Liquidated borrower ${borrowerAddress} in pool ${poolAddress}`,
+      );
+      return tx.hash;
+    } catch (error) {
+      this.logger.error(
+        `Failed to liquidate borrower ${borrowerAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to liquidate: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  // Get borrower position
+  async getBorrowerPosition(
+    poolAddress: string,
+    borrowerAddress: string,
+  ): Promise<{
+    borrowBalance: string;
+    collateralAmount: string;
+  }> {
+    try {
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const [borrowBalance, collateralAmount] = await Promise.all([
+        pool.getCurrentBorrowBalance(borrowerAddress),
+        pool.collateral(borrowerAddress),
+      ]);
+
+      return {
+        borrowBalance: borrowBalance.toString(),
+        collateralAmount: collateralAmount.toString(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `Failed to get borrower position for ${borrowerAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get borrower position: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  // Get LP shares for an investor
+  async getLPShares(
+    poolAddress: string,
+    investorAddress: string,
+  ): Promise<string> {
+    try {
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const shares = await pool.lpShares(investorAddress);
+      return shares.toString();
+    } catch (error) {
+      this.logger.error(
+        `Failed to get LP shares for ${investorAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get LP shares: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
@@ -511,35 +559,57 @@ export class ContractService {
     totalSupply: string;
   }> {
     try {
-      const token = new ethers.Contract(tokenAddress, MOCK_TOKEN_ABI, this.wallet);
-      
+      const token = new ethers.Contract(
+        tokenAddress,
+        MOCK_TOKEN_ABI,
+        this.wallet,
+      );
+
       const [name, symbol, decimals, totalSupply] = await Promise.all([
         token.name(),
         token.symbol(),
         token.decimals(),
-        token.totalSupply()
+        token.totalSupply(),
       ]);
 
       return {
         name,
         symbol,
         decimals: Number(decimals),
-        totalSupply: totalSupply.toString()
+        totalSupply: totalSupply.toString(),
       };
     } catch (error) {
       this.logger.error(`Failed to get token info for ${tokenAddress}:`, error);
-      throw new Error(`Failed to get token info: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to get token info: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  async getTokenBalance(tokenAddress: string, holderAddress: string): Promise<string> {
+  async getTokenBalance(
+    tokenAddress: string,
+    holderAddress: string,
+  ): Promise<string> {
     try {
-      const token = new ethers.Contract(tokenAddress, MOCK_TOKEN_ABI, this.wallet);
+      const token = new ethers.Contract(
+        tokenAddress,
+        MOCK_TOKEN_ABI,
+        this.wallet,
+      );
       const balance = await token.balanceOf(holderAddress);
       return balance.toString();
     } catch (error) {
-      this.logger.error(`Failed to get token balance for ${holderAddress}:`, error);
-      throw new Error(`Failed to get token balance: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to get token balance for ${holderAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get token balance: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
@@ -564,44 +634,81 @@ export class ContractService {
   // Oracle interactions
   async getPrice(oracleAddress: string): Promise<string> {
     try {
-      const oracle = new ethers.Contract(oracleAddress, ORACLE_ABI, this.wallet);
+      const oracle = new ethers.Contract(
+        oracleAddress,
+        ORACLE_ABI,
+        this.wallet,
+      );
       const price = await oracle.getPrice();
       return price.toString();
     } catch (error) {
-      this.logger.error(`Failed to get price from oracle ${oracleAddress}:`, error);
-      throw new Error(`Failed to get price: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to get price from oracle ${oracleAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get price: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  // Helper methods to get contract addresses by grain type
-  async getPoolAddress(grainType: string): Promise<string> {
+  // Helper methods to get contract addresses by asset type
+  async getPoolAddress(assetType: string): Promise<string> {
     try {
-      return await this.getPoolByGrainType(grainType);
+      return await this.getPoolByAssetType(assetType);
     } catch (error) {
-      this.logger.error(`Failed to get pool address for ${grainType}:`, error);
-      throw new Error(`Failed to get pool address for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(`Failed to get pool address for ${assetType}:`, error);
+      throw new Error(
+        `Failed to get pool address for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  async getCollateralTokenAddress(grainType: string): Promise<string> {
+  async getCollateralTokenAddress(assetType: string): Promise<string> {
     try {
-      const poolAddress = await this.getPoolAddress(grainType);
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const poolAddress = await this.getPoolAddress(assetType);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       return await pool.collateralToken();
     } catch (error) {
-      this.logger.error(`Failed to get collateral token address for ${grainType}:`, error);
-      throw new Error(`Failed to get collateral token address for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to get collateral token address for ${assetType}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get collateral token address for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 
-  async getOracleAddress(grainType: string): Promise<string> {
+  async getOracleAddress(assetType: string): Promise<string> {
     try {
-      const poolAddress = await this.getPoolAddress(grainType);
-      const pool = new ethers.Contract(poolAddress, GRAIN_POOL_ABI, this.wallet);
+      const poolAddress = await this.getPoolAddress(assetType);
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
       return await pool.priceOracle();
     } catch (error) {
-      this.logger.error(`Failed to get oracle address for ${grainType}:`, error);
-      throw new Error(`Failed to get oracle address for ${grainType}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      this.logger.error(
+        `Failed to get oracle address for ${assetType}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get oracle address for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
     }
   }
 }

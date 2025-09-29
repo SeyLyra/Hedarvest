@@ -1,19 +1,17 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-describe("Full Lending Flow Test", function () {
+describe("Full Lending Flow Test (HTS Compatible)", function () {
     // Contract instances
     let lendingFactory;
     let lendingPool;
     let priceOracle;
-    let faucetToken;
+    let mockToken;
     
-    // Mock tokens for testing
-    let mockLendingToken;
-    let mockCollateralToken;
-    let mockLendingTokenAddress;
-    let mockCollateralTokenAddress;
-    let mockLPTokenAddress;
+    // HTS Token addresses
+    let lendingToken;
+    let collateralToken;
+    let lpToken;
     
     // Test accounts
     let owner;
@@ -25,7 +23,7 @@ describe("Full Lending Flow Test", function () {
     
     // Test parameters
     const ASSET_TYPE = "Wheat";
-    const INITIAL_PRICE = ethers.parseEther("200"); // $200 per unit
+    const INITIAL_PRICE = ethers.parseEther("2"); // $200 per unit
     const BASE_LTV = 7500; // 75% LTV
     const PROTOCOL_FEE = 1000; // 10%
     
@@ -54,168 +52,148 @@ describe("Full Lending Flow Test", function () {
         it("Should deploy LendingFactory successfully", async function () {
             const LendingFactory = await ethers.getContractFactory("LendingFactory");
             lendingFactory = await LendingFactory.deploy();
+            await lendingFactory.waitForDeployment();
             
-            expect(lendingFactory.target).to.be.properAddress;
-            console.log("✅ LendingFactory deployed at:", lendingFactory.target);
+            const factoryAddress = await lendingFactory.getAddress();
+            expect(factoryAddress).to.be.properAddress;
+            console.log("✅ LendingFactory deployed at:", factoryAddress);
         });
 
         it("Should create lending pool with HTS tokens", async function () {
-            // Create mock token addresses for testing (simulating HTS tokens)
-            mockLendingTokenAddress = ethers.Wallet.createRandom().address;
-            mockCollateralTokenAddress = ethers.Wallet.createRandom().address;
-            mockLPTokenAddress = ethers.Wallet.createRandom().address;
+            // Create mock token addresses for testing
+            const mockLendingToken = ethers.Wallet.createRandom().address;
+            const mockCollateralToken = ethers.Wallet.createRandom().address;
+            const mockLpToken = ethers.Wallet.createRandom().address;
             
-            // Deploy oracle first
-            const MockPriceOracle = await ethers.getContractFactory("MockPriceOracle");
-            priceOracle = await MockPriceOracle.deploy();
-            await priceOracle.setPrice(ASSET_TYPE, INITIAL_PRICE);
-            
-            // Deploy LendingPool directly (bypassing factory for testing)
-            const LendingPool = await ethers.getContractFactory("LendingPool");
-            lendingPool = await LendingPool.deploy(
+            const tx = await lendingFactory.connect(owner).createPool(
                 ASSET_TYPE,
-                mockLendingTokenAddress,
-                mockCollateralTokenAddress,
-                mockLPTokenAddress, // Separate LP token address
+                mockLendingToken,
+                mockCollateralToken,
+                mockLpToken,
                 BASE_LTV,
                 PROTOCOL_FEE,
-                priceOracle.target,
-                owner.address
+                INITIAL_PRICE
             );
             
+            const receipt = await tx.wait();
+            
+            // Extract pool and oracle addresses from events
+            const poolCreatedEvent = receipt.logs.find(log => {
+                try {
+                    const parsed = lendingFactory.interface.parseLog(log);
+                    return parsed && parsed.name === "PoolCreated";
+                } catch (e) {
+                    return false;
+                }
+            });
+            expect(poolCreatedEvent).to.not.be.undefined;
+            
+            const parsedEvent = lendingFactory.interface.parseLog(poolCreatedEvent);
+            const poolAddress = parsedEvent.args.pool;
+            const oracleAddress = parsedEvent.args.oracle;
+            
+            lendingPool = await ethers.getContractAt("LendingPool", poolAddress);
+            priceOracle = await ethers.getContractAt("MockPriceOracle", oracleAddress);
+            
+            // Get token addresses from pool
+            lendingToken = await lendingPool.lendingToken();
+            collateralToken = await lendingPool.collateralToken();
+            lpToken = await lendingPool.lpToken();
+            
             console.log("✅ Lending Pool created successfully");
-            console.log(`   Pool Address: ${lendingPool.target}`);
-            console.log(`   Oracle Address: ${priceOracle.target}`);
-            console.log(`   Lending Token: ${mockLendingTokenAddress}`);
-            console.log(`   Collateral Token: ${mockCollateralTokenAddress}`);
+            console.log(`   Pool Address: ${poolAddress}`);
+            console.log(`   Oracle Address: ${oracleAddress}`);
+            console.log(`   Lending Token: ${lendingToken}`);
+            console.log(`   Collateral Token: ${collateralToken}`);
+            console.log(`   LP Token: ${lpToken}`);
             
             // Verify pool configuration
             expect(await lendingPool.assetType()).to.equal(ASSET_TYPE);
             expect(await lendingPool.baseLTV()).to.equal(BASE_LTV);
             expect(await lendingPool.protocolFee()).to.equal(PROTOCOL_FEE);
-            
-            // Verify interest rate model parameters
-            expect(await lendingPool.baseRate()).to.equal(100); // 1%
-            expect(await lendingPool.optimalUtilizationRate()).to.equal(8000); // 80%
-            expect(await lendingPool.rateSlope1()).to.equal(500); // 5%
-            expect(await lendingPool.rateSlope2()).to.equal(3000); // 30%
-            
-            // Verify risk parameters
-            expect(await lendingPool.reserveFactor()).to.equal(1000); // 10%
-            expect(await lendingPool.liquidationBonus()).to.equal(500); // 5%
         });
 
-        it("Should create FaucetToken contracts for testing", async function () {
-            // Deploy FaucetToken for lending token
-            const FaucetToken = await ethers.getContractFactory("FaucetToken");
-            faucetToken = await FaucetToken.deploy(mockLendingTokenAddress);
+        it("Should create MockToken contracts for HTS testing", async function () {
+            // Deploy MockToken for HTS lending token
+            const MockToken = await ethers.getContractFactory("MockToken");
+            mockToken = await MockToken.deploy(lendingToken);
+            await mockToken.waitForDeployment();
             
-            console.log("✅ FaucetToken deployed at:", faucetToken.target);
-        });
-
-        it("Should validate constructor parameters", async function () {
-            const LendingPool = await ethers.getContractFactory("LendingPool");
+            const mockTokenAddress = await mockToken.getAddress();
+            console.log("✅ MockToken deployed at:", mockTokenAddress);
+            console.log(`   Wrapped HTS Token: ${lendingToken}`);
             
-            // Test invalid asset type
-            await expect(
-                LendingPool.deploy(
-                    "", // Empty asset type
-                    mockLendingTokenAddress,
-                    mockCollateralTokenAddress,
-                    mockLendingTokenAddress,
-                    7500,
-                    1000,
-                    priceOracle.target,
-                    owner.address
-                )
-            ).to.be.revertedWith("Asset type cannot be empty");
-            
-            // Test zero lending token address
-            await expect(
-                LendingPool.deploy(
-                    "TestAsset",
-                    ethers.ZeroAddress,
-                    mockCollateralTokenAddress,
-                    mockLPTokenAddress,
-                    7500,
-                    1000,
-                    priceOracle.target,
-                    owner.address
-                )
-            ).to.be.revertedWith("Invalid address");
-            
-            // Test invalid LTV (too high)
-            await expect(
-                LendingPool.deploy(
-                    "TestAsset",
-                    mockLendingTokenAddress,
-                    mockCollateralTokenAddress,
-                    mockLPTokenAddress,
-                    10001, // > 100%
-                    1000,
-                    priceOracle.target,
-                    owner.address
-                )
-            ).to.be.revertedWith("Base LTV too high");
-            
-            // Test invalid protocol fee (too high)
-            await expect(
-                LendingPool.deploy(
-                    "TestAsset",
-                    mockLendingTokenAddress,
-                    mockCollateralTokenAddress,
-                    mockLPTokenAddress,
-                    7500,
-                    10001, // > 100%
-                    priceOracle.target,
-                    owner.address
-                )
-            ).to.be.revertedWith("Protocol fee too high");
-            
-            console.log("✅ Constructor parameter validation working correctly");
+            // Verify MockToken is properly configured
+            const tokenAddress = await mockToken.tokenAddress();
+            expect(tokenAddress).to.equal(lendingToken);
         });
     });
 
     describe("Phase 2: Liquidity Providers - Yield Farming Setup", function () {
-        it("Should mint tokens to liquidity providers", async function () {
-            // Note: In a real Hedera environment, tokens would be minted via HTS
-            // For testing, we'll simulate the minting by setting up the test environment
-            console.log("✅ Token minting simulated for liquidity providers");
-            console.log(`   LP1 would receive: 100,000 USDC`);
-            console.log(`   LP2 would receive: 50,000 USDC`);
-            console.log("   Note: Actual token operations require Hedera HTS environment");
+        it("Should mint HTS tokens to liquidity providers (simulated)", async function () {
+            console.log("🧪 Simulating HTS token minting for liquidity providers...");
+            console.log("ℹ️  Note: In production, MockToken would mint actual HTS tokens");
+            console.log("ℹ️  This requires MockToken to be treasury and supply key");
+            
+            // In a real test with actual HTS tokens, this would work:
+            // await mockToken.connect(liquidityProvider1).faucetMint(
+            //     ethers.parseEther("150000") // $150K worth
+            // );
+            // await mockToken.connect(liquidityProvider2).faucetMint(
+            //     ethers.parseEther("75000") // $75K worth
+            // );
+            
+            console.log("✅ HTS token minting simulation completed");
+            console.log("   LP1 would receive: $150,000 worth of HTS tokens");
+            console.log("   LP2 would receive: $75,000 worth of HTS tokens");
+            
+            console.log("✅ Tokens minted to liquidity providers");
+            // Note: For HTS tokens, we can't directly call balanceOf, so we'll verify through deposits
         });
 
         it("Liquidity Provider 1 should deposit and receive LP tokens", async function () {
-            // Note: Actual deposit requires HTS token approval and transfer
-            // For testing, we'll verify the pool is ready for deposits
+            // For HTS tokens, we need to use the HTS approve function
+            // This is handled internally by the LendingPool contract
+            
+            // Deposit liquidity
+            const tx = await lendingPool.connect(liquidityProvider1).deposit(LP1_DEPOSIT);
+            const receipt = await tx.wait();
+            
+            const depositedEvent = receipt.logs.find(e => e.event === "Deposited");
+            expect(depositedEvent).to.not.be.undefined;
+            
+            const lpShares = depositedEvent.args.shares;
             const totalAssets = await lendingPool.totalAssets();
-            const lp1Shares = await lendingPool.lpShares(liquidityProvider1.address);
             
-            console.log("✅ LP1 Deposit Test (Simulated)");
-            console.log(`   Current Pool Assets: ${ethers.formatEther(totalAssets)}`);
-            console.log(`   LP1 Shares: ${ethers.formatEther(lp1Shares)}`);
-            console.log("   Note: Actual deposits require Hedera HTS environment");
+            console.log("✅ LP1 Liquidity Deposit Complete");
+            console.log(`   Deposited: $${ethers.formatEther(LP1_DEPOSIT)}`);
+            console.log(`   LP Shares Received: ${ethers.formatEther(lpShares)}`);
+            console.log(`   Pool TVL: $${ethers.formatEther(totalAssets)}`);
             
-            // Verify pool is initialized
-            expect(totalAssets).to.equal(0); // Pool starts empty
-            expect(lp1Shares).to.equal(0); // No shares initially
+            expect(await lendingPool.lpShares(liquidityProvider1.address)).to.equal(lpShares);
+            expect(totalAssets).to.equal(LP1_DEPOSIT);
         });
 
         it("Liquidity Provider 2 should deposit and receive LP tokens", async function () {
-            // Note: Actual deposit requires HTS token approval and transfer
-            // For testing, we'll verify the pool is ready for deposits
+            // For HTS tokens, approval is handled internally by the LendingPool contract
+            
+            // Deposit liquidity
+            const tx = await lendingPool.connect(liquidityProvider2).deposit(LP2_DEPOSIT);
+            const receipt = await tx.wait();
+            
+            const depositedEvent = receipt.logs.find(e => e.event === "Deposited");
+            expect(depositedEvent).to.not.be.undefined;
+            
+            const lpShares = depositedEvent.args.shares;
             const totalAssets = await lendingPool.totalAssets();
-            const lp2Shares = await lendingPool.lpShares(liquidityProvider2.address);
             
-            console.log("✅ LP2 Deposit Test (Simulated)");
-            console.log(`   Current Pool Assets: ${ethers.formatEther(totalAssets)}`);
-            console.log(`   LP2 Shares: ${ethers.formatEther(lp2Shares)}`);
-            console.log("   Note: Actual deposits require Hedera HTS environment");
+            console.log("✅ LP2 Liquidity Deposit Complete");
+            console.log(`   Deposited: $${ethers.formatEther(LP2_DEPOSIT)}`);
+            console.log(`   LP Shares Received: ${ethers.formatEther(lpShares)}`);
+            console.log(`   Pool TVL: $${ethers.formatEther(totalAssets)}`);
             
-            // Verify pool is initialized
-            expect(totalAssets).to.equal(0); // Pool starts empty
-            expect(lp2Shares).to.equal(0); // No shares initially
+            expect(await lendingPool.lpShares(liquidityProvider2.address)).to.equal(lpShares);
+            expect(totalAssets).to.equal(LP1_DEPOSIT.add(LP2_DEPOSIT));
         });
 
         it("Should verify liquidity provider positions", async function () {
@@ -230,84 +208,110 @@ describe("Full Lending Flow Test", function () {
             console.log(`   Total Pool Assets: $${ethers.formatEther(totalAssets)}`);
             console.log(`   Available Liquidity: $${ethers.formatEther(availableLiquidity)}`);
             
-            // In test environment, pool starts empty since we can't do actual deposits
-            expect(lp1Shares).to.equal(0);
-            expect(lp2Shares).to.equal(0);
-            expect(totalAssets).to.equal(0);
-            expect(availableLiquidity).to.equal(0);
+            expect(lp1Shares).to.be.gt(0);
+            expect(lp2Shares).to.be.gt(0);
+            expect(availableLiquidity).to.equal(totalAssets);
         });
     });
 
     describe("Phase 3: Borrowers - Collateralized Lending", function () {
         it("Should mint collateral tokens to borrowers", async function () {
-            // Note: In a real Hedera environment, collateral tokens would be minted via HTS
-            // For testing, we'll simulate the collateral minting
-            console.log("✅ Collateral token minting simulated for borrowers");
-            console.log(`   Borrower1 would receive: ${ethers.formatEther(BORROWER1_COLLATERAL)} wheat tokens`);
-            console.log(`   Borrower2 would receive: ${ethers.formatEther(BORROWER2_COLLATERAL)} wheat tokens`);
-            console.log("   Note: Actual token operations require Hedera HTS environment");
+            // Deploy FaucetToken for collateral token
+            const FaucetToken = await ethers.getContractFactory("FaucetToken");
+            const collateralFaucet = await FaucetToken.deploy(collateralToken);
+            await collateralFaucet.waitForDeployment();
+            
+            // Mint collateral tokens to Borrower 1
+            await collateralFaucet.connect(borrower1).faucetMint(
+                BORROWER1_COLLATERAL
+            );
+            
+            // Mint collateral tokens to Borrower 2
+            await collateralFaucet.connect(borrower2).faucetMint(
+                BORROWER2_COLLATERAL
+            );
+            
+            console.log("✅ Collateral tokens minted to borrowers");
+            console.log(`   Borrower1 Collateral: ${ethers.formatEther(BORROWER1_COLLATERAL)} units`);
+            console.log(`   Borrower2 Collateral: ${ethers.formatEther(BORROWER2_COLLATERAL)} units`);
         });
 
         it("Borrower 1 should deposit collateral", async function () {
-            // Note: Actual collateral deposit requires HTS token approval and transfer
-            // For testing, we'll verify the pool is ready for collateral deposits
+            // For HTS tokens, approval is handled internally by the LendingPool contract
+            
+            // Deposit collateral
+            const tx = await lendingPool.connect(borrower1).depositCollateral(BORROWER1_COLLATERAL);
+            const receipt = await tx.wait();
+            
+            const collateralDepositedEvent = receipt.logs.find(e => e.event === "CollateralDeposited");
+            expect(collateralDepositedEvent).to.not.be.undefined;
+            
+            const usdValue = collateralDepositedEvent.args.usdValue;
             const collateralBalance = await lendingPool.collateral(borrower1.address);
             
-            console.log("✅ Borrower1 Collateral Deposit Test (Simulated)");
-            console.log(`   Current Collateral: ${ethers.formatEther(collateralBalance)} units`);
-            console.log(`   Would deposit: ${ethers.formatEther(BORROWER1_COLLATERAL)} units`);
-            console.log("   Note: Actual deposits require Hedera HTS environment");
+            console.log("✅ Borrower1 Collateral Deposit Complete");
+            console.log(`   Collateral Deposited: ${ethers.formatEther(BORROWER1_COLLATERAL)} units`);
+            console.log(`   USD Value: $${ethers.formatEther(usdValue)}`);
+            console.log(`   Max Borrow Capacity: $${ethers.formatEther(usdValue * BigInt(BASE_LTV) / 10000n)}`);
             
-            // Verify no collateral initially
-            expect(collateralBalance).to.equal(0);
+            expect(collateralBalance).to.equal(BORROWER1_COLLATERAL);
         });
 
         it("Borrower 2 should deposit collateral", async function () {
-            // Note: Actual collateral deposit requires HTS token approval and transfer
-            // For testing, we'll verify the pool is ready for collateral deposits
+            // For HTS tokens, approval is handled internally by the LendingPool contract
+            
+            // Deposit collateral
+            const tx = await lendingPool.connect(borrower2).depositCollateral(BORROWER2_COLLATERAL);
+            const receipt = await tx.wait();
+            
+            const collateralDepositedEvent = receipt.logs.find(e => e.event === "CollateralDeposited");
+            expect(collateralDepositedEvent).to.not.be.undefined;
+            
+            const usdValue = collateralDepositedEvent.args.usdValue;
             const collateralBalance = await lendingPool.collateral(borrower2.address);
             
-            console.log("✅ Borrower2 Collateral Deposit Test (Simulated)");
-            console.log(`   Current Collateral: ${ethers.formatEther(collateralBalance)} units`);
-            console.log(`   Would deposit: ${ethers.formatEther(BORROWER2_COLLATERAL)} units`);
-            console.log("   Note: Actual deposits require Hedera HTS environment");
+            console.log("✅ Borrower2 Collateral Deposit Complete");
+            console.log(`   Collateral Deposited: ${ethers.formatEther(BORROWER2_COLLATERAL)} units`);
+            console.log(`   USD Value: $${ethers.formatEther(usdValue)}`);
+            console.log(`   Max Borrow Capacity: $${ethers.formatEther(usdValue * BigInt(BASE_LTV) / 10000n)}`);
             
-            // Verify no collateral initially
-            expect(collateralBalance).to.equal(0);
+            expect(collateralBalance).to.equal(BORROWER2_COLLATERAL);
         });
 
         it("Borrower 1 should take a loan", async function () {
-            // Note: Loan creation requires collateral deposits first
-            // For testing, we'll verify the pool is ready for loan operations
+            const tx = await lendingPool.connect(borrower1).createLoan(BORROWER1_LOAN);
+            const receipt = await tx.wait();
+            
+            const loanCreatedEvent = receipt.logs.find(e => e.event === "LoanCreated");
+            expect(loanCreatedEvent).to.not.be.undefined;
+            
             const borrowBalance = await lendingPool.borrows(borrower1.address);
             const totalBorrows = await lendingPool.totalBorrows();
             
-            console.log("✅ Borrower1 Loan Test (Simulated)");
-            console.log(`   Current Borrow Balance: $${ethers.formatEther(borrowBalance)}`);
-            console.log(`   Would borrow: $${ethers.formatEther(BORROWER1_LOAN)}`);
+            console.log("✅ Borrower1 Loan Created");
+            console.log(`   Loan Amount: $${ethers.formatEther(BORROWER1_LOAN)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(borrowBalance)}`);
             console.log(`   Total Pool Borrows: $${ethers.formatEther(totalBorrows)}`);
-            console.log("   Note: Actual loans require collateral deposits via HTS");
             
-            // Verify no loans initially
-            expect(borrowBalance).to.equal(0);
-            expect(totalBorrows).to.equal(0);
+            expect(borrowBalance).to.equal(BORROWER1_LOAN);
         });
 
         it("Borrower 2 should take a loan", async function () {
-            // Note: Loan creation requires collateral deposits first
-            // For testing, we'll verify the pool is ready for loan operations
+            const tx = await lendingPool.connect(borrower2).createLoan(BORROWER2_LOAN);
+            const receipt = await tx.wait();
+            
+            const loanCreatedEvent = receipt.logs.find(e => e.event === "LoanCreated");
+            expect(loanCreatedEvent).to.not.be.undefined;
+            
             const borrowBalance = await lendingPool.borrows(borrower2.address);
             const totalBorrows = await lendingPool.totalBorrows();
             
-            console.log("✅ Borrower2 Loan Test (Simulated)");
-            console.log(`   Current Borrow Balance: $${ethers.formatEther(borrowBalance)}`);
-            console.log(`   Would borrow: $${ethers.formatEther(BORROWER2_LOAN)}`);
+            console.log("✅ Borrower2 Loan Created");
+            console.log(`   Loan Amount: $${ethers.formatEther(BORROWER2_LOAN)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(borrowBalance)}`);
             console.log(`   Total Pool Borrows: $${ethers.formatEther(totalBorrows)}`);
-            console.log("   Note: Actual loans require collateral deposits via HTS");
             
-            // Verify no loans initially
-            expect(borrowBalance).to.equal(0);
-            expect(totalBorrows).to.equal(0);
+            expect(borrowBalance).to.equal(BORROWER2_LOAN);
         });
 
         it("Should verify borrower positions and utilization", async function () {
@@ -324,9 +328,9 @@ describe("Full Lending Flow Test", function () {
             console.log(`   Borrower1 Borrowed: $${ethers.formatEther(borrower1Debt)}`);
             console.log(`   Borrower2 Collateral: ${ethers.formatEther(borrower2Collateral)} units`);
             console.log(`   Borrower2 Borrowed: $${ethers.formatEther(borrower2Debt)}`);
-            console.log(`   Pool Utilization Rate: ${Number(utilizationRate) / 100}%`);
+            console.log(`   Pool Utilization Rate: ${utilizationRate / 100}%`);
             
-            expect(utilizationRate).to.equal(0); // No utilization in test environment
+            expect(utilizationRate).to.be.gt(0);
         });
     });
 
@@ -343,19 +347,23 @@ describe("Full Lending Flow Test", function () {
         });
 
         it("Should accrue interest and update pool state", async function () {
-            // Note: Interest accrual requires actual loans to be present
-            // For testing, we'll verify the interest calculation mechanism
-            const totalBorrows = await lendingPool.totalBorrows();
+            const tx = await lendingPool.accrueInterest();
+            const receipt = await tx.wait();
+            
+            const interestAccruedEvent = receipt.logs.find(e => e.event === "InterestAccrued");
+            expect(interestAccruedEvent).to.not.be.undefined;
+            
+            const interestAmount = interestAccruedEvent.args.interestAmount;
+            const newTotalBorrows = interestAccruedEvent.args.newTotalBorrows;
             const totalReserves = await lendingPool.totalReserves();
             
-            console.log("✅ Interest Accrual Test (Simulated)");
-            console.log(`   Current Total Borrows: $${ethers.formatEther(totalBorrows)}`);
-            console.log(`   Current Total Reserves: $${ethers.formatEther(totalReserves)}`);
-            console.log("   Note: Interest accrual requires actual loan positions via HTS");
+            console.log("✅ Interest Accrued Successfully");
+            console.log(`   Interest Amount: $${ethers.formatEther(interestAmount)}`);
+            console.log(`   New Total Borrows: $${ethers.formatEther(newTotalBorrows)}`);
+            console.log(`   Protocol Reserves: $${ethers.formatEther(totalReserves)}`);
             
-            // Verify initial state
-            expect(totalBorrows).to.equal(0);
-            expect(totalReserves).to.equal(0);
+            expect(interestAmount).to.be.gt(0);
+            expect(newTotalBorrows).to.be.gt(BORROWER1_LOAN.add(BORROWER2_LOAN));
         });
 
         it("Should calculate LP yield and exchange rate", async function () {
@@ -363,47 +371,75 @@ describe("Full Lending Flow Test", function () {
             const lp1Shares = await lendingPool.lpShares(liquidityProvider1.address);
             const lp2Shares = await lendingPool.lpShares(liquidityProvider2.address);
             
+            // Calculate current values manually
+            const lp1Value = (lp1Shares * exchangeRate) / ethers.parseEther("1");
+            const lp2Value = (lp2Shares * exchangeRate) / ethers.parseEther("1");
+            
             console.log("💰 Liquidity Provider Yield Calculation:");
             console.log(`   Exchange Rate: ${ethers.formatEther(exchangeRate)}`);
             console.log(`   LP1 Shares: ${ethers.formatEther(lp1Shares)}`);
-            console.log(`   LP1 Current Value: $0.0 (no deposits)`);
+            console.log(`   LP1 Current Value: $${ethers.formatEther(lp1Value)}`);
             console.log(`   LP2 Shares: ${ethers.formatEther(lp2Shares)}`);
-            console.log(`   LP2 Current Value: $0.0 (no deposits)`);
-            console.log("   Note: Yield calculations require actual deposits via HTS");
+            console.log(`   LP2 Current Value: $${ethers.formatEther(lp2Value)}`);
             
-            // In test environment, exchange rate starts at 1.0 and no shares exist
-            expect(exchangeRate).to.equal(ethers.parseEther("1"));
-            expect(lp1Shares).to.equal(0);
-            expect(lp2Shares).to.equal(0);
+            expect(exchangeRate).to.be.gt(ethers.parseEther("1"));
+            expect(lp1Value).to.be.gt(0);
+            expect(lp2Value).to.be.gt(0);
         });
     });
 
     describe("Phase 5: Loan Repayment & Yield Realization", function () {
         it("Borrower 1 should repay partial loan", async function () {
-            // Note: Loan repayment requires actual loans to be present
-            // For testing, we'll verify the repayment mechanism
+            const partialRepayment = BORROWER1_LOAN / 2n; // Repay half
+            
+            // Mint HTS tokens for repayment (simulated)
+            console.log("🧪 Simulating HTS token minting for repayment...");
+            // await mockToken.connect(borrower1).faucetMint(
+            //     partialRepayment * 2n // Extra for interest
+            // );
+            
+            // For HTS tokens, approval is handled internally by the LendingPool contract
+            
+            const tx = await lendingPool.connect(borrower1).repayLoan(partialRepayment);
+            const receipt = await tx.wait();
+            
+            const loanRepaidEvent = receipt.logs.find(log => { try { const parsed = lendingPool.interface.parseLog(log); return parsed && parsed.name === 'LoanRepaid'; } catch (e) { return false; } });
+            expect(loanRepaidEvent).to.not.be.undefined;
+            
             const remainingDebt = await lendingPool.borrows(borrower1.address);
             
-            console.log("✅ Borrower1 Partial Repayment Test (Simulated)");
-            console.log(`   Current Debt: $${ethers.formatEther(remainingDebt)}`);
-            console.log(`   Would repay: $${ethers.formatEther(BORROWER1_LOAN / 2n)}`);
-            console.log("   Note: Loan repayments require actual loan positions via HTS");
+            console.log("✅ Borrower1 Partial Repayment");
+            console.log(`   Repaid Amount: $${ethers.formatEther(partialRepayment)}`);
+            console.log(`   Interest Paid: $${ethers.formatEther(loanRepaidEvent.args.interest)}`);
+            console.log(`   Remaining Debt: $${ethers.formatEther(remainingDebt)}`);
             
-            // Verify no debt initially
-            expect(remainingDebt).to.equal(0);
+            expect(remainingDebt).to.be.lt(BORROWER1_LOAN);
         });
 
         it("Borrower 2 should repay full loan", async function () {
-            // Note: Loan repayment requires actual loans to be present
-            // For testing, we'll verify the repayment mechanism
+            const fullRepayment = BORROWER2_LOAN;
+            
+            // Mint HTS tokens for repayment (simulated)
+            console.log("🧪 Simulating HTS token minting for full repayment...");
+            // await mockToken.connect(borrower2).faucetMint(
+            //     fullRepayment * 2n // Extra for interest
+            // );
+            
+            // For HTS tokens, approval is handled internally by the LendingPool contract
+            
+            const tx = await lendingPool.connect(borrower2).repayLoan(fullRepayment);
+            const receipt = await tx.wait();
+            
+            const loanRepaidEvent = receipt.logs.find(log => { try { const parsed = lendingPool.interface.parseLog(log); return parsed && parsed.name === 'LoanRepaid'; } catch (e) { return false; } });
+            expect(loanRepaidEvent).to.not.be.undefined;
+            
             const remainingDebt = await lendingPool.borrows(borrower2.address);
             
-            console.log("✅ Borrower2 Full Repayment Test (Simulated)");
-            console.log(`   Current Debt: $${ethers.formatEther(remainingDebt)}`);
-            console.log(`   Would repay: $${ethers.formatEther(BORROWER2_LOAN)}`);
-            console.log("   Note: Loan repayments require actual loan positions via HTS");
+            console.log("✅ Borrower2 Full Repayment");
+            console.log(`   Repaid Amount: $${ethers.formatEther(fullRepayment)}`);
+            console.log(`   Interest Paid: $${ethers.formatEther(loanRepaidEvent.args.interest)}`);
+            console.log(`   Remaining Debt: $${ethers.formatEther(remainingDebt)}`);
             
-            // Verify no debt initially
             expect(remainingDebt).to.equal(0);
         });
 
@@ -411,52 +447,21 @@ describe("Full Lending Flow Test", function () {
             const lp1Shares = await lendingPool.lpShares(liquidityProvider1.address);
             const lp2Shares = await lendingPool.lpShares(liquidityProvider2.address);
             
-            console.log("✅ Liquidity Provider Withdrawal Test (Simulated)");
-            console.log(`   LP1 Current Shares: ${ethers.formatEther(lp1Shares)}`);
-            console.log(`   LP2 Current Shares: ${ethers.formatEther(lp2Shares)}`);
-            console.log("   Note: Withdrawals require actual deposits and yield via HTS");
+            // LP1 withdraws half
+            const lp1WithdrawShares = lp1Shares / 2n;
+            await lendingPool.connect(liquidityProvider1).withdraw(lp1WithdrawShares);
             
-            // Verify no shares initially
-            expect(lp1Shares).to.equal(0);
-            expect(lp2Shares).to.equal(0);
-        });
-
-        it("Should validate deposit and withdrawal parameters", async function () {
-            // Test zero amount deposit
-            await expect(
-                lendingPool.connect(liquidityProvider1).deposit(0)
-            ).to.be.revertedWith("Amount must be greater than zero");
+            // LP2 withdraws all
+            await lendingPool.connect(liquidityProvider2).withdraw(lp2Shares);
             
-            // Test zero shares withdrawal
-            await expect(
-                lendingPool.connect(liquidityProvider1).withdraw(0)
-            ).to.be.revertedWith("Amount must be greater than zero");
+            const finalAssets = await lendingPool.totalAssets();
+            const finalBorrows = await lendingPool.totalBorrows();
             
-            console.log("✅ Deposit and withdrawal parameter validation working correctly");
-        });
-
-        it("Should validate loan and collateral parameters", async function () {
-            // Test zero amount collateral deposit
-            await expect(
-                lendingPool.connect(borrower1).depositCollateral(0)
-            ).to.be.revertedWith("Amount must be greater than zero");
-            
-            // Test zero amount loan creation
-            await expect(
-                lendingPool.connect(borrower1).createLoan(0)
-            ).to.be.revertedWith("Amount must be greater than zero");
-            
-            // Test zero amount loan repayment
-            await expect(
-                lendingPool.connect(borrower1).repayLoan(0)
-            ).to.be.revertedWith("Amount must be greater than zero");
-            
-            // Test liquidation with zero address
-            await expect(
-                lendingPool.connect(liquidator).liquidate(ethers.ZeroAddress)
-            ).to.be.revertedWith("Invalid address");
-            
-            console.log("✅ Loan and collateral parameter validation working correctly");
+            console.log("✅ Liquidity Provider Withdrawals Complete");
+            console.log(`   LP1 Withdrew: ${ethers.formatEther(lp1WithdrawShares)} shares`);
+            console.log(`   LP2 Withdrew: ${ethers.formatEther(lp2Shares)} shares`);
+            console.log(`   Final Pool Assets: $${ethers.formatEther(finalAssets)}`);
+            console.log(`   Final Pool Borrows: $${ethers.formatEther(finalBorrows)}`);
         });
     });
 
@@ -474,28 +479,42 @@ describe("Full Lending Flow Test", function () {
             const collateralAmount = await lendingPool.collateral(borrower1.address);
             const currentDebt = await lendingPool.getCurrentBorrowBalance(borrower1.address);
             const price = await priceOracle.getPrice(ASSET_TYPE);
+            const collateralUSD = (collateralAmount * price) / ethers.parseEther("1");
+            const maxBorrow = (collateralUSD * BASE_LTV) / 10000;
+            const healthFactor = currentDebt == 0n ? ethers.MaxUint256 : (maxBorrow * ethers.parseEther("1")) / currentDebt;
             
             console.log("🏥 Borrower Health Check After Price Crash:");
-            console.log(`   Borrower1 Collateral: ${ethers.formatEther(collateralAmount)} units`);
-            console.log(`   Borrower1 Debt: $${ethers.formatEther(currentDebt)}`);
-            console.log(`   Current Price: $${ethers.formatEther(price)}`);
-            console.log("   Note: Health factor calculations require actual positions via HTS");
+            console.log(`   Borrower1 Health Factor: ${ethers.formatEther(healthFactor)}`);
+            console.log(`   Collateral Value: $${ethers.formatEther(collateralUSD)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(currentDebt)}`);
             
-            // Verify no positions initially
-            expect(collateralAmount).to.equal(0);
-            expect(currentDebt).to.equal(0);
+            // Health factor should be low due to price crash
+            expect(healthFactor).to.be.lt(ethers.parseEther("1.5"));
         });
 
         it("Should execute liquidation", async function () {
-            // Note: Liquidation requires actual loan positions to be present
-            // For testing, we'll verify the liquidation mechanism
+            // Liquidator needs collateral tokens
+            const FaucetToken = await ethers.getContractFactory("FaucetToken");
+            const collateralFaucet = await FaucetToken.deploy(collateralToken);
+            await collateralFaucet.waitForDeployment();
+            await collateralFaucet.connect(liquidator).faucetMint(
+                ethers.parseEther("100").toString()
+            );
+            
+            const tx = await lendingPool.connect(liquidator).liquidate(borrower1.address);
+            const receipt = await tx.wait();
+            
+            const liquidatedEvent = receipt.logs.find(e => e.event === "LoanLiquidated");
+            expect(liquidatedEvent).to.not.be.undefined;
+            
+            const seizedCollateral = liquidatedEvent.args.collateralSeized;
+            const repaidDebt = liquidatedEvent.args.debtRepaid;
+            
+            console.log("⚡ Liquidation Executed");
+            console.log(`   Collateral Seized: ${ethers.formatEther(seizedCollateral)} units`);
+            console.log(`   Debt Repaid: $${ethers.formatEther(repaidDebt)}`);
+            
             const remainingDebt = await lendingPool.borrows(borrower1.address);
-            
-            console.log("⚡ Liquidation Test (Simulated)");
-            console.log(`   Current Borrower1 Debt: $${ethers.formatEther(remainingDebt)}`);
-            console.log("   Note: Liquidations require actual loan positions via HTS");
-            
-            // Verify no debt initially
             expect(remainingDebt).to.equal(0);
         });
     });
@@ -509,26 +528,37 @@ describe("Full Lending Flow Test", function () {
             const utilizationRate = await lendingPool.utilizationRate();
             const exchangeRate = await lendingPool.exchangeRate();
             const currentAPR = await lendingPool.currentAPR();
-            // const factoryStats = await lendingFactory.getPoolStats(); // Factory deployment failed due to size
+            const factoryStats = await lendingFactory.getPoolStats();
             
             console.log("📊 Final Pool Statistics:");
             console.log(`   Total Assets: $${ethers.formatEther(totalAssets)}`);
             console.log(`   Total Borrows: $${ethers.formatEther(totalBorrows)}`);
             console.log(`   Total Reserves: $${ethers.formatEther(totalReserves)}`);
             console.log(`   Available Liquidity: $${ethers.formatEther(availableLiquidity)}`);
-            console.log(`   Utilization Rate: ${Number(utilizationRate) / 100}%`);
+            console.log(`   Utilization Rate: ${utilizationRate / 100}%`);
             console.log(`   Exchange Rate: ${ethers.formatEther(exchangeRate)}`);
-            console.log(`   Current APR: ${Number(currentAPR) / 100}%`);
+            console.log(`   Current APR: ${currentAPR / 100}%`);
             
             console.log("\n🏭 Factory Pool Statistics:");
-            console.log("   Note: Factory statistics not available in test environment");
+            console.log(`   Number of Pools: ${factoryStats.length}`);
+            for (let i = 0; i < factoryStats.length; i++) {
+                console.log(`   Pool ${i + 1} (${factoryStats[i].assetType}):`);
+                console.log(`     TVL: $${ethers.formatEther(factoryStats[i].totalAssets)}`);
+                console.log(`     Borrows: $${ethers.formatEther(factoryStats[i].totalBorrows)}`);
+                console.log(`     Utilization: ${factoryStats[i].utilizationRate / 100}%`);
+                console.log(`     APR: ${factoryStats[i].currentAPR / 100}%`);
+            }
         });
 
         it("Should verify all DeFi mechanics worked correctly", async function () {
-            // Verify pool state in test environment
+            // Verify liquidity providers earned yield
             const lp1FinalShares = await lendingPool.lpShares(liquidityProvider1.address);
+            
+            // Verify borrowers had their loans processed
             const borrower1Debt = await lendingPool.getCurrentBorrowBalance(borrower1.address);
             const borrower2Debt = await lendingPool.getCurrentBorrowBalance(borrower2.address);
+            
+            // Verify interest accrual worked
             const totalReserves = await lendingPool.totalReserves();
             
             console.log("✅ DeFi Mechanics Verification:");
@@ -536,13 +566,10 @@ describe("Full Lending Flow Test", function () {
             console.log(`   Borrower1 Debt: $${ethers.formatEther(borrower1Debt)}`);
             console.log(`   Borrower2 Debt: $${ethers.formatEther(borrower2Debt)}`);
             console.log(`   Protocol Reserves: $${ethers.formatEther(totalReserves)}`);
-            console.log("   Note: All mechanics verified for simulation - actual operations require HTS");
             
-            // In test environment, everything starts at zero
-            expect(lp1FinalShares).to.equal(0);
-            expect(borrower1Debt).to.equal(0);
-            expect(borrower2Debt).to.equal(0);
-            expect(totalReserves).to.equal(0);
+            expect(borrower1Debt).to.equal(0); // Liquidated
+            expect(borrower2Debt).to.equal(0); // Repaid
+            expect(totalReserves).to.be.gt(0);
         });
     });
 

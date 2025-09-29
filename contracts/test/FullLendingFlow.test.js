@@ -23,17 +23,17 @@ describe("Full Lending Flow Test", function () {
     
     // Test parameters
     const ASSET_TYPE = "Wheat";
-    const INITIAL_PRICE = ethers.utils.parseEther("2"); // $200 per unit
+    const INITIAL_PRICE = ethers.parseEther("2"); // $200 per unit
     const BASE_LTV = 7500; // 75% LTV
     const PROTOCOL_FEE = 1000; // 10%
     
     // Test amounts
-    const LP1_DEPOSIT = ethers.utils.parseEther("100000"); // $100K
-    const LP2_DEPOSIT = ethers.utils.parseEther("50000");  // $50K
-    const BORROWER1_COLLATERAL = ethers.utils.parseEther("1000"); // 1000 units wheat
-    const BORROWER2_COLLATERAL = ethers.utils.parseEther("500");  // 500 units wheat
-    const BORROWER1_LOAN = ethers.utils.parseEther("150000"); // $150K loan
-    const BORROWER2_LOAN = ethers.utils.parseEther("75000");  // $75K loan
+    const LP1_DEPOSIT = ethers.parseEther("100000"); // $100K
+    const LP2_DEPOSIT = ethers.parseEther("50000");  // $50K
+    const BORROWER1_COLLATERAL = ethers.parseEther("1000"); // 1000 units wheat
+    const BORROWER2_COLLATERAL = ethers.parseEther("500");  // 500 units wheat
+    const BORROWER1_LOAN = ethers.parseEther("150000"); // $150K loan
+    const BORROWER2_LOAN = ethers.parseEther("75000");  // $75K loan
 
     before(async function () {
         // Get signers
@@ -42,7 +42,7 @@ describe("Full Lending Flow Test", function () {
         console.log("🚀 Setting up Full Lending Flow Test Environment");
         console.log("📊 Test Parameters:");
         console.log(`   Asset Type: ${ASSET_TYPE}`);
-        console.log(`   Initial Price: $${ethers.utils.formatEther(INITIAL_PRICE)}`);
+        console.log(`   Initial Price: $${ethers.formatEther(INITIAL_PRICE)}`);
         console.log(`   Base LTV: ${BASE_LTV / 100}%`);
         console.log(`   Protocol Fee: ${PROTOCOL_FEE / 100}%`);
         console.log("");
@@ -52,10 +52,11 @@ describe("Full Lending Flow Test", function () {
         it("Should deploy LendingFactory successfully", async function () {
             const LendingFactory = await ethers.getContractFactory("LendingFactory");
             lendingFactory = await LendingFactory.deploy();
-            await lendingFactory.deployed();
+            await lendingFactory.waitForDeployment();
             
-            expect(lendingFactory.address).to.be.properAddress;
-            console.log("✅ LendingFactory deployed at:", lendingFactory.address);
+            const factoryAddress = await lendingFactory.getAddress();
+            expect(factoryAddress).to.be.properAddress;
+            console.log("✅ LendingFactory deployed at:", factoryAddress);
         });
 
         it("Should create lending pool with HTS tokens", async function () {
@@ -102,9 +103,15 @@ describe("Full Lending Flow Test", function () {
             // Deploy FaucetToken for lending token
             const FaucetToken = await ethers.getContractFactory("FaucetToken");
             faucetToken = await FaucetToken.deploy(lendingToken);
-            await faucetToken.deployed();
+            await faucetToken.waitForDeployment();
             
-            console.log("✅ FaucetToken deployed at:", faucetToken.address);
+            const faucetAddress = await faucetToken.getAddress();
+            console.log("✅ FaucetToken deployed at:", faucetAddress);
+            
+            // For testing, we need to use the FaucetToken as the actual token
+            // since the LendingPool expects HTS tokens but we're in a test environment
+            // We'll update the pool to use the FaucetToken instead of the HTS token
+            lendingToken = faucetAddress;
         });
     });
 
@@ -112,12 +119,12 @@ describe("Full Lending Flow Test", function () {
         it("Should mint tokens to liquidity providers", async function () {
             // Mint lending tokens to LP1
             await faucetToken.connect(liquidityProvider1).faucetMint(
-                ethers.utils.parseEther("150000").toString() // $150K worth
+                ethers.parseEther("150000").toString() // $150K worth
             );
             
             // Mint lending tokens to LP2
             await faucetToken.connect(liquidityProvider2).faucetMint(
-                ethers.utils.parseEther("75000").toString() // $75K worth
+                ethers.parseEther("75000").toString() // $75K worth
             );
             
             console.log("✅ Tokens minted to liquidity providers");
@@ -139,11 +146,11 @@ describe("Full Lending Flow Test", function () {
             const totalAssets = await lendingPool.totalAssets();
             
             console.log("✅ LP1 Liquidity Deposit Complete");
-            console.log(`   Deposited: $${ethers.utils.formatEther(LP1_DEPOSIT)}`);
-            console.log(`   LP Shares Received: ${ethers.utils.formatEther(lpShares)}`);
-            console.log(`   Pool TVL: $${ethers.utils.formatEther(totalAssets)}`);
+            console.log(`   Deposited: $${ethers.formatEther(LP1_DEPOSIT)}`);
+            console.log(`   LP Shares Received: ${ethers.formatEther(lpShares)}`);
+            console.log(`   Pool TVL: $${ethers.formatEther(totalAssets)}`);
             
-            expect(await lendingPool.lpShares(liquidityProvider1.address)).to.equal(lpShares);
+            expect(await lendingPool.lpShares(await liquidityProvider1.getAddress())).to.equal(lpShares);
             expect(totalAssets).to.equal(LP1_DEPOSIT);
         });
 
@@ -161,25 +168,25 @@ describe("Full Lending Flow Test", function () {
             const totalAssets = await lendingPool.totalAssets();
             
             console.log("✅ LP2 Liquidity Deposit Complete");
-            console.log(`   Deposited: $${ethers.utils.formatEther(LP2_DEPOSIT)}`);
-            console.log(`   LP Shares Received: ${ethers.utils.formatEther(lpShares)}`);
-            console.log(`   Pool TVL: $${ethers.utils.formatEther(totalAssets)}`);
+            console.log(`   Deposited: $${ethers.formatEther(LP2_DEPOSIT)}`);
+            console.log(`   LP Shares Received: ${ethers.formatEther(lpShares)}`);
+            console.log(`   Pool TVL: $${ethers.formatEther(totalAssets)}`);
             
-            expect(await lendingPool.lpShares(liquidityProvider2.address)).to.equal(lpShares);
+            expect(await lendingPool.lpShares(await liquidityProvider2.getAddress())).to.equal(lpShares);
             expect(totalAssets).to.equal(LP1_DEPOSIT.add(LP2_DEPOSIT));
         });
 
         it("Should verify liquidity provider positions", async function () {
-            const lp1Shares = await lendingPool.getInvestorShares(liquidityProvider1.address);
-            const lp2Shares = await lendingPool.getInvestorShares(liquidityProvider2.address);
+            const lp1Shares = await lendingPool.lpShares(await liquidityProvider1.getAddress());
+            const lp2Shares = await lendingPool.lpShares(await liquidityProvider2.getAddress());
             const totalAssets = await lendingPool.totalAssets();
             const availableLiquidity = await lendingPool.availableLiquidity();
             
             console.log("📊 Liquidity Provider Positions:");
-            console.log(`   LP1 Shares: ${ethers.utils.formatEther(lp1Shares)}`);
-            console.log(`   LP2 Shares: ${ethers.utils.formatEther(lp2Shares)}`);
-            console.log(`   Total Pool Assets: $${ethers.utils.formatEther(totalAssets)}`);
-            console.log(`   Available Liquidity: $${ethers.utils.formatEther(availableLiquidity)}`);
+            console.log(`   LP1 Shares: ${ethers.formatEther(lp1Shares)}`);
+            console.log(`   LP2 Shares: ${ethers.formatEther(lp2Shares)}`);
+            console.log(`   Total Pool Assets: $${ethers.formatEther(totalAssets)}`);
+            console.log(`   Available Liquidity: $${ethers.formatEther(availableLiquidity)}`);
             
             expect(lp1Shares).to.be.gt(0);
             expect(lp2Shares).to.be.gt(0);
@@ -192,7 +199,7 @@ describe("Full Lending Flow Test", function () {
             // Deploy FaucetToken for collateral token
             const FaucetToken = await ethers.getContractFactory("FaucetToken");
             const collateralFaucet = await FaucetToken.deploy(collateralToken);
-            await collateralFaucet.deployed();
+            await collateralFaucet.waitForDeployment();
             
             // Mint collateral tokens to Borrower 1
             await collateralFaucet.connect(borrower1).faucetMint(
@@ -205,8 +212,8 @@ describe("Full Lending Flow Test", function () {
             );
             
             console.log("✅ Collateral tokens minted to borrowers");
-            console.log(`   Borrower1 Collateral: ${ethers.utils.formatEther(BORROWER1_COLLATERAL)} units`);
-            console.log(`   Borrower2 Collateral: ${ethers.utils.formatEther(BORROWER2_COLLATERAL)} units`);
+            console.log(`   Borrower1 Collateral: ${ethers.formatEther(BORROWER1_COLLATERAL)} units`);
+            console.log(`   Borrower2 Collateral: ${ethers.formatEther(BORROWER2_COLLATERAL)} units`);
         });
 
         it("Borrower 1 should deposit collateral", async function () {
@@ -220,12 +227,12 @@ describe("Full Lending Flow Test", function () {
             expect(collateralDepositedEvent).to.not.be.undefined;
             
             const usdValue = collateralDepositedEvent.args.usdValue;
-            const collateralBalance = await lendingPool.collateral(borrower1.address);
+            const collateralBalance = await lendingPool.collateral(await borrower1.getAddress());
             
             console.log("✅ Borrower1 Collateral Deposit Complete");
-            console.log(`   Collateral Deposited: ${ethers.utils.formatEther(BORROWER1_COLLATERAL)} units`);
-            console.log(`   USD Value: $${ethers.utils.formatEther(usdValue)}`);
-            console.log(`   Max Borrow Capacity: $${ethers.utils.formatEther(usdValue.mul(BASE_LTV).div(10000))}`);
+            console.log(`   Collateral Deposited: ${ethers.formatEther(BORROWER1_COLLATERAL)} units`);
+            console.log(`   USD Value: $${ethers.formatEther(usdValue)}`);
+            console.log(`   Max Borrow Capacity: $${ethers.formatEther(usdValue.mul(BASE_LTV).div(10000))}`);
             
             expect(collateralBalance).to.equal(BORROWER1_COLLATERAL);
         });
@@ -241,12 +248,12 @@ describe("Full Lending Flow Test", function () {
             expect(collateralDepositedEvent).to.not.be.undefined;
             
             const usdValue = collateralDepositedEvent.args.usdValue;
-            const collateralBalance = await lendingPool.collateral(borrower2.address);
+            const collateralBalance = await lendingPool.collateral(await borrower2.getAddress());
             
             console.log("✅ Borrower2 Collateral Deposit Complete");
-            console.log(`   Collateral Deposited: ${ethers.utils.formatEther(BORROWER2_COLLATERAL)} units`);
-            console.log(`   USD Value: $${ethers.utils.formatEther(usdValue)}`);
-            console.log(`   Max Borrow Capacity: $${ethers.utils.formatEther(usdValue.mul(BASE_LTV).div(10000))}`);
+            console.log(`   Collateral Deposited: ${ethers.formatEther(BORROWER2_COLLATERAL)} units`);
+            console.log(`   USD Value: $${ethers.formatEther(usdValue)}`);
+            console.log(`   Max Borrow Capacity: $${ethers.formatEther(usdValue.mul(BASE_LTV).div(10000))}`);
             
             expect(collateralBalance).to.equal(BORROWER2_COLLATERAL);
         });
@@ -258,13 +265,13 @@ describe("Full Lending Flow Test", function () {
             const loanCreatedEvent = receipt.events.find(e => e.event === "LoanCreated");
             expect(loanCreatedEvent).to.not.be.undefined;
             
-            const borrowBalance = await lendingPool.borrows(borrower1.address);
+            const borrowBalance = await lendingPool.borrows(await borrower1.getAddress());
             const totalBorrows = await lendingPool.totalBorrows();
             
             console.log("✅ Borrower1 Loan Created");
-            console.log(`   Loan Amount: $${ethers.utils.formatEther(BORROWER1_LOAN)}`);
-            console.log(`   Outstanding Debt: $${ethers.utils.formatEther(borrowBalance)}`);
-            console.log(`   Total Pool Borrows: $${ethers.utils.formatEther(totalBorrows)}`);
+            console.log(`   Loan Amount: $${ethers.formatEther(BORROWER1_LOAN)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(borrowBalance)}`);
+            console.log(`   Total Pool Borrows: $${ethers.formatEther(totalBorrows)}`);
             
             expect(borrowBalance).to.equal(BORROWER1_LOAN);
         });
@@ -276,31 +283,31 @@ describe("Full Lending Flow Test", function () {
             const loanCreatedEvent = receipt.events.find(e => e.event === "LoanCreated");
             expect(loanCreatedEvent).to.not.be.undefined;
             
-            const borrowBalance = await lendingPool.borrows(borrower2.address);
+            const borrowBalance = await lendingPool.borrows(await borrower2.getAddress());
             const totalBorrows = await lendingPool.totalBorrows();
             
             console.log("✅ Borrower2 Loan Created");
-            console.log(`   Loan Amount: $${ethers.utils.formatEther(BORROWER2_LOAN)}`);
-            console.log(`   Outstanding Debt: $${ethers.utils.formatEther(borrowBalance)}`);
-            console.log(`   Total Pool Borrows: $${ethers.utils.formatEther(totalBorrows)}`);
+            console.log(`   Loan Amount: $${ethers.formatEther(BORROWER2_LOAN)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(borrowBalance)}`);
+            console.log(`   Total Pool Borrows: $${ethers.formatEther(totalBorrows)}`);
             
             expect(borrowBalance).to.equal(BORROWER2_LOAN);
         });
 
         it("Should verify borrower positions and utilization", async function () {
-            const borrower1Collateral = await lendingPool.collateral(borrower1.address);
-            const borrower2Collateral = await lendingPool.collateral(borrower2.address);
-            const borrower1Debt = await lendingPool.getCurrentBorrowBalance(borrower1.address);
-            const borrower2Debt = await lendingPool.getCurrentBorrowBalance(borrower2.address);
+            const borrower1Collateral = await lendingPool.collateral(await borrower1.getAddress());
+            const borrower2Collateral = await lendingPool.collateral(await borrower2.getAddress());
+            const borrower1Debt = await lendingPool.getCurrentBorrowBalance(await borrower1.getAddress());
+            const borrower2Debt = await lendingPool.getCurrentBorrowBalance(await borrower2.getAddress());
             const totalAssets = await lendingPool.totalAssets();
             const totalBorrows = await lendingPool.totalBorrows();
             const utilizationRate = await lendingPool.utilizationRate();
             
             console.log("📊 Borrower Positions & Pool Utilization:");
-            console.log(`   Borrower1 Collateral: ${ethers.utils.formatEther(borrower1Collateral)} units`);
-            console.log(`   Borrower1 Borrowed: $${ethers.utils.formatEther(borrower1Debt)}`);
-            console.log(`   Borrower2 Collateral: ${ethers.utils.formatEther(borrower2Collateral)} units`);
-            console.log(`   Borrower2 Borrowed: $${ethers.utils.formatEther(borrower2Debt)}`);
+            console.log(`   Borrower1 Collateral: ${ethers.formatEther(borrower1Collateral)} units`);
+            console.log(`   Borrower1 Borrowed: $${ethers.formatEther(borrower1Debt)}`);
+            console.log(`   Borrower2 Collateral: ${ethers.formatEther(borrower2Collateral)} units`);
+            console.log(`   Borrower2 Borrowed: $${ethers.formatEther(borrower2Debt)}`);
             console.log(`   Pool Utilization Rate: ${utilizationRate / 100}%`);
             
             expect(utilizationRate).to.be.gt(0);
@@ -323,17 +330,25 @@ describe("Full Lending Flow Test", function () {
             const tx = await lendingPool.accrueInterest();
             const receipt = await tx.wait();
             
-            const interestAccruedEvent = receipt.events.find(e => e.event === "InterestAccrued");
+            const interestAccruedEvent = receipt.logs.find(log => {
+                try {
+                    const parsed = lendingPool.interface.parseLog(log);
+                    return parsed && parsed.name === 'InterestAccrued';
+                } catch (e) {
+                    return false;
+                }
+            });
             expect(interestAccruedEvent).to.not.be.undefined;
             
-            const interestAmount = interestAccruedEvent.args.interestAmount;
-            const newTotalBorrows = interestAccruedEvent.args.newTotalBorrows;
+            const parsed = lendingPool.interface.parseLog(interestAccruedEvent);
+            const interestAmount = parsed.args.interestAmount;
+            const newTotalBorrows = parsed.args.newTotalBorrows;
             const totalReserves = await lendingPool.totalReserves();
             
             console.log("✅ Interest Accrued Successfully");
-            console.log(`   Interest Amount: $${ethers.utils.formatEther(interestAmount)}`);
-            console.log(`   New Total Borrows: $${ethers.utils.formatEther(newTotalBorrows)}`);
-            console.log(`   Protocol Reserves: $${ethers.utils.formatEther(totalReserves)}`);
+            console.log(`   Interest Amount: $${ethers.formatEther(interestAmount)}`);
+            console.log(`   New Total Borrows: $${ethers.formatEther(newTotalBorrows)}`);
+            console.log(`   Protocol Reserves: $${ethers.formatEther(totalReserves)}`);
             
             expect(interestAmount).to.be.gt(0);
             expect(newTotalBorrows).to.be.gt(BORROWER1_LOAN.add(BORROWER2_LOAN));
@@ -341,21 +356,21 @@ describe("Full Lending Flow Test", function () {
 
         it("Should calculate LP yield and exchange rate", async function () {
             const exchangeRate = await lendingPool.exchangeRate();
-            const lp1Shares = await lendingPool.lpShares(liquidityProvider1.address);
-            const lp2Shares = await lendingPool.lpShares(liquidityProvider2.address);
+            const lp1Shares = await lendingPool.lpShares(liquidityProvider1.getAddress());
+            const lp2Shares = await lendingPool.lpShares(liquidityProvider2.getAddress());
             
             // Calculate current values manually
-            const lp1Value = (lp1Shares * exchangeRate) / ethers.utils.parseEther("1");
-            const lp2Value = (lp2Shares * exchangeRate) / ethers.utils.parseEther("1");
+            const lp1Value = (lp1Shares * exchangeRate) / ethers.parseEther("1");
+            const lp2Value = (lp2Shares * exchangeRate) / ethers.parseEther("1");
             
             console.log("💰 Liquidity Provider Yield Calculation:");
-            console.log(`   Exchange Rate: ${ethers.utils.formatEther(exchangeRate)}`);
-            console.log(`   LP1 Shares: ${ethers.utils.formatEther(lp1Shares)}`);
-            console.log(`   LP1 Current Value: $${ethers.utils.formatEther(lp1Value)}`);
-            console.log(`   LP2 Shares: ${ethers.utils.formatEther(lp2Shares)}`);
-            console.log(`   LP2 Current Value: $${ethers.utils.formatEther(lp2Value)}`);
+            console.log(`   Exchange Rate: ${ethers.formatEther(exchangeRate)}`);
+            console.log(`   LP1 Shares: ${ethers.formatEther(lp1Shares)}`);
+            console.log(`   LP1 Current Value: $${ethers.formatEther(lp1Value)}`);
+            console.log(`   LP2 Shares: ${ethers.formatEther(lp2Shares)}`);
+            console.log(`   LP2 Current Value: $${ethers.formatEther(lp2Value)}`);
             
-            expect(exchangeRate).to.be.gt(ethers.utils.parseEther("1"));
+            expect(exchangeRate).to.be.gt(ethers.parseEther("1"));
             expect(lp1Value).to.be.gt(0);
             expect(lp2Value).to.be.gt(0);
         });
@@ -378,12 +393,12 @@ describe("Full Lending Flow Test", function () {
             const loanRepaidEvent = receipt.events.find(e => e.event === "LoanRepaid");
             expect(loanRepaidEvent).to.not.be.undefined;
             
-            const remainingDebt = await lendingPool.borrows(borrower1.address);
+            const remainingDebt = await lendingPool.borrows(borrower1.getAddress());
             
             console.log("✅ Borrower1 Partial Repayment");
-            console.log(`   Repaid Amount: $${ethers.utils.formatEther(partialRepayment)}`);
-            console.log(`   Interest Paid: $${ethers.utils.formatEther(loanRepaidEvent.args.interest)}`);
-            console.log(`   Remaining Debt: $${ethers.utils.formatEther(remainingDebt)}`);
+            console.log(`   Repaid Amount: $${ethers.formatEther(partialRepayment)}`);
+            console.log(`   Interest Paid: $${ethers.formatEther(loanRepaidEvent.args.interest)}`);
+            console.log(`   Remaining Debt: $${ethers.formatEther(remainingDebt)}`);
             
             expect(remainingDebt).to.be.lt(BORROWER1_LOAN);
         });
@@ -404,19 +419,19 @@ describe("Full Lending Flow Test", function () {
             const loanRepaidEvent = receipt.events.find(e => e.event === "LoanRepaid");
             expect(loanRepaidEvent).to.not.be.undefined;
             
-            const remainingDebt = await lendingPool.borrows(borrower2.address);
+            const remainingDebt = await lendingPool.borrows(borrower2.getAddress());
             
             console.log("✅ Borrower2 Full Repayment");
-            console.log(`   Repaid Amount: $${ethers.utils.formatEther(fullRepayment)}`);
-            console.log(`   Interest Paid: $${ethers.utils.formatEther(loanRepaidEvent.args.interest)}`);
-            console.log(`   Remaining Debt: $${ethers.utils.formatEther(remainingDebt)}`);
+            console.log(`   Repaid Amount: $${ethers.formatEther(fullRepayment)}`);
+            console.log(`   Interest Paid: $${ethers.formatEther(loanRepaidEvent.args.interest)}`);
+            console.log(`   Remaining Debt: $${ethers.formatEther(remainingDebt)}`);
             
             expect(remainingDebt).to.equal(0);
         });
 
         it("Liquidity providers should withdraw with yield", async function () {
-            const lp1Shares = await lendingPool.lpShares(liquidityProvider1.address);
-            const lp2Shares = await lendingPool.lpShares(liquidityProvider2.address);
+            const lp1Shares = await lendingPool.lpShares(liquidityProvider1.getAddress());
+            const lp2Shares = await lendingPool.lpShares(liquidityProvider2.getAddress());
             
             // LP1 withdraws half
             const lp1WithdrawShares = lp1Shares.div(2);
@@ -429,10 +444,10 @@ describe("Full Lending Flow Test", function () {
             const finalBorrows = await lendingPool.totalBorrows();
             
             console.log("✅ Liquidity Provider Withdrawals Complete");
-            console.log(`   LP1 Withdrew: ${ethers.utils.formatEther(lp1WithdrawShares)} shares`);
-            console.log(`   LP2 Withdrew: ${ethers.utils.formatEther(lp2Shares)} shares`);
-            console.log(`   Final Pool Assets: $${ethers.utils.formatEther(finalAssets)}`);
-            console.log(`   Final Pool Borrows: $${ethers.utils.formatEther(finalBorrows)}`);
+            console.log(`   LP1 Withdrew: ${ethers.formatEther(lp1WithdrawShares)} shares`);
+            console.log(`   LP2 Withdrew: ${ethers.formatEther(lp2Shares)} shares`);
+            console.log(`   Final Pool Assets: $${ethers.formatEther(finalAssets)}`);
+            console.log(`   Final Pool Borrows: $${ethers.formatEther(finalBorrows)}`);
         });
     });
 
@@ -443,36 +458,36 @@ describe("Full Lending Flow Test", function () {
             await priceOracle.connect(owner).setPrice(ASSET_TYPE, crashPrice);
             
             console.log("📉 Price Crash Simulated");
-            console.log(`   New Price: $${ethers.utils.formatEther(crashPrice)}`);
+            console.log(`   New Price: $${ethers.formatEther(crashPrice)}`);
         });
 
         it("Should check borrower health factors after price crash", async function () {
-            const collateralAmount = await lendingPool.collateral(borrower1.address);
-            const currentDebt = await lendingPool.getCurrentBorrowBalance(borrower1.address);
+            const collateralAmount = await lendingPool.collateral(await borrower1.getAddress());
+            const currentDebt = await lendingPool.getCurrentBorrowBalance(await borrower1.getAddress());
             const price = await priceOracle.getPrice(ASSET_TYPE);
-            const collateralUSD = (collateralAmount * price) / ethers.utils.parseEther("1");
-            const maxBorrow = (collateralUSD * BASE_LTV) / 10000;
-            const healthFactor = currentDebt == 0 ? ethers.constants.MaxUint256 : (maxBorrow * ethers.utils.parseEther("1")) / currentDebt;
+            const collateralUSD = (collateralAmount * price) / ethers.parseEther("1");
+            const maxBorrow = (collateralUSD * BigInt(BASE_LTV)) / BigInt(10000);
+            const healthFactor = currentDebt == 0n ? ethers.MaxUint256 : (maxBorrow * ethers.parseEther("1")) / currentDebt;
             
             console.log("🏥 Borrower Health Check After Price Crash:");
-            console.log(`   Borrower1 Health Factor: ${ethers.utils.formatEther(healthFactor)}`);
-            console.log(`   Collateral Value: $${ethers.utils.formatEther(collateralUSD)}`);
-            console.log(`   Outstanding Debt: $${ethers.utils.formatEther(currentDebt)}`);
+            console.log(`   Borrower1 Health Factor: ${ethers.formatEther(healthFactor)}`);
+            console.log(`   Collateral Value: $${ethers.formatEther(collateralUSD)}`);
+            console.log(`   Outstanding Debt: $${ethers.formatEther(currentDebt)}`);
             
             // Health factor should be low due to price crash
-            expect(healthFactor).to.be.lt(ethers.utils.parseEther("1.5"));
+            expect(healthFactor).to.be.lt(ethers.parseEther("1.5"));
         });
 
         it("Should execute liquidation", async function () {
             // Liquidator needs collateral tokens
             const FaucetToken = await ethers.getContractFactory("FaucetToken");
             const collateralFaucet = await FaucetToken.deploy(collateralToken);
-            await collateralFaucet.deployed();
+            await collateralFaucet.waitForDeployment();
             await collateralFaucet.connect(liquidator).faucetMint(
-                ethers.utils.parseEther("100").toString()
+                ethers.parseEther("100").toString()
             );
             
-            const tx = await lendingPool.connect(liquidator).liquidate(borrower1.address);
+            const tx = await lendingPool.connect(liquidator).liquidate(borrower1.getAddress());
             const receipt = await tx.wait();
             
             const liquidatedEvent = receipt.events.find(e => e.event === "LoanLiquidated");
@@ -482,10 +497,10 @@ describe("Full Lending Flow Test", function () {
             const repaidDebt = liquidatedEvent.args.repaid;
             
             console.log("⚡ Liquidation Executed");
-            console.log(`   Collateral Seized: ${ethers.utils.formatEther(seizedCollateral)} units`);
-            console.log(`   Debt Repaid: $${ethers.utils.formatEther(repaidDebt)}`);
+            console.log(`   Collateral Seized: ${ethers.formatEther(seizedCollateral)} units`);
+            console.log(`   Debt Repaid: $${ethers.formatEther(repaidDebt)}`);
             
-            const remainingDebt = await lendingPool.borrows(borrower1.address);
+            const remainingDebt = await lendingPool.borrows(borrower1.getAddress());
             expect(remainingDebt).to.equal(0);
         });
     });
@@ -502,20 +517,20 @@ describe("Full Lending Flow Test", function () {
             const factoryStats = await lendingFactory.getPoolStats();
             
             console.log("📊 Final Pool Statistics:");
-            console.log(`   Total Assets: $${ethers.utils.formatEther(totalAssets)}`);
-            console.log(`   Total Borrows: $${ethers.utils.formatEther(totalBorrows)}`);
-            console.log(`   Total Reserves: $${ethers.utils.formatEther(totalReserves)}`);
-            console.log(`   Available Liquidity: $${ethers.utils.formatEther(availableLiquidity)}`);
+            console.log(`   Total Assets: $${ethers.formatEther(totalAssets)}`);
+            console.log(`   Total Borrows: $${ethers.formatEther(totalBorrows)}`);
+            console.log(`   Total Reserves: $${ethers.formatEther(totalReserves)}`);
+            console.log(`   Available Liquidity: $${ethers.formatEther(availableLiquidity)}`);
             console.log(`   Utilization Rate: ${utilizationRate / 100}%`);
-            console.log(`   Exchange Rate: ${ethers.utils.formatEther(exchangeRate)}`);
+            console.log(`   Exchange Rate: ${ethers.formatEther(exchangeRate)}`);
             console.log(`   Current APR: ${currentAPR / 100}%`);
             
             console.log("\n🏭 Factory Pool Statistics:");
             console.log(`   Number of Pools: ${factoryStats.length}`);
             for (let i = 0; i < factoryStats.length; i++) {
                 console.log(`   Pool ${i + 1} (${factoryStats[i].assetType}):`);
-                console.log(`     TVL: $${ethers.utils.formatEther(factoryStats[i].totalAssets)}`);
-                console.log(`     Borrows: $${ethers.utils.formatEther(factoryStats[i].totalBorrows)}`);
+                console.log(`     TVL: $${ethers.formatEther(factoryStats[i].totalAssets)}`);
+                console.log(`     Borrows: $${ethers.formatEther(factoryStats[i].totalBorrows)}`);
                 console.log(`     Utilization: ${factoryStats[i].utilizationRate / 100}%`);
                 console.log(`     APR: ${factoryStats[i].currentAPR / 100}%`);
             }
@@ -523,20 +538,20 @@ describe("Full Lending Flow Test", function () {
 
         it("Should verify all DeFi mechanics worked correctly", async function () {
             // Verify liquidity providers earned yield
-            const lp1FinalShares = await lendingPool.lpShares(liquidityProvider1.address);
+            const lp1FinalShares = await lendingPool.lpShares(liquidityProvider1.getAddress());
             
             // Verify borrowers had their loans processed
-            const borrower1Debt = await lendingPool.getCurrentBorrowBalance(borrower1.address);
-            const borrower2Debt = await lendingPool.getCurrentBorrowBalance(borrower2.address);
+            const borrower1Debt = await lendingPool.getCurrentBorrowBalance(await borrower1.getAddress());
+            const borrower2Debt = await lendingPool.getCurrentBorrowBalance(await borrower2.getAddress());
             
             // Verify interest accrual worked
             const totalReserves = await lendingPool.totalReserves();
             
             console.log("✅ DeFi Mechanics Verification:");
-            console.log(`   LP1 Remaining Shares: ${ethers.utils.formatEther(lp1FinalShares)}`);
-            console.log(`   Borrower1 Debt: $${ethers.utils.formatEther(borrower1Debt)}`);
-            console.log(`   Borrower2 Debt: $${ethers.utils.formatEther(borrower2Debt)}`);
-            console.log(`   Protocol Reserves: $${ethers.utils.formatEther(totalReserves)}`);
+            console.log(`   LP1 Remaining Shares: ${ethers.formatEther(lp1FinalShares)}`);
+            console.log(`   Borrower1 Debt: $${ethers.formatEther(borrower1Debt)}`);
+            console.log(`   Borrower2 Debt: $${ethers.formatEther(borrower2Debt)}`);
+            console.log(`   Protocol Reserves: $${ethers.formatEther(totalReserves)}`);
             
             expect(borrower1Debt).to.equal(0); // Liquidated
             expect(borrower2Debt).to.equal(0); // Repaid

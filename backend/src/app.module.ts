@@ -12,6 +12,8 @@ import { PoolsModule } from './pools/pools.module';
 import { InvestorModule } from './investor/investor.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { HcsModule } from './hcs/hcs.module';
+import { FaucetModule } from './faucet/faucet.module';
+import { OptimizedModule } from './optimized/optimized.module';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { HcsModule } from './hcs/hcs.module';
     PoolsModule,
     InvestorModule,
     TransactionModule,
+    FaucetModule,
+    OptimizedModule,
   ],
   controllers: [AppController],
   providers: [

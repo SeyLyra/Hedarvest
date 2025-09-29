@@ -1,6 +1,17 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
-import { RegisterAgentDto, ManageDepositDto, LoginAgentDto } from './dto';
+import {
+  RegisterAgentDto,
+  ManageDepositDto,
+  LoginAgentDto,
+  UpdateAgentProfileDto,
+  ChangePasswordDto,
+} from './dto';
 import { TransactionService } from '../transaction/transaction.service';
 import { HederaService } from '../lib/hedera.service';
 import * as bcrypt from 'bcryptjs';
@@ -16,7 +27,15 @@ export class AgentService {
   ) {}
 
   async registerAgent(registerAgentDto: RegisterAgentDto) {
-    const { name, email, password, walletAddress, location, commissionRate } = registerAgentDto as any;
+    const {
+      name,
+      email,
+      password,
+      phoneNumber,
+      walletAddress,
+      location,
+      commissionRate,
+    } = registerAgentDto;
 
     // Check if agent already exists
     const existingAgent = await this.prisma.agent.findUnique({
@@ -29,16 +48,18 @@ export class AgentService {
 
     // Hash password
     const saltRounds = 12;
-    const passwordHash = await bcrypt.hash(password, saltRounds);
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-    // Create agent
+    // Create agent with pending status
     const agent = await this.prisma.agent.create({
       data: {
         name,
         email,
-        passwordHash,
-        walletAddress,
-        location,
+        passwordHash: hashedPassword,
+        phoneNumber: phoneNumber || null,
+        walletAddress: walletAddress || null,
+        location: location || null,
+        status: 'pending', // Default to pending for approval
         commissionRate: commissionRate || 0.05,
       },
     });
@@ -51,13 +72,20 @@ export class AgentService {
       meta: {
         name,
         email,
+        phoneNumber,
         walletAddress,
         location,
-        commissionRate: agent.commissionRate,
+        status: 'pending',
       },
     });
 
-    return agent;
+    // Return agent without password hash
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, ...agentResponse } = agent;
+    return {
+      ...agentResponse,
+      message: 'Agent registration submitted successfully. Awaiting approval.',
+    };
   }
 
   async loginAgent(loginAgentDto: LoginAgentDto) {
@@ -108,7 +136,10 @@ export class AgentService {
       throw new NotFoundException('Agent not found');
     }
 
-    return agent;
+    // Return agent without password hash
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, ...agentResponse } = agent;
+    return agentResponse;
   }
 
   async getAgentDeposits(agentId: number) {
@@ -133,7 +164,9 @@ export class AgentService {
     });
 
     if (!deposit) {
-      throw new NotFoundException('Deposit not found or not assigned to this agent');
+      throw new NotFoundException(
+        'Deposit not found or not assigned to this agent',
+      );
     }
 
     let updatedDeposit;
@@ -162,7 +195,7 @@ export class AgentService {
         if (!updatedWeight && !updatedQualityGrade) {
           throw new BadRequestException('No updates provided');
         }
-        
+
         updatedDeposit = await this.prisma.grainDeposit.update({
           where: { id: depositId },
           data: {
@@ -191,7 +224,7 @@ export class AgentService {
       },
     });
 
-    return updatedDeposit;
+    return updatedDeposit as any;
   }
 
   async getCommissionStats(agentId: number) {
@@ -209,7 +242,10 @@ export class AgentService {
     });
 
     // Calculate commission
-    const totalTokensMinted = deposits.reduce((sum, deposit) => sum + Number(deposit.tokensMinted), 0);
+    const totalTokensMinted = deposits.reduce(
+      (sum, deposit) => sum + Number(deposit.tokensMinted),
+      0,
+    );
     const totalCommission = totalTokensMinted * Number(agent.commissionRate);
 
     return {
@@ -218,7 +254,7 @@ export class AgentService {
       totalDeposits: deposits.length,
       totalTokensMinted,
       totalCommission,
-      deposits: deposits.map(deposit => ({
+      deposits: deposits.map((deposit) => ({
         id: deposit.id,
         grainType: deposit.grainType,
         weightKg: deposit.weightKg,
@@ -230,9 +266,146 @@ export class AgentService {
   }
 
   async getAllAgents() {
-    return this.prisma.agent.findMany({
+    const agents = await this.prisma.agent.findMany({
       where: { isActive: true },
       orderBy: { name: 'asc' },
     });
+
+    // Return agents without password hashes
+    return agents.map(({ passwordHash, ...agent }) => agent);
+  }
+
+  async updateAgentStatus(
+    agentId: number,
+    status: 'pending' | 'approved' | 'rejected',
+  ) {
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+    });
+
+    if (!agent) {
+      throw new NotFoundException('Agent not found');
+    }
+
+    const updatedAgent = await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { status },
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'agent_status_update',
+      ref: `agent_${agentId}`,
+      entity: 'Agent',
+      meta: {
+        agentId,
+        previousStatus: agent.status,
+        newStatus: status,
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, ...agentResponse } = updatedAgent;
+    return agentResponse;
+  }
+
+  async updateAgentProfile(
+    agentId: number,
+    updateAgentProfileDto: UpdateAgentProfileDto,
+  ) {
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+    });
+
+    if (!agent) {
+      throw new NotFoundException('Agent not found');
+    }
+
+    // Only allow updates to certain fields
+    const allowedUpdates = {
+      name: updateAgentProfileDto.name,
+      phoneNumber: updateAgentProfileDto.phoneNumber,
+      location: updateAgentProfileDto.location,
+      walletAddress: updateAgentProfileDto.walletAddress,
+    };
+
+    // Remove undefined values
+    const filteredUpdates = Object.fromEntries(
+      Object.entries(allowedUpdates).filter(
+        ([, value]) => value !== undefined,
+      ),
+    );
+
+    if (Object.keys(filteredUpdates).length === 0) {
+      throw new BadRequestException('No valid updates provided');
+    }
+
+    const updatedAgent = await this.prisma.agent.update({
+      where: { id: agentId },
+      data: filteredUpdates,
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'agent_profile_update',
+      ref: `agent_${agentId}`,
+      entity: 'Agent',
+      meta: {
+        agentId,
+        updatedFields: Object.keys(filteredUpdates),
+        previousValues: {
+          name: agent.name,
+          phoneNumber: agent.phoneNumber,
+          location: agent.location,
+          walletAddress: agent.walletAddress,
+        },
+        newValues: filteredUpdates,
+      },
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { passwordHash, ...agentResponse } = updatedAgent;
+    return agentResponse;
+  }
+
+  async changePassword(agentId: number, changePasswordDto: ChangePasswordDto) {
+    const { currentPassword, newPassword } = changePasswordDto;
+
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+    });
+
+    if (!agent || !agent.passwordHash) {
+      throw new NotFoundException('Agent not found');
+    }
+
+    // Verify current password
+    const isValid = await bcrypt.compare(currentPassword, agent.passwordHash);
+    if (!isValid) {
+      throw new UnauthorizedException('Current password is incorrect');
+    }
+
+    // Hash new password
+    const saltRounds = 12;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    await this.prisma.agent.update({
+      where: { id: agentId },
+      data: { passwordHash: hashedNewPassword },
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'agent_password_change',
+      ref: `agent_${agentId}`,
+      entity: 'Agent',
+      meta: {
+        agentId,
+        email: agent.email,
+      },
+    });
+
+    return { message: 'Password changed successfully' };
   }
 }

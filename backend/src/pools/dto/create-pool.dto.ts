@@ -17,12 +17,6 @@ export class CreatePoolDto {
   @Min(0)
   baseLtv: number;
 
-  @IsNumber()
-  @Min(0)
-  riskPremium: number;
-
-  @IsString()
-  debtCeiling: string;
 
   @IsNumber()
   @Min(0)

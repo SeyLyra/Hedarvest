@@ -11,7 +11,10 @@ model Farmer {
   id            Int      @id @default(autoincrement())
   memberNumber  String   @unique
   phoneNumber   String
+  nationalId    String?
   walletAddress String   @unique
+  agentId       Int?
+  agent         Agent?   @relation(fields: [agentId], references: [id])
   otpRequest    OtpRequest?
   deposits      GrainDeposit[]
   loans         Loan[]
@@ -24,11 +27,14 @@ model Agent {
   name           String
   email          String   @unique
   passwordHash   String
+  phoneNumber    String?
   walletAddress  String?  @unique
   location       String?
+  status         String   @default("pending") // pending, approved, rejected
   isActive       Boolean  @default(true)
   commissionRate Decimal  @default(0.05)
   deposits       GrainDeposit[]
+  farmers        Farmer[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 }
@@ -53,11 +59,14 @@ model Loan {
   id               Int      @id @default(autoincrement())
   farmer           Farmer   @relation(fields: [farmerId], references: [id])
   farmerId         Int
+  pool             Pool?    @relation(fields: [poolId], references: [id])
+  poolId           Int?
   grainType        String   // Store grain type instead of pool relation
   amount           Decimal
   collateralTokens Decimal   @default(0)
   interestRate     Decimal   @default(0)
   status           String    @default("active")
+  dueDate          DateTime?
   createdAt        DateTime  @default(now())
   repaidAt         DateTime?
 }
@@ -69,6 +78,32 @@ model TxLog {
   entity    String?
   meta      Json?
   createdAt DateTime @default(now())
+}
+
+model Pool {
+  id                    Int      @id @default(autoincrement())
+  grainType             String   @unique
+  poolAddress           String   @unique
+  lendingToken          String
+  lendingTokenAddress   String?
+  collateralToken       String
+  lpToken               String
+  oracleAddress         String?
+  totalLiquidity        Decimal  @default(0)
+  liquidity             Decimal  @default(0) // Alias for totalLiquidity
+  totalBorrows          Decimal  @default(0)
+  totalReserves         Decimal  @default(0)
+  utilizationRate       Decimal  @default(0)
+  currentAPR            Decimal  @default(0)
+  apr                   Decimal  @default(0) // Alias for currentAPR
+  baseLtv               Decimal  @default(0.8)
+  protocolFee           Decimal  @default(0.1)
+  riskPremium           Decimal  @default(0.05)
+  debtCeiling           Decimal  @default(1000000)
+  isActive              Boolean  @default(true)
+  loans                 Loan[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model OtpRequest {

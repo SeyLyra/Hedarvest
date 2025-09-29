@@ -20,11 +20,12 @@ export class PoolsService {
         data: {
           grainType: createPoolDto.grainType,
           poolAddress: createPoolDto.poolAddress,
+          lendingToken: 'placeholder-lending-token',
+          collateralToken: 'placeholder-collateral-token',
+          lpToken: 'placeholder-lp-token',
           oracleAddress: createPoolDto.oracleAddress,
           lendingTokenAddress: createPoolDto.lendingTokenAddress,
           baseLtv: createPoolDto.baseLtv,
-          riskPremium: createPoolDto.riskPremium,
-          debtCeiling: BigInt(createPoolDto.debtCeiling),
           protocolFee: createPoolDto.protocolFee,
         },
       });
@@ -40,8 +41,6 @@ export class PoolsService {
           oracleAddress: pool.oracleAddress,
           lendingTokenAddress: pool.lendingTokenAddress,
           baseLtv: pool.baseLtv.toString(),
-          riskPremium: pool.riskPremium.toString(),
-          debtCeiling: pool.debtCeiling.toString(),
           protocolFee: pool.protocolFee.toString(),
         });
       } catch (hcsError) {
@@ -75,8 +74,6 @@ export class PoolsService {
         oracleAddress: pool.oracleAddress,
         lendingTokenAddress: pool.lendingTokenAddress,
         baseLtv: pool.baseLtv.toString(),
-        riskPremium: pool.riskPremium.toString(),
-        debtCeiling: pool.debtCeiling.toString(),
         protocolFee: pool.protocolFee.toString(),
         apr: pool.apr.toString(),
         liquidity: pool.liquidity.toString(),
@@ -117,8 +114,6 @@ export class PoolsService {
         oracleAddress: pool.oracleAddress,
         lendingTokenAddress: pool.lendingTokenAddress,
         baseLtv: pool.baseLtv.toString(),
-        riskPremium: pool.riskPremium.toString(),
-        debtCeiling: pool.debtCeiling.toString(),
         protocolFee: pool.protocolFee.toString(),
         apr: pool.apr.toString(),
         liquidity: pool.liquidity.toString(),
@@ -167,9 +162,6 @@ export class PoolsService {
   async updatePool(id: number, updatePoolDto: UpdatePoolDto) {
     try {
       const updateData: any = { ...updatePoolDto };
-      if (updatePoolDto.debtCeiling) {
-        updateData.debtCeiling = BigInt(updatePoolDto.debtCeiling);
-      }
       
       const pool = await this.prisma.pool.update({
         where: { id },
@@ -197,11 +189,11 @@ export class PoolsService {
   }
 
   async syncFromFactory() {
-    this.logger.log('Starting sync from PoolFactory contract...');
+    this.logger.log('Starting sync from LendingFactory contract...');
     
     try {
       // Get all pools from the factory contract
-      const factoryPools = await this.contractService.getAllPoolsFromFactory();
+      const factoryPools = await this.contractService.getAllPools();
       this.logger.log(`Found ${factoryPools.length} pools in factory contract`);
 
       const syncResults = {
@@ -212,6 +204,9 @@ export class PoolsService {
 
       for (const factoryPool of factoryPools) {
         try {
+          // Get detailed pool info from the contract
+          const poolInfo = await this.contractService.getPoolInfo(factoryPool.poolAddress);
+          
           // Check if pool already exists in database
           const existingPool = await this.prisma.pool.findUnique({
             where: { poolAddress: factoryPool.poolAddress },
@@ -223,38 +218,34 @@ export class PoolsService {
               where: { id: existingPool.id },
               data: {
                 oracleAddress: factoryPool.oracleAddress,
-                lendingTokenAddress: factoryPool.lendingTokenAddress,
-                baseLtv: factoryPool.baseLtv,
-                riskPremium: factoryPool.riskPremium,
-                debtCeiling: BigInt(factoryPool.debtCeiling),
-                protocolFee: factoryPool.protocolFee,
-                liquidity: factoryPool.availableLiquidity,
-                totalBorrows: factoryPool.totalBorrows,
-                totalReserves: factoryPool.totalReserves,
-                utilizationRate: factoryPool.utilizationRate,
+                lendingTokenAddress: poolInfo.lendingToken,
+                baseLtv: poolInfo.baseLTV,
+                protocolFee: poolInfo.protocolFee,
+                liquidity: poolInfo.availableLiquidity,
+                totalBorrows: poolInfo.totalBorrows,
+                totalReserves: poolInfo.totalReserves,
+                utilizationRate: poolInfo.utilizationRate,
                 updatedAt: new Date(),
               },
             });
             syncResults.updated++;
-            this.logger.log(`Updated pool: ${factoryPool.grainType}`);
+            this.logger.log(`Updated pool: ${poolInfo.assetType}`);
           } else {
             // Create new pool record
             await this.createPoolRecord({
-              grainType: factoryPool.grainType,
+              grainType: poolInfo.assetType,
               poolAddress: factoryPool.poolAddress,
               oracleAddress: factoryPool.oracleAddress,
-              lendingTokenAddress: factoryPool.lendingTokenAddress,
-              baseLtv: factoryPool.baseLtv,
-              riskPremium: factoryPool.riskPremium,
-              debtCeiling: factoryPool.debtCeiling.toString(),
-              protocolFee: factoryPool.protocolFee,
+              lendingTokenAddress: poolInfo.lendingToken,
+              baseLtv: poolInfo.baseLTV,
+              protocolFee: poolInfo.protocolFee,
             });
             syncResults.created++;
-            this.logger.log(`Created pool: ${factoryPool.grainType}`);
+            this.logger.log(`Created pool: ${poolInfo.assetType}`);
           }
         } catch (poolError) {
           syncResults.errors++;
-          this.logger.error(`Failed to sync pool ${factoryPool.grainType}:`, poolError);
+          this.logger.error(`Failed to sync pool ${factoryPool.assetType}:`, poolError);
         }
       }
 
@@ -330,8 +321,6 @@ export class PoolsService {
           oracleAddress: eventData.oracleAddress,
           lendingTokenAddress: eventData.lendingTokenAddress,
           baseLtv: parseFloat(eventData.baseLtv),
-          riskPremium: parseFloat(eventData.riskPremium),
-          debtCeiling: eventData.debtCeiling,
           protocolFee: parseFloat(eventData.protocolFee),
         });
         this.logger.log(`Created pool from HCS event: ${eventData.grainType}`);

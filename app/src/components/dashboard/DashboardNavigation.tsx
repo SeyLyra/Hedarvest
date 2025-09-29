@@ -10,10 +10,11 @@ import {
   Activity,
   TrendingUp,
   DollarSign,
-  PieChart
+  PieChart,
+  Droplets
 } from 'lucide-react';
 
-export type DashboardSection = 'overview' | 'pools' | 'portfolio' | 'activity';
+export type DashboardSection = 'overview' | 'pools' | 'portfolio' | 'activity' | 'faucet';
 
 interface DashboardNavigationProps {
   activeSection: DashboardSection;
@@ -45,6 +46,12 @@ const sections = [
     label: 'Activity',
     icon: Activity,
     description: 'Transaction history'
+  },
+  {
+    id: 'faucet' as DashboardSection,
+    label: 'Faucet',
+    icon: Droplets,
+    description: 'Mint mock USDT tokens'
   }
 ];
 

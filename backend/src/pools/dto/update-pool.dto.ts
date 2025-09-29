@@ -14,14 +14,6 @@ export class UpdatePoolDto {
   @Min(0)
   baseLtv?: number;
 
-  @IsOptional()
-  @IsNumber()
-  @Min(0)
-  riskPremium?: number;
-
-  @IsOptional()
-  @IsString()
-  debtCeiling?: string;
 
   @IsOptional()
   @IsNumber()

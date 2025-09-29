@@ -1,402 +1,607 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { WalletConnectButton } from '@/components/auth/WalletConnectButton';
-import { useWallet } from '@/hooks/useWallet';
-import { TrendingUp, Shield, DollarSign, ArrowRight, CheckCircle } from 'lucide-react';
-import { Loader } from '@/components/shared/Loader';
-import { LoadingButton } from '@/components/shared/LoadingButton';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import Image from "next/image";
+import {
+  CheckCircle,
+  Shield,
+  TrendingUp,
+  Eye,
+  BarChart3,
+  AlertCircle,
+  RefreshCw,
+  ArrowRight,
+  Sparkles,
+  Zap,
+  Star,
+  Globe,
+  Lock,
+  Target,
+  Rocket,
+  Wheat,
+  Sun,
+  Leaf,
+  TreePine,
+  Gem,
+  Coins,
+  Banknote,
+  PiggyBank,
+  Award,
+  Crown,
+  Diamond,
+  Heart,
+  Flame
+} from "lucide-react";
+import { useHashPackDirect } from "@/hooks/useHashPackDirect";
+
+// TypeScript declaration for HashPack
+declare global {
+  interface Window {
+    hedera?: {
+      request: (params: { method: string }) => Promise<string[]>;
+    };
+  }
+}
 
 export default function InvestorLoginPage() {
   const router = useRouter();
-  const { isConnected, isConnecting, address, error, connectMetaMask } = useWallet();
-  const [isRedirecting, setIsRedirecting] = useState(false);
-  const [connectionStatus, setConnectionStatus] = useState<'idle' | 'connecting' | 'switching-network' | 'connected'>('idle');
-  const [isDirectConnecting, setIsDirectConnecting] = useState(false);
-  const [forceUpdate, setForceUpdate] = useState(0);
-
-  // Memoize the wallet state to prevent dependency array changes
-  const walletState = useMemo(() => ({
+  const [showRedirectFallback, setShowRedirectFallback] = useState(false);
+  const [confirmedAccountId, setConfirmedAccountId] = useState<string | null>(null);
+  const [isClient, setIsClient] = useState(false);
+  
+  // Use the direct HashPack connection hook
+  const {
+    hashconnect,
+    connectionStatus,
     isConnected,
-    isConnecting,
-    address,
-    forceUpdate
-  }), [isConnected, isConnecting, address, forceUpdate]);
+    accountId,
+    error,
+    isLoading,
+    connect,
+    disconnect,
+    checkConnection
+  } = useHashPackDirect();
 
-  // Check if wallet is already connected on page load
+  // Ensure we're on the client side
   useEffect(() => {
-    console.log('=== PAGE LOAD WALLET CHECK ===');
-    console.log('Initial wallet state:', { isConnected, isConnecting, address });
-    
-    if (isConnected && address) {
-      console.log('Wallet already connected, redirecting...');
-      setTimeout(() => {
-        window.location.href = '/dashboard/investor';
-      }, 100);
-    }
+    setIsClient(true);
   }, []);
 
-  // Auto-redirect if wallet is already connected
+  // Handle successful connection
   useEffect(() => {
-    console.log('=== WALLET STATE EFFECT ===');
-    console.log('Wallet state changed:', walletState);
-    console.log('isConnected:', walletState.isConnected);
-    console.log('isConnecting:', walletState.isConnecting);
-    console.log('address:', walletState.address);
-    
-    if (walletState.isConnected && !walletState.isConnecting && walletState.address) {
-      console.log('✅ Conditions met for redirect');
-      console.log('Redirecting to dashboard...');
-      setConnectionStatus('connected');
-      setIsRedirecting(true);
-      // Redirect immediately after wallet is connected
-      console.log('Executing redirect...');
+    if (isConnected && accountId) {
+      console.log('✅ HashPack connected successfully:', accountId);
+      // Store account in localStorage for persistence
+      localStorage.setItem('hashpack_account', accountId);
+      
+      // Redirect to dashboard after successful connection
       setTimeout(() => {
-        window.location.href = '/dashboard/investor';
-      }, 100);
-    } else {
-      console.log('❌ Conditions not met for redirect');
-      console.log('isConnected:', walletState.isConnected);
-      console.log('isConnecting:', walletState.isConnecting);
-      console.log('address:', walletState.address);
+        router.push('/investor-dashboard');
+      }, 1000);
     }
-  }, [walletState]);
+  }, [isConnected, accountId, router]);
 
-  const handleWalletConnected = () => {
-    console.log('Wallet connected callback triggered');
-    setConnectionStatus('connected');
-    setIsRedirecting(true);
-    // Redirect immediately after successful connection
-    console.log('Executing redirect from callback...');
-    window.location.href = '/dashboard/investor';
+  // Handle retry connection
+  const handleRetryConnection = () => {
+    connect();
   };
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background">
-      {/* Background Pattern */}
-      <div className="absolute inset-0 opacity-30">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.1)_1px,transparent_0)] bg-[length:20px_20px]"></div>
-      </div>
-      
-      {/* Header */}
-      <div className="relative z-10 border-b bg-card/80 backdrop-blur-sm">
-        <div className="w-full px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="h-10 w-10 rounded-xl bg-gradient-to-r from-agricultural-green to-golden-accent shadow-lg"></div>
-              <span className="text-3xl font-bold text-foreground">Hedarvest</span>
-            </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={() => router.push('/')}
-              className="hover:bg-muted/50 transition-colors"
-            >
-              ← Back to Home
-            </Button>
-          </div>
+  // Test function to verify click handlers work
+  const testClick = () => {
+    console.log('🧪 Test button clicked!');
+    alert('Test button is working!');
+  };
+
+  const checkHashPackManually = () => {
+    console.log('🔍 Manual HashPack Check:');
+    
+    if (typeof window === 'undefined') {
+      alert('Window not available');
+      return;
+    }
+
+    // Check specifically for HashPack (not MetaMask)
+    const checks = {
+      'window.hedera (HashPack)': !!window.hedera,
+      'window.hashpack (HashPack)': !!(window as any).hashpack,
+      'window.ethereum (MetaMask)': !!(window as any).ethereum,
+      'window.web3': !!(window as any).web3,
+    };
+
+    console.log('HashPack Detection Results:', checks);
+    
+    // Look for any property that might be HashPack
+    const allProps = Object.keys(window);
+    const hashpackProps = allProps.filter(prop => 
+      prop.toLowerCase().includes('hedera') || 
+      prop.toLowerCase().includes('hash') || 
+      prop.toLowerCase().includes('pack')
+    );
+    
+    // Check for HashPack in different ways
+    const hashpackChecks = {
+      'window.hedera': window.hedera,
+      'window.hashpack': (window as any).hashpack,
+      'window.hashconnect': (window as any).hashconnect,
+      'window.HederaWallet': (window as any).HederaWallet,
+      'window.HederaWalletConnect': (window as any).HederaWalletConnect,
+    };
+    
+    console.log('All HashPack-related properties:', hashpackChecks);
+    console.log('Properties containing "hedera", "hash", or "pack":', hashpackProps);
+    
+    // Check if HashPack is in extensions
+    const extensions = (window as any).chrome?.runtime?.getManifest ? 'Chrome extensions available' : 'No Chrome extensions API';
+    console.log('Extensions API:', extensions);
+    
+    alert(`HashPack Detection Results:\n${Object.entries(checks).map(([key, value]) => `${key}: ${value ? '✅' : '❌'}`).join('\n')}\n\nFound properties: ${hashpackProps.join(', ') || 'None'}\n\nHashPack specific: ${Object.entries(hashpackChecks).filter(([k,v]) => v).map(([k,v]) => k).join(', ') || 'None'}`);
+  };
+
+  const testDirectConnection = async () => {
+    console.log('🧪 Testing direct connection...');
+    
+    if (typeof window === 'undefined') {
+      alert('Window not available');
+      return;
+    }
+
+    // Check multiple possible HashPack detection methods
+    console.log('🔍 Checking for HashPack...');
+    console.log('window.hedera:', window.hedera);
+    console.log('window.hashpack:', (window as any).hashpack);
+    console.log('window.ethereum:', (window as any).ethereum);
+    
+    // Try to detect HashPack specifically (not MetaMask)
+    const hashpackDetected = window.hedera || (window as any).hashpack;
+    
+    if (!hashpackDetected) {
+      alert('HashPack not found! Please:\n1. Install HashPack extension\n2. Refresh the page\n3. Make sure extension is enabled\n\nNote: MetaMask is detected but we need HashPack specifically');
+      return;
+    }
+
+    try {
+      console.log('🔗 Testing direct connection to HashPack...');
+      const provider = window.hedera || (window as any).hashpack;
+      const accounts = await provider.request({ method: 'eth_requestAccounts' });
+      console.log('📋 Direct connection result:', accounts);
+      alert(`Direct connection successful! Accounts: ${JSON.stringify(accounts)}`);
+    } catch (err: any) {
+      console.error('❌ Direct connection failed:', err);
+      alert(`Direct connection failed: ${err.message}`);
+    }
+  };
+
+  const debugLog = () => {
+    console.log('🔍 HashConnect Debug Info:');
+    console.log('- hashconnect:', hashconnect);
+    console.log('- connectionStatus:', connectionStatus);
+    console.log('- isConnected:', isConnected);
+    console.log('- accountId:', accountId);
+    console.log('- error:', error);
+    console.log('- isLoading:', isLoading);
+    console.log('- isClient:', isClient);
+    console.log('- window.hedera:', typeof window !== 'undefined' ? window.hedera : 'undefined');
+    console.log('- window.hashpack:', typeof window !== 'undefined' ? (window as any).hashpack : 'undefined');
+    
+    // Test if click handlers are working
+    alert('Debug log clicked! Check console for details.');
+  };
+
+  // Check for existing connection on page load
+  useEffect(() => {
+    const existingAccount = localStorage.getItem('hashpack_account');
+    if (existingAccount) {
+      setConfirmedAccountId(existingAccount);
+      // Auto-redirect if already connected
+        setTimeout(() => {
+        router.push('/investor-dashboard');
+        }, 1000);
+    }
+  }, [router]);
+
+  // Show loading state during hydration
+  if (!isClient) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
+          <p className="text-emerald-700">Loading...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Content */}
-      <div className="relative z-10 flex items-center justify-center min-h-[calc(100vh-120px)] px-8 py-16">
-        <div className="w-full max-w-7xl">
-          <div className="grid lg:grid-cols-2 gap-16 items-center">
-            {/* Left Column - Content */}
-            <div className="space-y-12">
-              {/* Hero Section */}
-              <div className="space-y-8">
-                <div className="space-y-6">
-                  <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-agricultural-green/10 to-trust-blue/10 border border-agricultural-green/20 text-agricultural-green text-sm font-medium">
-                    🌾 Agricultural Finance Revolution
-                  </div>
-                  
-                  <h1 className="text-5xl md:text-6xl font-bold text-foreground leading-tight">
-                    Invest in Real-World{" "}
-                    <span className="bg-gradient-to-r from-agricultural-green via-trust-blue to-golden-accent bg-clip-text text-transparent">
-                      Yields
-                    </span>
-                  </h1>
-                  
-                  <p className="text-xl text-muted-foreground leading-relaxed max-w-2xl">
-                    By becoming an investor, you provide liquidity into agricultural lending pools and earn sustainable yield backed by real assets.
-                  </p>
-                </div>
+  return (
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Ultra Fancy White-Dominant Background with Modern Green */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50 to-teal-50">
+        <div className="absolute inset-0 opacity-30" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23F0FDF4' fill-opacity='0.3'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 animate-pulse-slow"></div>
+      </div>
 
-                {/* Supported Wallets */}
-                <div className="space-y-4">
-                  <p className="text-lg font-medium text-foreground">
-                    We currently support MetaMask (EVM) and HashPack (Hedera).
-                  </p>
-                  <div className="flex gap-3">
-                    <Badge variant="outline" className="bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 border-blue-200 px-4 py-2 text-sm font-medium">
-                      🦊 MetaMask
-                    </Badge>
-                    <Badge variant="outline" className="bg-gradient-to-r from-purple-50 to-purple-100 text-purple-700 border-purple-200 px-4 py-2 text-sm font-medium">
-                      🔗 HashPack
-                    </Badge>
-                  </div>
-                </div>
+      {/* Floating Modern Green Shapes */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-r from-emerald-200/30 to-teal-300/30 rounded-full blur-xl animate-float"></div>
+        <div className="absolute top-40 right-20 w-32 h-32 bg-gradient-to-r from-teal-200/30 to-cyan-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '2s'}}></div>
+        <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-gradient-to-r from-green-200/30 to-emerald-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-60 right-1/3 w-16 h-16 bg-gradient-to-r from-mint-200/30 to-teal-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '1s'}}></div>
+      </div>
 
-                {/* Security Note */}
-                <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-xl p-6 shadow-sm">
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0">
-                      <Shield className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-green-800 mb-2">
-                        Your wallet is your login
-                      </p>
-                      <p className="text-green-700 leading-relaxed">
-                        No password is required, and you always stay in control of your funds. 
-                        Your private keys never leave your device.
-                      </p>
-                    </div>
-                  </div>
+      {/* Ultra Fancy Agricultural Header */}
+      <header className="relative z-50 w-full px-8 py-6">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex justify-between items-center">
+            <div className="flex items-center gap-4 group cursor-pointer">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
+            <Image
+              src="/logo.png"
+              alt="Hedarvest Logo"
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 group-hover:scale-110 transition-transform duration-300"
+                  />
                 </div>
               </div>
+              <div>
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
+                  Hedarvest
+                </span>
+                <div className="text-xs text-emerald-600 font-medium">Agricultural DeFi Platform</div>
+              </div>
+          </div>
 
-              {/* Info Card */}
-              <Card className="bg-gradient-to-br from-agricultural-green/5 via-trust-blue/5 to-golden-accent/5 border-agricultural-green/20 shadow-xl">
-                <CardHeader className="pb-4">
-                  <CardTitle className="text-2xl font-bold text-foreground flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-agricultural-green to-trust-blue rounded-full flex items-center justify-center">
-                      <TrendingUp className="w-4 h-4 text-white" />
-                    </div>
-                    Why Invest with Hedarvest?
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                      <CheckCircle className="w-4 h-4 text-green-600" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-foreground mb-2">Earn yield on real-world collateral</p>
-                      <p className="text-muted-foreground leading-relaxed">
-                        Your investments are backed by actual agricultural assets, not synthetic tokens. 
-                        Real farmers, real crops, real returns.
-                      </p>
-                    </div>
-                  </div>
+            <div className="flex items-center gap-6">
+              {!isConnected ? (
+                <div className="flex flex-col items-end gap-4">
+                  <Button
+                    onClick={connect}
+                    disabled={isLoading}
+                    className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-bold py-4 px-8 rounded-2xl shadow-2xl hover:shadow-emerald-500/25 transition-all duration-300 hover:scale-105"
+                  >
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                    {isLoading ? (
+                      <>
+                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
+                        <span className="relative z-10">Connecting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="relative z-10 mr-3 group-hover:animate-bounce">🌾</span>
+                        <span className="relative z-10">Connect HashPack</span>
+                        <ArrowRight className="relative z-10 w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform" />
+                      </>
+                    )}
+                  </Button>
                   
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                      <CheckCircle className="w-4 h-4 text-blue-600" />
+                  <div className="flex items-center gap-3">
+                    <div className="text-xs text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
+                      HashConnect: {hashconnect ? '✅' : '❌'} | Status: {connectionStatus}
                     </div>
-                    <div>
-                      <p className="text-lg font-semibold text-foreground mb-2">Withdraw anytime</p>
-                      <p className="text-muted-foreground leading-relaxed">
-                        No lock-up periods. Access your funds when you need them with instant liquidity.
-                      </p>
-                    </div>
+                    <button 
+                      onClick={testClick}
+                      className="text-xs text-blue-600 underline hover:text-blue-700 transition-colors"
+                    >
+                      Test Click
+                    </button>
+                    <button 
+                      onClick={checkHashPackManually}
+                      className="text-xs text-orange-600 underline hover:text-orange-700 transition-colors"
+                    >
+                      Check HashPack
+                    </button>
+                    <button 
+                      onClick={testDirectConnection}
+                      className="text-xs text-purple-600 underline hover:text-purple-700 transition-colors"
+                    >
+                      Direct Test
+                    </button>
+                    <button 
+                      onClick={debugLog}
+                      className="text-xs text-emerald-600 underline hover:text-teal-600 transition-colors"
+                    >
+                      Debug Log
+                    </button>
+                    <button 
+                      onClick={connect}
+                      className="text-xs text-emerald-600 underline hover:text-teal-700 transition-colors"
+                    >
+                      Retry Connect
+                    </button>
                   </div>
-                  
-                  <div className="flex items-start gap-4">
-                    <div className="w-8 h-8 bg-purple-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
-                      <CheckCircle className="w-4 h-4 text-purple-600" />
-                    </div>
-                    <div>
-                      <p className="text-lg font-semibold text-foreground mb-2">Transparent on-chain pools</p>
-                      <p className="text-muted-foreground leading-relaxed">
-                        All transactions are verifiable on the blockchain for complete transparency and trust.
-                      </p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-2xl px-6 py-3 border border-emerald-500/30">
+                  <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse shadow-lg shadow-emerald-400/50"></div>
+                  <span className="text-emerald-700 text-sm font-medium">
+                    {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Connected'}
+                  </span>
+                  <button 
+                    onClick={disconnect}
+                    className="text-xs text-red-600 underline hover:text-red-700 transition-colors ml-2"
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
+        </div>
+      </header>
 
-            {/* Right Column - Wallet Connection */}
-            <div className="space-y-10">
-              {/* Connection Card */}
-              <Card className="bg-gradient-to-br from-card via-card to-muted/20 border-border shadow-2xl backdrop-blur-sm">
-                <CardHeader className="text-center pb-6">
-                  <div className="w-20 h-20 bg-gradient-to-r from-agricultural-green via-trust-blue to-golden-accent rounded-2xl flex items-center justify-center mx-auto mb-6 shadow-lg">
-                    <DollarSign className="w-10 h-10 text-white" />
-                  </div>
-                  <CardTitle className="text-3xl font-bold text-foreground mb-3">
-                    Connect Your Wallet
-                  </CardTitle>
-                  <p className="text-lg text-muted-foreground leading-relaxed">
-                    Connect your MetaMask or HashPack wallet to start investing in real-world agricultural yields
-                  </p>
-                </CardHeader>
-                
-                <CardContent className="space-y-6">
-                  {/* Success State */}
-                  {isConnected && isRedirecting ? (
-                    <div className="text-center space-y-6">
-                      <div className="w-20 h-20 bg-gradient-to-r from-green-100 to-emerald-100 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
-                        <CheckCircle className="w-10 h-10 text-green-600" />
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-3">
-                          🎉 Wallet Connected Successfully!
-                        </h3>
-                        <p className="text-lg text-muted-foreground mb-2">
-                          Welcome, <span className="font-mono font-semibold text-foreground">{address?.slice(0, 6)}...{address?.slice(-4)}</span>
-                        </p>
-                        <p className="text-muted-foreground">
-                          Redirecting to your dashboard...
-                        </p>
-                      </div>
-                      <div className="flex justify-center">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-agricultural-green"></div>
-                      </div>
-                    </div>
-                  ) : isConnecting ? (
-                    <div className="text-center space-y-6">
-                      <div className="w-20 h-20 bg-gradient-to-r from-blue-100 to-trust-blue/20 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
-                        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-trust-blue"></div>
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-3">
-                          {error && error.includes('switch to Hedera') ? 'Switching Network...' : 'Connecting Wallet...'}
-                        </h3>
-                        <p className="text-lg text-muted-foreground">
-                          {error && error.includes('switch to Hedera') 
-                            ? 'Please switch to Hedera Testnet in MetaMask to continue'
-                            : 'Please approve the connection in your wallet'
-                          }
-                        </p>
-                      </div>
-                    </div>
-                  ) : error ? (
-                    <div className="text-center space-y-6">
-                      <div className="w-20 h-20 bg-gradient-to-r from-red-100 to-red-200 rounded-2xl flex items-center justify-center mx-auto shadow-lg">
-                        <div className="w-10 h-10 text-red-600">⚠️</div>
-                      </div>
-                      <div>
-                        <h3 className="text-2xl font-bold text-foreground mb-3">
-                          Connection Failed
-                        </h3>
-                        <p className="text-lg text-muted-foreground mb-4">
-                          {error}
-                        </p>
-                        <Button 
-                          onClick={() => window.location.reload()} 
-                          variant="outline"
-                          className="mt-4"
-                        >
-                          Try Again
-                        </Button>
-                      </div>
-                    </div>
+      {/* Ultra Fancy Agricultural Hero Section */}
+      <section className="relative py-32 overflow-hidden">
+        <div className="w-full px-8 relative z-10">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-20">
+              {/* Animated Agricultural Badge */}
+              <div className="mb-8 animate-fade-in">
+                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 backdrop-blur-sm border border-emerald-500/30">
+                  <Wheat className="w-4 h-4 text-emerald-600 animate-pulse" />
+                  <span className="text-emerald-700 font-medium">Powered by Hedera Network</span>
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></div>
+                </div>
+              </div>
+              
+              {/* Main Heading with Agricultural Effects */}
+              <h1 className="text-6xl md:text-8xl font-black mb-8 leading-tight">
+                <span className="block text-emerald-800 mb-4 animate-fade-in" style={{animationDelay: '0.1s'}}>
+                  Institutional-Grade
+                </span>
+                <span className="block bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent animate-fade-in" style={{animationDelay: '0.3s'}}>
+                  Agricultural Investing
+                </span>
+              </h1>
+              
+              {/* Subtitle with Agricultural Glow Effect */}
+              <p className="text-2xl md:text-3xl text-emerald-700 mb-12 max-w-5xl mx-auto leading-relaxed animate-fade-in" style={{animationDelay: '0.5s'}}>
+                Access a new asset class with predictable returns backed by real-world agricultural operations. 
+                Earn sustainable yields while supporting global food security.
+              </p>
+
+              {/* Ultra Fancy Agricultural CTA Button */}
+              <div className="animate-fade-in" style={{animationDelay: '0.7s'}}>
+                <Button
+                  onClick={connect}
+                  disabled={isLoading}
+                  className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-black py-6 px-12 rounded-3xl shadow-2xl hover:shadow-emerald-500/50 transition-all duration-500 hover:scale-110 text-xl"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                  {isLoading ? (
+                    <>
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-4"></div>
+                      <span className="relative z-10">Connecting to HashPack...</span>
+                    </>
                   ) : (
                     <>
-                      {/* Wallet Connection Button */}
-                      <div className="space-y-6">
-                        <WalletConnectButton
-                          variant="default"
-                          size="lg"
-                          className="w-full text-xl py-8 bg-gradient-to-r from-agricultural-green to-trust-blue hover:from-agricultural-green/90 hover:to-trust-blue/90 text-white font-semibold shadow-lg hover:shadow-xl transition-all duration-300"
-                          onConnected={handleWalletConnected}
-                        />
-                        
-                        {/* Direct MetaMask Connection Button */}
-            
-                        <div className="text-center space-y-2">
-                          <p className="text-sm text-muted-foreground">
-                            By connecting, you agree to our Terms of Service
-                          </p>
-                          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
-                            <Shield className="w-3 h-3" />
-                            <span>Secure • Private • Non-custodial</span>
-                          </div>
-                        </div>
-                      </div>
+                      <Wheat className="relative z-10 w-6 h-6 mr-4 group-hover:animate-bounce" />
+                      <span className="relative z-10">Start Investing Now</span>
+                      <ArrowRight className="relative z-10 w-6 h-6 ml-4 group-hover:translate-x-2 transition-transform" />
                     </>
                   )}
+                </Button>
+              </div>
+                          </div>
+              
+            {/* Ultra Fancy Agricultural Investment Advantages Grid */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
+              {[
+                { icon: Gem, title: "Real Asset Backing", desc: "100% collateralized by physical crops", color: "from-emerald-400 to-teal-500", emoji: "💎" },
+                { icon: Coins, title: "Predictable Yields", desc: "8-12% APY from agricultural operations", color: "from-teal-400 to-cyan-500", emoji: "💰" },
+                { icon: Crown, title: "Full Transparency", desc: "Blockchain-verified supply chain tracking", color: "from-green-400 to-emerald-500", emoji: "👑" },
+                { icon: Diamond, title: "Diversified Portfolio", desc: "Multiple crops and geographic regions", color: "from-cyan-400 to-teal-500", emoji: "💠" }
+              ].map((item, index) => (
+                <div key={index} className="group relative">
+                  <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl rounded-3xl" style={{background: `linear-gradient(135deg, ${item.color.split(' ')[1]}, ${item.color.split(' ')[3]})`}}></div>
+                  <div className="relative bg-gradient-to-br from-emerald-50/90 to-teal-50/90 backdrop-blur-xl rounded-3xl p-8 border border-emerald-200/50 hover:border-emerald-400/70 transition-all duration-500 hover:scale-105 hover:-translate-y-2 shadow-lg hover:shadow-emerald-200/50">
+                    <div className={`w-16 h-16 bg-gradient-to-r ${item.color} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300`}>
+                      <item.icon className="w-8 h-8 text-white" />
+                          </div>
+                    <div className="text-4xl mb-4 group-hover:animate-bounce">{item.emoji}</div>
+                    <h3 className="text-xl font-bold text-emerald-800 mb-4 group-hover:text-emerald-600 transition-colors">{item.title}</h3>
+                    <p className="text-emerald-700 group-hover:text-emerald-800 transition-colors">{item.desc}</p>
+                    <div className="mt-6 w-full h-1 bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
+                          </div>
+                </div>
+              ))}
+                        </div>
 
-                  {/* Features Preview - Only show when not connected */}
-                  {!isConnected && (
-                    <div className="space-y-4">
-                      <h4 className="text-lg font-semibold text-foreground text-center">
-                        What you'll get access to:
-                      </h4>
-                      <div className="grid grid-cols-1 gap-4">
-                        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-agricultural-green/5 to-trust-blue/5 rounded-xl border border-agricultural-green/10">
-                          <div className="w-10 h-10 bg-gradient-to-r from-agricultural-green/20 to-agricultural-green/10 rounded-xl flex items-center justify-center">
-                            <TrendingUp className="w-5 h-5 text-agricultural-green" />
-                          </div>
-                          <span className="font-medium text-foreground">Real-time pool analytics</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-trust-blue/5 to-purple-50 rounded-xl border border-trust-blue/10">
-                          <div className="w-10 h-10 bg-gradient-to-r from-trust-blue/20 to-trust-blue/10 rounded-xl flex items-center justify-center">
-                            <Shield className="w-5 h-5 text-trust-blue" />
-                          </div>
-                          <span className="font-medium text-foreground">Secure wallet integration</span>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 p-4 bg-gradient-to-r from-golden-accent/5 to-yellow-50 rounded-xl border border-golden-accent/10">
-                          <div className="w-10 h-10 bg-gradient-to-r from-golden-accent/20 to-golden-accent/10 rounded-xl flex items-center justify-center">
-                            <DollarSign className="w-5 h-5 text-golden-accent" />
-                          </div>
-                          <span className="font-medium text-foreground">Instant deposit & withdrawal</span>
-                        </div>
+            {/* Ultra Fancy Agricultural Why Invest Section */}
+            <div className="relative mb-20">
+              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-4xl blur-3xl"></div>
+              <div className="relative bg-gradient-to-br from-emerald-50/95 to-teal-50/95 backdrop-blur-xl rounded-4xl p-16 border border-emerald-200/50 shadow-xl">
+                <div className="text-center mb-16">
+                  <h2 className="text-5xl md:text-6xl font-black text-emerald-800 mb-8">
+                  Why Invest in{" "}
+                    <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                    Agricultural Assets?
+                  </span>
+                </h2>
+                  <p className="text-2xl text-emerald-700 max-w-4xl mx-auto">
+                  Traditional markets are volatile, but agriculture provides stable, inflation-resistant returns 
+                  backed by the world's most essential industry.
+                  </p>
+                </div>
+                
+                <div className="grid md:grid-cols-3 gap-12">
+                  {[
+                    { emoji: "💎", title: "Stable Returns", desc: "Agricultural assets provide consistent returns regardless of market volatility, as food demand remains constant.", color: "from-emerald-400 to-teal-500", icon: PiggyBank },
+                    { emoji: "🌍", title: "Global Impact", desc: "Support sustainable farming practices while earning returns that contribute to global food security.", color: "from-teal-400 to-cyan-500", icon: Heart },
+                    { emoji: "⚡", title: "Innovation", desc: "Be part of the blockchain revolution in agriculture, combining traditional farming with cutting-edge technology.", color: "from-green-400 to-emerald-500", icon: Zap }
+                  ].map((item, index) => (
+                    <div key={index} className="text-center group cursor-pointer">
+                      <div className="text-8xl mb-6 group-hover:animate-bounce">{item.emoji}</div>
+                      <div className="w-16 h-16 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
+                        <item.icon className="w-8 h-8 text-white" />
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Trust Indicators */}
-              <div className="bg-gradient-to-r from-muted/40 via-muted/20 to-muted/40 rounded-2xl p-8 border border-border/50 shadow-lg">
-                <h4 className="text-xl font-bold text-foreground mb-6 text-center">
-                  Trusted by Investors
-                </h4>
-                <div className="grid grid-cols-3 gap-6 text-center">
-                  <div className="space-y-2">
-                    <div className="text-3xl font-bold text-agricultural-green">8.2%</div>
-                    <div className="text-sm text-muted-foreground font-medium">Avg APY</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-3xl font-bold text-trust-blue">$2.4M</div>
-                    <div className="text-sm text-muted-foreground font-medium">Total Value</div>
-                  </div>
-                  <div className="space-y-2">
-                    <div className="text-3xl font-bold text-golden-accent">165%</div>
-                    <div className="text-sm text-muted-foreground font-medium">Collateral Ratio</div>
-                  </div>
+                      <h3 className="text-3xl font-bold text-emerald-800 mb-6 group-hover:scale-105 transition-transform">{item.title}</h3>
+                      <p className="text-emerald-700 group-hover:text-emerald-800 transition-colors text-lg leading-relaxed">
+                        {item.desc}
+                  </p>
+                </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Footer */}
-      <div className="relative z-10 border-t bg-card/80 backdrop-blur-sm">
-        <div className="w-full px-8 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-xl bg-gradient-to-r from-agricultural-green to-golden-accent shadow-lg"></div>
-              <span className="text-xl font-bold text-foreground">Hedarvest</span>
+      {/* Ultra Fancy Agricultural Investment Stats Section */}
+      <section className="relative py-20">
+        <div className="w-full px-8">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-5xl font-black text-emerald-800 mb-6">
+                Ready to Start{" "}
+                <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                  Investing?
+                </span>
+              </h2>
+              <p className="text-2xl text-emerald-700">
+                Use the Connect HashPack button to connect your wallet and access the investor dashboard
+              </p>
+              
+              {/* Ultra Fancy Agricultural Status Messages */}
+              {error && (
+                <div className="mt-8 max-w-2xl mx-auto">
+                  <div className="relative bg-red-50 backdrop-blur-xl rounded-3xl p-8 border border-red-200">
+                    <div className="flex items-center gap-3 text-red-600 mb-4">
+                      <AlertCircle className="h-6 w-6 animate-pulse" />
+                      <span className="font-bold text-xl">Connection Error</span>
+                  </div>
+                    <p className="text-red-700 mb-6">{error}</p>
+                    <div className="flex justify-center gap-4">
+                      <Button
+                        onClick={handleRetryConnection}
+                        variant="outline"
+                        size="lg"
+                        className="bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30 group"
+                      >
+                        <RefreshCw className="h-5 w-5 mr-2 group-hover:rotate-180 transition-transform" />
+                        Try Again
+                      </Button>
+                        <Button
+                      onClick={() => window.location.reload()}
+                      variant="ghost"
+                        size="lg"
+                        className="text-red-600 hover:bg-red-100 group"
+                    >
+                        <span className="group-hover:animate-bounce">🔄</span>
+                      Refresh Page
+                        </Button>
+                    </div>
+                      </div>
+                    </div>
+              )}
+
+              {isConnected && accountId && (
+                <div className="mt-8 max-w-2xl mx-auto">
+                  <div className="relative bg-green-50 backdrop-blur-xl rounded-3xl p-8 border border-green-200">
+                    <div className="flex items-center gap-3 text-green-600 mb-4">
+                      <CheckCircle className="h-6 w-6 animate-bounce" />
+                      <span className="font-bold text-xl">Wallet Connected Successfully!</span>
+                    </div>
+                    <p className="text-green-700 mb-2 bg-white/80 p-3 rounded-xl font-mono">
+                      Account: {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Unknown'}
+                    </p>
+                    <p className="text-green-600 animate-pulse">
+                      Redirecting to dashboard...
+                    </p>
+                  </div>
+                </div>
+              )}
+              
+              {isLoading && (
+                <div className="mt-8 max-w-2xl mx-auto">
+                  <div className="relative bg-amber-50 backdrop-blur-xl rounded-3xl p-8 border border-amber-200">
+                    <div className="flex items-center gap-3 text-amber-600 mb-4">
+                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                      <span className="font-bold text-xl">Connecting to HashPack...</span>
+                    </div>
+                    <p className="text-amber-700 mb-4">
+                      Please approve the connection in your HashPack wallet. You should be automatically redirected back to this page.
+                    </p>
+                    <div className="flex justify-center">
+                    <Button
+                        onClick={() => window.location.reload()}
+                      variant="ghost"
+                        size="lg"
+                        className="text-amber-600 hover:bg-amber-100 group"
+                    >
+                        <RefreshCw className="h-5 w-5 mr-2 group-hover:rotate-180 transition-transform" />
+                        Refresh Page
+                    </Button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-8 text-sm text-muted-foreground">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-agricultural-green"></div>
-                <span>Powered by Hedera Network</span>
+
+            {/* Ultra Fancy Agricultural Investment Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              {[
+                { value: "8-12%", label: "Expected APY", desc: "Sustainable returns from agricultural operations", color: "from-emerald-400 to-teal-500", emoji: "💰" },
+                { value: "100%", label: "Asset Backed", desc: "Fully collateralized by physical crops", color: "from-teal-400 to-cyan-500", emoji: "💎" },
+                { value: "24/7", label: "Transparency", desc: "Blockchain-verified supply chain tracking", color: "from-green-400 to-emerald-500", emoji: "👑" }
+              ].map((stat, index) => (
+                <div key={index} className="group relative">
+                  <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl rounded-3xl" style={{background: `linear-gradient(135deg, ${stat.color.split(' ')[1]}, ${stat.color.split(' ')[3]})`}}></div>
+                  <div className="relative bg-gradient-to-br from-emerald-50/90 to-teal-50/90 backdrop-blur-xl rounded-3xl p-8 border border-emerald-200/50 hover:border-emerald-400/70 transition-all duration-500 hover:scale-105 text-center shadow-lg hover:shadow-emerald-200/50">
+                    <div className="text-6xl mb-4 group-hover:animate-bounce">{stat.emoji}</div>
+                    <div className={`text-6xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent mb-4 group-hover:scale-110 transition-transform`}>
+                      {stat.value}
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-trust-blue"></div>
-                <span>Blockchain Verified</span>
+                    <div className="text-2xl font-bold text-emerald-800 mb-2 group-hover:text-emerald-600 transition-colors">{stat.label}</div>
+                    <div className="text-emerald-700 group-hover:text-emerald-800 transition-colors">{stat.desc}</div>
+                    <div className="mt-6 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-golden-accent"></div>
-                <span>Real-World Assets</span>
               </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      </section>
+
+      {/* Ultra Fancy Agricultural HashPack Redirect Fallback */}
+      {showRedirectFallback && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="relative max-w-md mx-4">
+            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-3xl blur-xl"></div>
+            <Card className="relative bg-white/95 backdrop-blur-xl border border-emerald-200/50 rounded-3xl shadow-2xl">
+              <CardHeader className="text-center">
+                <CardTitle className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                  Wallet Connected
+                </CardTitle>
+            </CardHeader>
+              <CardContent className="space-y-8 text-center">
+                <div className="flex items-center justify-center gap-3 text-emerald-600">
+                  <CheckCircle className="h-8 w-8 animate-bounce" />
+                  <span className="font-bold text-xl">HashPack wallet connected successfully!</span>
+              </div>
+                <div className="text-emerald-700 bg-emerald-100 p-4 rounded-xl font-mono">
+                Account: {confirmedAccountId}
+              </div>
+              <Button
+                onClick={() => router.push('/dashboard/investor')}
+                  className="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-bold py-4 px-8 rounded-2xl shadow-2xl hover:shadow-emerald-500/25 transition-all duration-300 hover:scale-105 group"
+              >
+                  <Wheat className="w-5 h-5 mr-2 group-hover:animate-bounce" />
+                Continue to Dashboard
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+              </Button>
+            </CardContent>
+          </Card>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -15,118 +15,119 @@ export class BlockchainPoolsService {
   async getAllPools() {
     try {
       this.logger.log('Fetching all pools from blockchain...');
-      const pools = await this.contractService.getAllPoolsFromFactory();
+      const pools = await this.contractService.getAllPools();
       
       this.logger.log(`Retrieved ${pools.length} pools from blockchain`);
       
       if (pools.length === 0) {
         this.logger.warn('No pools found from blockchain - this might indicate:');
-        this.logger.warn('1. POOL_FACTORY_ADDRESS not set correctly');
+        this.logger.warn('1. LENDING_FACTORY_ADDRESS not set correctly');
         this.logger.warn('2. Smart contracts not deployed');
         this.logger.warn('3. RPC connection issues');
         this.logger.warn('4. Contract method getAllPools() not implemented');
       }
       
-      return pools.map(pool => ({
-        grainType: pool.grainType,
-        poolAddress: pool.poolAddress,
-        oracleAddress: pool.oracleAddress,
-        lendingTokenAddress: pool.lendingTokenAddress,
-        baseLtv: pool.baseLtv,
-        riskPremium: pool.riskPremium,
-        debtCeiling: pool.debtCeiling.toString(), // Convert BigInt to string
-        protocolFee: pool.protocolFee,
-        availableLiquidity: pool.availableLiquidity,
-        totalBorrows: pool.totalBorrows,
-        totalReserves: pool.totalReserves,
-        utilizationRate: pool.utilizationRate,
-        // Add calculated fields
-        apr: this.calculateAPR(pool.riskPremium, pool.utilizationRate),
-        isActive: true, // All blockchain pools are active
-        createdAt: new Date(), // Not available from blockchain
-        updatedAt: new Date(),
-      }));
+      // Get detailed info for each pool
+      const detailedPools: any[] = [];
+      for (const poolInfo of pools) {
+        try {
+          const poolDetails = await this.contractService.getPoolInfo(poolInfo.poolAddress);
+          detailedPools.push({
+            assetType: poolDetails.assetType,
+            poolAddress: poolInfo.poolAddress,
+            oracleAddress: poolInfo.oracleAddress,
+            lendingTokenAddress: poolDetails.lendingToken,
+            baseLtv: poolDetails.baseLTV,
+            protocolFee: poolDetails.protocolFee,
+            availableLiquidity: poolDetails.availableLiquidity,
+            totalBorrows: poolDetails.totalBorrows,
+            totalReserves: poolDetails.totalReserves,
+            utilizationRate: poolDetails.utilizationRate,
+            currentAPR: poolDetails.currentAPR,
+            exchangeRate: poolDetails.exchangeRate,
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          });
+        } catch (error) {
+          this.logger.warn(`Failed to get details for pool ${poolInfo.poolAddress}:`, error);
+        }
+      }
+      
+      return detailedPools;
     } catch (error) {
       this.logger.error('Failed to fetch pools from blockchain:', error);
       throw new Error('Failed to fetch pools from blockchain');
     }
   }
 
-  // Get pool by grain type from blockchain
-  async getPoolByGrainType(grainType: string) {
+  // Get pool by asset type from blockchain
+  async getPoolByAssetType(assetType: string) {
     try {
-      this.logger.log(`Fetching pool for grain type: ${grainType} from blockchain`);
-      const poolStats = await this.contractService.getPoolStatsByGrainType(grainType);
+      this.logger.log(`Fetching pool for asset type: ${assetType} from blockchain`);
+      const poolStats = await this.contractService.getPoolStatsByAssetType(assetType);
       
       return {
-        grainType: poolStats.grainType,
+        assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
         oracleAddress: poolStats.oracleAddress,
         lendingTokenAddress: poolStats.lendingTokenAddress,
         baseLtv: poolStats.baseLtv,
-        riskPremium: poolStats.riskPremium,
-        debtCeiling: poolStats.debtCeiling.toString(), // Convert BigInt to string
         protocolFee: poolStats.protocolFee,
         availableLiquidity: poolStats.availableLiquidity,
         totalBorrows: poolStats.totalBorrows,
         totalReserves: poolStats.totalReserves,
         utilizationRate: poolStats.utilizationRate,
+        currentAPR: poolStats.currentAPR,
         exchangeRate: poolStats.exchangeRate,
-        apr: this.calculateAPR(poolStats.riskPremium, poolStats.utilizationRate),
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Failed to fetch pool for grain type ${grainType}:`, error);
-      throw new NotFoundException(`Pool not found for grain type: ${grainType}`);
+      this.logger.error(`Failed to fetch pool for asset type ${assetType}:`, error);
+      throw new NotFoundException(`Pool not found for asset type: ${assetType}`);
     }
   }
 
-  // Get pool stats by grain type
-  async getPoolStats(grainType: string) {
+  // Get pool stats by asset type
+  async getPoolStats(assetType: string) {
     try {
-      this.logger.log(`Fetching pool stats for grain type: ${grainType} from blockchain`);
-      const poolStats = await this.contractService.getPoolStatsByGrainType(grainType);
+      this.logger.log(`Fetching pool stats for asset type: ${assetType} from blockchain`);
+      const poolStats = await this.contractService.getPoolStatsByAssetType(assetType);
       
       return {
-        grainType: poolStats.grainType,
+        assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
         oracleAddress: poolStats.oracleAddress,
         lendingTokenAddress: poolStats.lendingTokenAddress,
         baseLtv: poolStats.baseLtv,
-        riskPremium: poolStats.riskPremium,
-        debtCeiling: poolStats.debtCeiling.toString(), // Convert BigInt to string
         protocolFee: poolStats.protocolFee,
         availableLiquidity: poolStats.availableLiquidity,
         totalBorrows: poolStats.totalBorrows,
         totalReserves: poolStats.totalReserves,
         utilizationRate: poolStats.utilizationRate,
+        currentAPR: poolStats.currentAPR,
         exchangeRate: poolStats.exchangeRate,
-        apr: this.calculateAPR(poolStats.riskPremium, poolStats.utilizationRate),
         isActive: true,
         // Additional calculated fields
         totalAssets: (parseFloat(poolStats.availableLiquidity) + parseFloat(poolStats.totalBorrows)).toString(),
-        calculatedUtilization: this.calculateUtilizationRate(
-          poolStats.availableLiquidity,
-          poolStats.totalBorrows
-        ),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Failed to get pool stats for ${grainType}:`, error);
-      throw new NotFoundException(`Pool stats not found for grain type: ${grainType}`);
+      this.logger.error(`Failed to get pool stats for ${assetType}:`, error);
+      throw new NotFoundException(`Pool stats not found for asset type: ${assetType}`);
     }
   }
 
-  // Get pool address by grain type
-  async getPoolAddress(grainType: string): Promise<string> {
+  // Get pool address by asset type
+  async getPoolAddress(assetType: string): Promise<string> {
     try {
-      return await this.contractService.getPoolByGrainType(grainType);
+      return await this.contractService.getPoolByAssetType(assetType);
     } catch (error) {
-      this.logger.error(`Failed to get pool address for ${grainType}:`, error);
-      throw new NotFoundException(`Pool address not found for grain type: ${grainType}`);
+      this.logger.error(`Failed to get pool address for ${assetType}:`, error);
+      throw new NotFoundException(`Pool address not found for asset type: ${assetType}`);
     }
   }
 
@@ -135,29 +136,22 @@ export class BlockchainPoolsService {
     try {
       this.logger.log(`Fetching pool info for address: ${poolAddress} from blockchain`);
       const poolInfo = await this.contractService.getPoolInfo(poolAddress);
-      const poolBalance = await this.contractService.getPoolBalance(poolAddress);
-      
-      const utilizationRate = this.calculateUtilizationRate(
-        poolBalance.availableLiquidity,
-        poolBalance.totalBorrows
-      );
       
       return {
-        grainType: poolInfo.grainType,
+        assetType: poolInfo.assetType,
         poolAddress,
         oracleAddress: poolInfo.oracle,
         lendingTokenAddress: poolInfo.lendingToken,
         collateralTokenAddress: poolInfo.collateralToken,
+        lpTokenAddress: poolInfo.lpToken,
         baseLtv: poolInfo.baseLTV,
-        riskPremium: poolInfo.riskPremium,
-        debtCeiling: poolInfo.debtCeiling.toString(), // Convert BigInt to string
         protocolFee: poolInfo.protocolFee,
-        availableLiquidity: poolBalance.availableLiquidity,
-        totalBorrows: poolBalance.totalBorrows,
+        availableLiquidity: poolInfo.availableLiquidity,
+        totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,
-        utilizationRate,
+        utilizationRate: poolInfo.utilizationRate,
+        currentAPR: poolInfo.currentAPR,
         exchangeRate: poolInfo.exchangeRate,
-        apr: this.calculateAPR(poolInfo.riskPremium, utilizationRate),
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -177,24 +171,6 @@ export class BlockchainPoolsService {
       this.logger.warn(`Failed to publish HCS event ${eventType}:`, error);
     }
   }
-
-  // Calculate APR based on risk premium and utilization
-  private calculateAPR(riskPremium: number, utilizationRate: number): number {
-    // Base APR calculation: risk premium + utilization factor
-    const baseAPR = riskPremium;
-    const utilizationFactor = (utilizationRate / 100) * 2; // 2% max additional for high utilization
-    return Math.round((baseAPR + utilizationFactor) * 100) / 100;
-  }
-
-  // Calculate utilization rate
-  private calculateUtilizationRate(availableLiquidity: string, totalBorrows: string): number {
-    const liquidity = parseFloat(availableLiquidity);
-    const borrows = parseFloat(totalBorrows);
-    const totalSupply = liquidity + borrows;
-    
-    return totalSupply > 0 ? Math.round((borrows / totalSupply) * 100) : 0;
-  }
-
 
   // Health check method
   async healthCheck(): Promise<{ status: string; poolsCount: number; lastUpdated: Date }> {

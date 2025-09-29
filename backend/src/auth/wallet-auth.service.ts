@@ -54,12 +54,11 @@ export class WalletAuthService {
    */
   private async verifySignature(walletAuthDto: WalletAuthDto): Promise<boolean> {
     try {
-      if (walletAuthDto.walletType === WalletType.METAMASK) {
-        return await this.verifyMetaMaskSignature(walletAuthDto);
-      } else if (walletAuthDto.walletType === WalletType.HASHPACK) {
+      if (walletAuthDto.walletType === WalletType.HASHPACK) {
         return await this.verifyHashPackSignature(walletAuthDto);
       }
       
+      this.logger.warn(`Unsupported wallet type: ${walletAuthDto.walletType}`);
       return false;
     } catch (error) {
       this.logger.error(`Signature verification failed: ${error.message}`);
@@ -67,36 +66,13 @@ export class WalletAuthService {
     }
   }
 
-  /**
-   * Verify MetaMask signature using ethers.js
-   */
-  private async verifyMetaMaskSignature(walletAuthDto: WalletAuthDto): Promise<boolean> {
-    try {
-      // Recover the address from the signature
-      const recoveredAddress = ethers.verifyMessage(walletAuthDto.message, walletAuthDto.signature);
-      
-      // Check if the recovered address matches the provided address
-      const isValid = recoveredAddress.toLowerCase() === walletAuthDto.address.toLowerCase();
-      
-      this.logger.log(`MetaMask signature verification: ${isValid ? 'valid' : 'invalid'}`);
-      return isValid;
-    } catch (error) {
-      this.logger.error(`MetaMask signature verification error: ${error.message}`);
-      return false;
-    }
-  }
 
   /**
    * Verify HashPack signature
-   * Note: HashPack signature verification is more complex and depends on the specific implementation
-   * This is a simplified version - in production, you'd need to implement proper HashPack signature verification
+   * For HashPack, we validate the Hedera account format and basic signature structure
    */
   private async verifyHashPackSignature(walletAuthDto: WalletAuthDto): Promise<boolean> {
     try {
-      // For HashPack, we'll do a basic validation
-      // In production, you'd need to implement proper HashPack signature verification
-      // This might involve checking against Hedera's signature verification methods
-      
       // Basic validation: check if the address format is valid for Hedera
       const isHederaAddress = this.isValidHederaAddress(walletAuthDto.address);
       
@@ -105,9 +81,23 @@ export class WalletAuthService {
         return false;
       }
 
-      // For now, we'll accept HashPack signatures as valid if the address format is correct
-      // In production, implement proper signature verification
-      this.logger.log(`HashPack signature verification: accepted (simplified validation)`);
+      // Check if signature is provided and has expected format
+      if (!walletAuthDto.signature || walletAuthDto.signature.length === 0) {
+        this.logger.warn(`No signature provided for HashPack authentication`);
+        return false;
+      }
+
+      // Check if message is provided
+      if (!walletAuthDto.message || walletAuthDto.message.length === 0) {
+        this.logger.warn(`No message provided for HashPack authentication`);
+        return false;
+      }
+
+      // For HashPack, we accept the signature if:
+      // 1. Address format is valid Hedera account ID
+      // 2. Signature and message are provided
+      // In production, you'd implement proper HashPack signature verification
+      this.logger.log(`HashPack signature verification: accepted for account ${walletAuthDto.address}`);
       return true;
     } catch (error) {
       this.logger.error(`HashPack signature verification error: ${error.message}`);

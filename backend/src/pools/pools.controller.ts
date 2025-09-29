@@ -10,14 +10,14 @@ export class PoolsController {
     return this.blockchainPoolsService.getAllPools();
   }
 
-  @Get(':grainType')
-  async getPoolByGrainType(@Param('grainType') grainType: string) {
-    return this.blockchainPoolsService.getPoolByGrainType(grainType);
+  @Get(':assetType')
+  async getPoolByAssetType(@Param('assetType') assetType: string) {
+    return this.blockchainPoolsService.getPoolByAssetType(assetType);
   }
 
-  @Get(':grainType/stats')
-  async getPoolStats(@Param('grainType') grainType: string) {
-    return this.blockchainPoolsService.getPoolStats(grainType);
+  @Get(':assetType/stats')
+  async getPoolStats(@Param('assetType') assetType: string) {
+    return this.blockchainPoolsService.getPoolStats(assetType);
   }
 
   @Get('health/check')
@@ -34,13 +34,13 @@ export class PoolsController {
         success: true,
         poolsCount: pools.length,
         pools: pools,
-        factoryAddress: process.env.POOL_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
       };
     } catch (error) {
       return {
         success: false,
         error: error.message,
-        factoryAddress: process.env.POOL_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
       };
     }
   }

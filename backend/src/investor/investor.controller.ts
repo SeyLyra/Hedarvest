@@ -21,9 +21,9 @@ export class InvestorController {
     return this.investorService.getAvailablePools();
   }
 
-  @Get('pools/:grainType/stats')
-  async getPoolStats(@Param('grainType') grainType: string) {
-    return this.investorService.getPoolStatsByGrainType(grainType);
+  @Get('pools/:assetType/stats')
+  async getPoolStats(@Param('assetType') assetType: string) {
+    return this.investorService.getPoolStatsByAssetType(assetType);
   }
 
   @Get('portfolio/:address')
@@ -40,13 +40,13 @@ export class InvestorController {
         success: true,
         poolsCount: pools.length,
         pools: pools,
-        factoryAddress: process.env.POOL_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
       };
     } catch (error) {
       return {
         success: false,
         error: error.message,
-        factoryAddress: process.env.POOL_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
       };
     }
   }

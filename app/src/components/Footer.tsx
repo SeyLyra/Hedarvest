@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import Image from "next/image";
 
 const Footer = () => {
   const footerSections = [
@@ -50,7 +51,13 @@ const Footer = () => {
             {/* Brand Section */}
             <div className="lg:col-span-2">
               <div className="flex items-center space-x-2 mb-6">
-                <div className="h-8 w-8 rounded bg-gradient-to-r from-agricultural-green to-golden-accent"></div>
+                <Image 
+                  src="/logo.png" 
+                  alt="Hedarvest Logo" 
+                  width={32} 
+                  height={32} 
+                  className="h-8 w-8"
+                />
                 <span className="text-2xl font-bold text-foreground">Hedarvest</span>
               </div>
               <p className="text-muted-foreground mb-6 leading-relaxed">

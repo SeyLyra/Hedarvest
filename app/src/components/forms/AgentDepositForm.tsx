@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { CheckCircle, Loader2 } from "lucide-react"
+import { CheckCircle, Loader2, ArrowRight } from "lucide-react"
 
 export default function AgentDepositForm() {
   const [txId, setTxId] = useState<string | null>(null)
@@ -41,20 +41,20 @@ export default function AgentDepositForm() {
 
   if (isSuccess && txId) {
     return (
-      <Card className="w-full max-w-2xl mx-auto">
+      <Card className="w-full max-w-2xl mx-auto glass card-hover">
         <CardHeader className="text-center">
-          <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-            <CheckCircle className="w-8 h-8 text-green-600" />
+          <div className="mx-auto w-20 h-20 bg-gradient-to-r from-agricultural-green to-trust-blue rounded-full flex items-center justify-center mb-4 animate-bounce">
+            <CheckCircle className="w-10 h-10 text-white" />
           </div>
-          <CardTitle className="text-2xl text-green-600">Deposit Successful!</CardTitle>
-          <CardDescription>
+          <CardTitle className="text-3xl gradient-text">Deposit Successful!</CardTitle>
+          <CardDescription className="text-lg">
             Your crop deposit has been processed successfully.
           </CardDescription>
         </CardHeader>
-        <CardContent className="text-center space-y-4">
-          <div className="bg-gray-50 p-4 rounded-lg">
-            <p className="text-sm text-gray-600">Transaction ID:</p>
-            <p className="font-mono text-lg font-semibold">{txId}</p>
+        <CardContent className="text-center space-y-6">
+          <div className="glass p-6 rounded-xl border border-agricultural-green/20">
+            <p className="text-sm text-muted-foreground mb-2">Transaction ID:</p>
+            <p className="font-mono text-lg font-semibold bg-gradient-to-r from-agricultural-green to-trust-blue bg-clip-text text-transparent break-all">{txId}</p>
           </div>
           <Button 
             onClick={() => {
@@ -62,7 +62,10 @@ export default function AgentDepositForm() {
               setTxId(null)
             }}
             variant="outline"
+            size="lg"
+            className="group"
           >
+            <span className="group-hover:animate-bounce">🔄</span>
             Make Another Deposit
           </Button>
         </CardContent>
@@ -71,25 +74,26 @@ export default function AgentDepositForm() {
   }
 
   return (
-    <Card className="w-full max-w-2xl mx-auto">
+    <Card className="w-full max-w-2xl mx-auto glass card-hover">
       <CardHeader>
-        <CardTitle>Agent Crop Deposit</CardTitle>
-        <CardDescription>
+        <CardTitle className="text-2xl gradient-text">Agent Crop Deposit</CardTitle>
+        <CardDescription className="text-lg">
           Submit crop deposit information for farmer verification and instant cash advance.
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="cropType">Crop Type</Label>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-2 group">
+              <Label htmlFor="cropType" className="text-sm font-medium group-hover:text-agricultural-green transition-colors">Crop Type</Label>
               <Input
                 id="cropType"
                 {...register("cropType")}
                 placeholder="e.g., Wheat, Corn, Soybeans"
+                className="transition-all duration-300 focus:ring-2 focus:ring-agricultural-green/20 focus:border-agricultural-green"
               />
               {errors.cropType && (
-                <p className="text-sm text-red-600">{errors.cropType.message}</p>
+                <p className="text-sm text-red-600 animate-fade-in">{errors.cropType.message}</p>
               )}
             </div>
 
@@ -206,17 +210,22 @@ export default function AgentDepositForm() {
 
           <Button
             type="submit"
-            className="w-full"
+            className="w-full group"
             variant="agent"
+            size="lg"
             disabled={agentDepositMutation.isPending}
           >
             {agentDepositMutation.isPending ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" />
+                <Loader2 className="w-5 h-5 animate-spin" />
                 Processing Deposit...
               </>
             ) : (
-              "Submit Deposit"
+              <>
+                <span className="group-hover:animate-bounce">📦</span>
+                Submit Deposit
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </>
             )}
           </Button>
         </form>

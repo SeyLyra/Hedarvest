@@ -1,7 +1,6 @@
 import { IsString, IsEnum, IsNotEmpty } from 'class-validator';
 
 export enum WalletType {
-  METAMASK = 'metamask',
   HASHPACK = 'hashpack'
 }
 

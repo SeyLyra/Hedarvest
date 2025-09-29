@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { backersDepositSchema } from "@/lib/validations"
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3002'
 
 export async function POST(request: NextRequest) {
   try {

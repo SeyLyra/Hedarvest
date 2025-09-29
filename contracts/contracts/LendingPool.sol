@@ -114,11 +114,40 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         protocolFee = _protocolFee;
         priceOracle = MockPriceOracle(_oracle);
         
+        // Associate this contract with HTS tokens for proper integration
+        _associateHTS();
+        
         transferOwnership(_owner);
         lastAccrualBlock = block.number;
     }
 
     // === Internal Helpers ===
+    function _associateHTS() private {
+        // Associate this contract with HTS tokens for proper integration
+        // This allows the contract to receive and send HTS tokens
+        // Only attempt association if we're on Hedera network (not in tests)
+        if (block.chainid == 296 || block.chainid == 295) { // Hedera testnet or mainnet
+            try HTS.associateToken(address(this), lendingToken) {
+                // Success
+            } catch {
+                // Association may already exist or fail - continue
+            }
+            
+            try HTS.associateToken(address(this), collateralToken) {
+                // Success
+            } catch {
+                // Association may already exist or fail - continue
+            }
+            
+            try HTS.associateToken(address(this), lpToken) {
+                // Success
+            } catch {
+                // Association may already exist or fail - continue
+            }
+        }
+        // For test environments, we'll handle association in the test setup
+    }
+
     function _min(uint256 a, uint256 b) private pure returns (uint256) {
         return a < b ? a : b;
     }
@@ -406,18 +435,22 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         
         // A. Handle Principal Repayment
         borrows[msg.sender] = _safeSub(principalAtLastIndex, principalRepaid);
-        totalBorrows = _safeSub(totalBorrows, principalRepaid); // Only subtract principal
+        totalBorrows = _safeSub(totalBorrows, repayAmount); // Fix: subtract total repayAmount (principal + interest)
         
         // B. Handle Interest Repayment (split interest into reserves and liquid assets)
         uint256 reservesSplit = _safeMulDiv(interestRepaid, reserveFactor, 10000);
         uint256 liquiditySplit = _safeSub(interestRepaid, reservesSplit);
         
-        // Funds repaid become liquid
+        // Funds repaid become liquid - both principal and interest liquidity split
         totalReserves += reservesSplit;
-        totalAssets += liquiditySplit; 
+        totalAssets += principalRepaid + liquiditySplit; // Fix: include principal repayment in totalAssets
 
-        // Update the borrower's index only if the loan is not fully repaid
-        borrowerBorrowIndex[msg.sender] = borrows[msg.sender] == 0 ? 0 : borrowIndex;
+        // Fix: Always update borrower index if there are remaining borrows
+        if (borrows[msg.sender] > 0) {
+            borrowerBorrowIndex[msg.sender] = borrowIndex;
+        } else {
+            borrowerBorrowIndex[msg.sender] = 0;
+        }
 
         emit LoanRepaid(msg.sender, principalRepaid, interestRepaid);
     }
@@ -431,7 +464,9 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
     }
 
     function availableLiquidity() public view returns (uint256) {
-        return totalAssets > totalBorrows ? totalAssets - totalBorrows : 0;
+        // Fix: totalAssets represents liquid cash + depositor profits
+        // For HTS integration, we could also use: IERC20(lendingToken).balanceOf(address(this))
+        return totalAssets;
     }
 
     function exchangeRate() public view returns (uint256) {
@@ -472,6 +507,13 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         if (currentDebt == 0) return type(uint256).max; // Infinite health for zero debt
         // Health Factor = maxBorrow * PRECISION / currentDebt (Liquidation threshold is 1)
         return _safeMulDiv(maxBorrow, PRECISION, currentDebt);
+    }
+
+    /**
+     * @dev Returns the LP shares for a specific investor (alias for lpShares mapping).
+     */
+    function getInvestorShares(address investor) external view validAddress(investor) returns (uint256) {
+        return lpShares[investor];
     }
 
     // === Admin Functions (Omitted for brevity, but exist in original) ===

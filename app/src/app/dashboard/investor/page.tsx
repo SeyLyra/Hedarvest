@@ -7,9 +7,9 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { TrendingUp, DollarSign, Activity, BarChart3, LogOut, Loader2 } from "lucide-react";
-// Logo import removed - using public path instead
+import Image from "next/image";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
-import { useWallet } from "@/hooks/useWallet";
+import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { useRouter } from "next/navigation";
 import { Loader } from "@/components/shared/Loader";
 import { LoadingButton } from "@/components/shared/LoadingButton";
@@ -19,7 +19,9 @@ import { OverviewSection } from "@/components/dashboard/OverviewSection";
 import { PoolsSection } from "@/components/dashboard/PoolsSection";
 import { PortfolioSection } from "@/components/dashboard/PortfolioSection";
 import { ActivitySection } from "@/components/dashboard/ActivitySection";
-import { useWalletBalance } from "@/hooks/useWalletBalance";
+// import { FaucetSection } from "@/components/dashboard/FaucetSection";
+// import { useWalletBalance } from "@/hooks/useWalletBalance";
+import { getHederaAccountId } from "@/lib/hedera-utils";
 
 interface PoolData {
   id: number;
@@ -35,7 +37,7 @@ interface PoolData {
 }
 
 // API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
 
 export default function InvestorDashboard() {
   const [pools, setPools] = useState<PoolData[]>([]);
@@ -51,16 +53,29 @@ export default function InvestorDashboard() {
   const [activityLoading, setActivityLoading] = useState(false);
   
   // Wallet integration
-  const { address, isConnected, disconnect } = useWallet();
-  const { hbarBalanceFormatted, usdtBalanceFormatted, loading: balanceLoading } = useWalletBalance(address);
+  const { address, isConnected, disconnect } = useWalletConnect();
+  // const { hbarBalance, isLoading: balanceLoading, refreshBalance } = useWalletBalance();
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [hederaAccountId, setHederaAccountId] = useState<string>("");
   const router = useRouter();
 
   // Update user address when wallet connects
   useEffect(() => {
     if (address) {
       setUserAddress(address);
+      // Load Hedera account ID
+      console.log(`Dashboard: Resolving Hedera account ID for address: ${address}`);
+      getHederaAccountId(address).then((hederaId) => {
+        console.log(`Dashboard: Received Hedera account ID: ${hederaId}`);
+        setHederaAccountId(hederaId);
+      }).catch((error) => {
+        console.error(`Dashboard: Failed to resolve Hedera account ID:`, error);
+        setHederaAccountId('Error: ' + error.message);
+      });
+    } else {
+      console.log('Dashboard: No address, clearing Hedera account ID');
+      setHederaAccountId("");
     }
   }, [address]);
 
@@ -398,6 +413,8 @@ export default function InvestorDashboard() {
             hasMore={false} // Implement pagination
           />
         );
+      case 'faucet':
+        return <div className="p-6">Faucet section temporarily unavailable</div>;
       default:
         return null;
     }
@@ -411,9 +428,11 @@ export default function InvestorDashboard() {
           <div className="w-full px-8 py-6">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <img 
+                <Image 
                   src="/logo.png" 
                   alt="Hedarvest Logo" 
+                  width={48}
+                  height={48}
                   className="w-12 h-12"
                 />
                 <div>
@@ -422,39 +441,60 @@ export default function InvestorDashboard() {
                 </div>
               </div>
               <div className="flex items-center gap-4">
-                {isConnected && address && (
-                  <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Wallet Balance</div>
-                    <div className="font-medium">
-                      {address.slice(0, 6)}...{address.slice(-4)}
-                    </div>
-                  </div>
-                )}
-                {isAuthenticated && (
-                  <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
-                    Connected
-                  </Badge>
-                )}
                 
                 {/* Wallet Balance */}
        {isConnected && address && (
-         <div className="flex items-center gap-4 text-sm">
-           <div className="text-right">
-             <div className="text-xs text-muted-foreground mb-1">
-               Wallet: {address.slice(0, 6)}...{address.slice(-4)}
+         <div className="flex items-center gap-4">
+           {/* Compact Wallet Info */}
+           <div className="flex items-center gap-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg px-3 py-2">
+             <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+             <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
+               {address.slice(0, 6)}...{address.slice(-4)}
              </div>
-             {balanceLoading ? (
+           </div>
+
+           {/* Compact Hedera Account */}
+           <div className="flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg px-3 py-2">
+             <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">Hedera:</div>
+             <div className="text-sm font-mono text-gray-700 dark:text-gray-300">
+               {hederaAccountId || 'Loading...'}
+             </div>
+             <button 
+               onClick={() => {
+                 console.log('Manual refresh of Hedera account ID');
+                 if (address) {
+                   getHederaAccountId(address).then((hederaId) => {
+                     console.log(`Manual refresh result: ${hederaId}`);
+                     setHederaAccountId(hederaId);
+                   }).catch((error) => {
+                     console.error('Manual refresh failed:', error);
+                     setHederaAccountId('Error: ' + error.message);
+                   });
+                 }
+               }}
+               className="p-1 hover:bg-emerald-100 dark:hover:bg-emerald-800/30 rounded transition-colors"
+               title="Refresh Hedera Account ID"
+             >
+               <svg className="w-3 h-3 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+               </svg>
+             </button>
+           </div>
+
+           {/* Compact Balance */}
+           <div className="flex items-center gap-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg px-3 py-2">
+              {false ? (
                <div className="flex items-center gap-2">
-                 <Loader2 className="w-4 h-4 animate-spin" />
-                 <span className="text-muted-foreground">Loading...</span>
+                 <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                 <span className="text-sm text-gray-500">Loading...</span>
                </div>
              ) : (
                <>
-                 <div className="font-medium text-sm">
-                   {parseFloat(hbarBalanceFormatted).toFixed(4)} HBAR
+                 <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                   0.0000 <span className="text-xs text-blue-600 dark:text-blue-400">HBAR</span>
                  </div>
-                 <div className="font-medium text-sm">
-                   {parseFloat(usdtBalanceFormatted).toFixed(2)} USDT
+                 <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                   0.00 <span className="text-xs text-blue-600 dark:text-blue-400">USDT</span>
                  </div>
                </>
              )}

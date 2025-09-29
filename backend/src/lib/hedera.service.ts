@@ -278,18 +278,20 @@ export class HederaService {
   }
 
   async getPoolInfo(grainType: string): Promise<{
-    grainType: string;
+    assetType: string;
     lendingToken: string;
     collateralToken: string;
+    lpToken: string;
     oracle: string;
     baseLTV: number;
-    riskPremium: number;
-    debtCeiling: string;
     protocolFee: number;
+    totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
     availableLiquidity: string;
     exchangeRate: string;
+    utilizationRate: string;
+    currentAPR: string;
   }> {
     try {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
@@ -439,7 +441,7 @@ export class HederaService {
   }> {
     try {
        const poolAddress = await this.contractService.getPoolAddress(grainType);
-      const contractTxHash = await this.contractService.createLoan(poolAddress, farmerAddress, amount);
+      const contractTxHash = await this.contractService.createLoan(poolAddress, amount);
       
       // Publish HCS event
       try {

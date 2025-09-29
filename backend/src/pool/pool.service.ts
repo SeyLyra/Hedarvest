@@ -32,6 +32,9 @@ export class PoolService {
       data: {
         poolAddress: tokenResult.tokenId, // Use token ID as address
         grainType,
+        lendingToken: 'placeholder-lending-token',
+        collateralToken: 'placeholder-collateral-token',
+        lpToken: 'placeholder-lp-token',
         oracleAddress: 'placeholder-oracle',
         lendingTokenAddress: 'placeholder-lending',
         apr: apr || 0,

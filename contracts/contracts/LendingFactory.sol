@@ -49,7 +49,10 @@ contract LendingFactory is Ownable {
      * @dev Creates and deploys a new LendingPool and a dedicated MockPriceOracle for the asset.
      * The caller (msg.sender) now takes ownership of both the new Pool and the new Oracle.
      * **NOTE:** The onlyOwner modifier has been removed to allow public creation.
-     * * @param assetType The unique identifier for the collateral asset (e.g., "Rice").
+     * @param assetType The unique identifier for the collateral asset (e.g., "Rice").
+     * @param lendingToken The address of the lending token (HTS token ID).
+     * @param collateralToken The address of the collateral token (HTS token ID).
+     * @param lpToken The address of the LP token (HTS token ID).
      * @param baseLTV The Loan-to-Value ratio (e.g., 7500 for 75%).
      * @param protocolFee The fee taken by the protocol from interest (e.g., 1000 for 10%).
      * @param initialPrice The starting price for the asset in USD (fixed point, e.g., 1e18).
@@ -57,12 +60,21 @@ contract LendingFactory is Ownable {
      */
     function createPool(
         string calldata assetType,
+        address lendingToken,
+        address collateralToken,
+        address lpToken,
         uint256 baseLTV,
         uint256 protocolFee,
         uint256 initialPrice
     ) external returns (address, address) {
         require(bytes(assetType).length > 0, "Asset type cannot be empty");
         require(lendingPools[assetType].poolAddress == address(0), "Pool already exists");
+        require(lendingToken != address(0), "Invalid lending token address");
+        require(collateralToken != address(0), "Invalid collateral token address");
+        require(lpToken != address(0), "Invalid LP token address");
+        require(lendingToken != collateralToken, "Lending and collateral tokens must be different");
+        require(lendingToken != lpToken, "Lending and LP tokens must be different");
+        require(collateralToken != lpToken, "Collateral and LP tokens must be different");
         require(baseLTV > 0 && baseLTV <= 10000, "Invalid LTV (0-10000)");
         require(protocolFee <= 10000, "Invalid protocol fee (0-10000)");
         require(initialPrice > 0, "Invalid price");
@@ -73,24 +85,19 @@ contract LendingFactory is Ownable {
         // Transfer ownership of the Oracle to the caller (msg.sender)
         oracle.transferOwnership(msg.sender);
 
-        // 2. Define Token Addresses for the new pool (Mocks for testing environment)
-        address lendingTokenAddr = address(0x1);
-        address collateralTokenAddr = address(0x2);
-        address lpTokenAddr = address(0x3);
-
-        // 3. Deploy the Lending Pool
+        // 2. Deploy the Lending Pool with provided token addresses
         LendingPool newPool = new LendingPool(
             assetType,
-            lendingTokenAddr,
-            collateralTokenAddr,
-            lpTokenAddr,
+            lendingToken,
+            collateralToken,
+            lpToken,
             baseLTV,
             protocolFee,
             address(oracle),
             msg.sender // Sets the caller/owner as the Pool's owner
         );
         
-        // 4. Register the new pool
+        // 3. Register the new pool
         lendingPools[assetType] = PoolInfo({
             poolAddress: address(newPool),
             oracleAddress: address(oracle),

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useWallet } from '@/hooks/useWallet';
+import { useWalletConnect } from '@/hooks/useWalletConnect';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Wallet, ArrowLeft, Loader2 } from 'lucide-react';
@@ -18,7 +18,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
   fallback 
 }) => {
   const router = useRouter();
-  const { isConnected, isConnecting } = useWallet();
+  const { isConnected, isConnecting } = useWalletConnect();
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
