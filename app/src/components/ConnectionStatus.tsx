@@ -1,9 +1,9 @@
 'use client';
 
-import { useSimpleWalletConnect } from '@/hooks/useSimpleWalletConnect';
+import { useHashPackDirect } from '@/hooks/useHashPackDirect';
 
 export default function ConnectionStatus() {
-  const { isConnected, isConnecting, error } = useSimpleWalletConnect();
+  const { isConnected, isLoading: isConnecting, error } = useHashPackDirect();
 
   if (!isConnected && !isConnecting && !error) {
     return null;

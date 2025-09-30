@@ -58,10 +58,12 @@ const CallToActionSection = () => {
             <div className="text-6xl mb-6 group-hover:animate-bounce">🚜</div>
             <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-agricultural-green transition-colors">Start Farming</h3>
             <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Get instant liquidity for your harvest with same-day cash advances</p>
-            <Button variant="farmer" size="lg" className="w-full group">
-              <span className="group-hover:animate-bounce">🚜</span>
-              Find an Agent Near You
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <Button variant="farmer" size="lg" className="w-full group" asChild>
+              <a href="/farmer-solution">
+                <span className="group-hover:animate-bounce">🚜</span>
+                Find an Agent Near You
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
             </Button>
           </div>
           
@@ -79,10 +81,12 @@ const CallToActionSection = () => {
             <div className="text-6xl mb-6 group-hover:animate-bounce">🤝</div>
             <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-golden-accent transition-colors">Become an Agent</h3>
             <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Earn fees for connecting farmers to liquidity</p>
-            <Button variant="accent" size="lg" className="w-full group">
-              <span className="group-hover:animate-bounce">🤝</span>
-              Join Agent Network
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <Button variant="accent" size="lg" className="w-full group" asChild>
+              <a href="/agent">
+                <span className="group-hover:animate-bounce">🤝</span>
+                Join Agent Network
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
             </Button>
           </div>
           

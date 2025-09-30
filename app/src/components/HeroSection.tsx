@@ -47,10 +47,12 @@ const HeroSection = () => {
           </p>
           
           <div className="flex flex-col sm:flex-row gap-4 mb-8 animate-fade-in" style={{animationDelay: '0.7s'}}>
-            <Button variant="farmer" size="xl" className="text-lg px-8 py-4 group">
-              <span className="group-hover:animate-bounce">🚜</span>
-              Farmer Solutions
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            <Button variant="farmer" size="xl" className="text-lg px-8 py-4 group" asChild>
+              <a href="/farmer-solution">
+                <span className="group-hover:animate-bounce">🚜</span>
+                Farmer Solutions
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
             </Button>
             <Button variant="agent" size="xl" className="text-lg px-8 py-4 group" asChild>
               <a href="/investor-login">

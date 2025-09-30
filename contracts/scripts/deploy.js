@@ -98,11 +98,11 @@ async function main() {
   
   console.log("✅ LP token deployed:", lpTokenId, `(${lpTokenEvm})`);
 
-  // 3. Deploy your LendingFactory
-  const Factory = await ethers.getContractFactory("LendingFactory");
+  // 3. Deploy your LendingPoolFactory
+  const Factory = await ethers.getContractFactory("LendingPoolFactory");
   const factory = await Factory.deploy();
   const factoryAddress = factory.target;
-  console.log("✅ LendingFactory deployed at:", factoryAddress);
+  console.log("✅ LendingPoolFactory deployed at:", factoryAddress);
   
   // Create a new contract instance to avoid resolveName issues
   const factoryContract = new ethers.Contract(factoryAddress, Factory.interface, deployer);

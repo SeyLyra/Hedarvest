@@ -63,7 +63,9 @@ export default function InvestorLoginPage() {
     isLoading,
     connect,
     disconnect,
-    checkConnection
+    checkConnection,
+    hbarBalance,
+    fetchBalance
   } = useHashPackDirect();
 
   // Ensure we're on the client side
@@ -92,13 +94,10 @@ export default function InvestorLoginPage() {
 
   // Test function to verify click handlers work
   const testClick = () => {
-    console.log('🧪 Test button clicked!');
     alert('Test button is working!');
   };
 
   const checkHashPackManually = () => {
-    console.log('🔍 Manual HashPack Check:');
-    
     if (typeof window === 'undefined') {
       alert('Window not available');
       return;
@@ -111,8 +110,6 @@ export default function InvestorLoginPage() {
       'window.ethereum (MetaMask)': !!(window as any).ethereum,
       'window.web3': !!(window as any).web3,
     };
-
-    console.log('HashPack Detection Results:', checks);
     
     // Look for any property that might be HashPack
     const allProps = Object.keys(window);
@@ -131,30 +128,18 @@ export default function InvestorLoginPage() {
       'window.HederaWalletConnect': (window as any).HederaWalletConnect,
     };
     
-    console.log('All HashPack-related properties:', hashpackChecks);
-    console.log('Properties containing "hedera", "hash", or "pack":', hashpackProps);
-    
     // Check if HashPack is in extensions
     const extensions = (window as any).chrome?.runtime?.getManifest ? 'Chrome extensions available' : 'No Chrome extensions API';
-    console.log('Extensions API:', extensions);
     
     alert(`HashPack Detection Results:\n${Object.entries(checks).map(([key, value]) => `${key}: ${value ? '✅' : '❌'}`).join('\n')}\n\nFound properties: ${hashpackProps.join(', ') || 'None'}\n\nHashPack specific: ${Object.entries(hashpackChecks).filter(([k,v]) => v).map(([k,v]) => k).join(', ') || 'None'}`);
   };
 
   const testDirectConnection = async () => {
-    console.log('🧪 Testing direct connection...');
-    
     if (typeof window === 'undefined') {
       alert('Window not available');
       return;
     }
 
-    // Check multiple possible HashPack detection methods
-    console.log('🔍 Checking for HashPack...');
-    console.log('window.hedera:', window.hedera);
-    console.log('window.hashpack:', (window as any).hashpack);
-    console.log('window.ethereum:', (window as any).ethereum);
-    
     // Try to detect HashPack specifically (not MetaMask)
     const hashpackDetected = window.hedera || (window as any).hashpack;
     
@@ -164,31 +149,28 @@ export default function InvestorLoginPage() {
     }
 
     try {
-      console.log('🔗 Testing direct connection to HashPack...');
       const provider = window.hedera || (window as any).hashpack;
       const accounts = await provider.request({ method: 'eth_requestAccounts' });
-      console.log('📋 Direct connection result:', accounts);
       alert(`Direct connection successful! Accounts: ${JSON.stringify(accounts)}`);
     } catch (err: any) {
-      console.error('❌ Direct connection failed:', err);
       alert(`Direct connection failed: ${err.message}`);
     }
   };
 
   const debugLog = () => {
-    console.log('🔍 HashConnect Debug Info:');
-    console.log('- hashconnect:', hashconnect);
-    console.log('- connectionStatus:', connectionStatus);
-    console.log('- isConnected:', isConnected);
-    console.log('- accountId:', accountId);
-    console.log('- error:', error);
-    console.log('- isLoading:', isLoading);
-    console.log('- isClient:', isClient);
-    console.log('- window.hedera:', typeof window !== 'undefined' ? window.hedera : 'undefined');
-    console.log('- window.hashpack:', typeof window !== 'undefined' ? (window as any).hashpack : 'undefined');
+    const debugInfo = {
+      hashconnect: !!hashconnect,
+      connectionStatus,
+      isConnected,
+      accountId,
+      error,
+      isLoading,
+      isClient,
+      windowHedera: typeof window !== 'undefined' ? !!window.hedera : false,
+      windowHashpack: typeof window !== 'undefined' ? !!(window as any).hashpack : false
+    };
     
-    // Test if click handlers are working
-    alert('Debug log clicked! Check console for details.');
+    alert(`Debug Info:\n${Object.entries(debugInfo).map(([key, value]) => `${key}: ${value}`).join('\n')}`);
   };
 
   // Check for existing connection on page load
@@ -320,9 +302,25 @@ export default function InvestorLoginPage() {
               ) : (
                 <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-2xl px-6 py-3 border border-emerald-500/30">
                   <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse shadow-lg shadow-emerald-400/50"></div>
-                  <span className="text-emerald-700 text-sm font-medium">
-                    {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Connected'}
-                  </span>
+                  <div className="flex flex-col">
+                    <span className="text-emerald-700 text-sm font-medium">
+                      {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Connected'}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {hbarBalance && (
+                        <span className="text-emerald-600 text-xs">
+                          {hbarBalance} HBAR
+                        </span>
+                      )}
+                      <button
+                        onClick={fetchBalance}
+                        className="text-xs text-emerald-600 hover:text-emerald-700 underline"
+                        title="Refresh Balance"
+                      >
+                        Refresh
+                      </button>
+                    </div>
+                  </div>
                   <button 
                     onClick={disconnect}
                     className="text-xs text-red-600 underline hover:text-red-700 transition-colors ml-2"
@@ -512,6 +510,11 @@ export default function InvestorLoginPage() {
                     <p className="text-green-700 mb-2 bg-white/80 p-3 rounded-xl font-mono">
                       Account: {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Unknown'}
                     </p>
+                    {hbarBalance && (
+                      <p className="text-green-600 mb-2 bg-white/80 p-3 rounded-xl font-mono">
+                        Balance: {hbarBalance} HBAR
+                      </p>
+                    )}
                     <p className="text-green-600 animate-pulse">
                       Redirecting to dashboard...
                     </p>

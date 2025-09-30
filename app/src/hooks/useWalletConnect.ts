@@ -14,10 +14,12 @@ interface HashPackWalletState {
   sendHederaTransaction: (to: string, amount: string) => Promise<string | null>;
   signMessage: (message: string) => Promise<string | null>;
   isHashPackAvailable: boolean;
+  hbarBalance: string | null;
+  fetchBalance: () => Promise<void>;
 }
 
 export const useWalletConnect = (): HashPackWalletState => {
-  const { connect: connectHashPack, isConnected, accountId, isLoading, error } = useHashPackDirect();
+  const { connect: connectHashPack, disconnect: disconnectHashPack, isConnected, accountId, isLoading, error, hbarBalance, fetchBalance } = useHashPackDirect();
   const [isConnecting, setIsConnecting] = useState(false);
 
   const connect = useCallback(async () => {
@@ -31,11 +33,16 @@ export const useWalletConnect = (): HashPackWalletState => {
     }
   }, [connectHashPack]);
 
-  const disconnect = useCallback(() => {
-    // Simple disconnect - clear storage
-    localStorage.removeItem('hashpack_account');
-    window.location.reload();
-  }, []);
+  const disconnect = useCallback(async () => {
+    try {
+      // Use the proper disconnect method from HashPack
+      await disconnectHashPack();
+    } catch (err) {
+      console.error('Disconnect failed:', err);
+      // Fallback: clear storage if disconnect fails
+      localStorage.removeItem('hashpack_account');
+    }
+  }, [disconnectHashPack]);
 
   const sendHederaTransaction = useCallback(async (to: string, amount: string): Promise<string | null> => {
     console.log('Transaction not implemented in simple version:', { to, amount });
@@ -62,6 +69,8 @@ export const useWalletConnect = (): HashPackWalletState => {
     disconnect,
     sendHederaTransaction,
     signMessage,
-    isHashPackAvailable: isHashPackAvailable()
+    isHashPackAvailable: isHashPackAvailable(),
+    hbarBalance,
+    fetchBalance
   };
 };

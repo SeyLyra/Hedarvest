@@ -3,36 +3,34 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { TrendingUp, DollarSign, Activity, BarChart3, ArrowRight, Loader2 } from "lucide-react";
+import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets } from "lucide-react";
+import Image from "next/image";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
-
-interface PoolData {
-  id: number;
-  grainType: string;
-  address: string;
-  price: number;
-  availableLiquidity: string;
-  totalBorrows: string;
-  utilizationRate: number;
-  apr: number;
-}
+import PoolsPage from "@/components/PoolsPage";
+import PortfolioPage from "@/components/PortfolioPage";
+import FaucetPage from "@/components/FaucetPage";
 
 // API base URL
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000';
+const API_BASE_URL = typeof window !== 'undefined' 
+  ? (window as any).location?.origin || 'http://localhost:3000'
+  : 'http://localhost:3000';
 
 export default function InvestorDashboard() {
-  const [pools, setPools] = useState<PoolData[]>([]);
-  const [amounts, setAmounts] = useState<{ [key: string]: string }>({});
+  const [activeTab, setActiveTab] = useState('pools');
+  const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [poolsLoading, setPoolsLoading] = useState(true);
   
   // Wallet integration
-  const { address, isConnected } = useWalletConnect();
+  const { address, isConnected, hbarBalance, fetchBalance, disconnect, connect, isConnecting } = useWalletConnect();
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  // Ensure we're on the client side
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Update user address when wallet connects
   useEffect(() => {
@@ -47,13 +45,6 @@ export default function InvestorDashboard() {
       handleWalletAuthentication();
     }
   }, [isConnected, address, isAuthenticated]);
-
-  // Fetch pools on component mount only if authenticated
-  useEffect(() => {
-    if (isAuthenticated) {
-      fetchPools();
-    }
-  }, [isAuthenticated]);
 
   const handleWalletAuthentication = async () => {
     try {
@@ -74,44 +65,19 @@ export default function InvestorDashboard() {
     }
   };
 
-  const fetchPools = async () => {
-    setPoolsLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/investor/pools`);
-      if (response.ok) {
-        const poolsData = await response.json();
-        setPools(poolsData);
-      } else {
-        console.error('Failed to fetch pools');
-        toast.error('Failed to load pools');
-      }
-    } catch (error) {
-      console.error('Error fetching pools:', error);
-      toast.error('Error loading pools');
-    } finally {
-      setPoolsLoading(false);
-    }
-  };
-
-  const handleAmountChange = (grainType: string, value: string) => {
-    setAmounts(prev => ({
-      ...prev,
-      [grainType]: value
-    }));
-  };
-
-  const handleDeposit = async (grainType: string) => {
-    const amount = amounts[grainType];
-    if (!amount || parseFloat(amount) <= 0) {
-      toast.error("Please enter a valid amount");
+  const handleDeposit = async (grainType: string, amount: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please authenticate your wallet first');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/investor/deposit`, {
+      const response = await fetch(`${API_BASE_URL}/api/investor/deposit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ 
           grainType, 
           amount: parseFloat(amount),
@@ -121,34 +87,33 @@ export default function InvestorDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Successfully deposited ${amount} USDT to ${grainType} pool`);
-        toast.info(`Transaction Hash: ${result.transactions?.contractTxHash || 'Processing...'}`);
-        setAmounts(prev => ({ ...prev, [grainType]: "" }));
-        // Refresh pools to get updated liquidity
-        fetchPools();
+        toast.success(`Successfully deposited ${amount} tokens to ${grainType} pool`);
+        console.log('Deposit result:', result);
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Deposit failed');
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Deposit failed');
       }
     } catch (error) {
-      toast.error(`Failed to deposit to ${grainType} pool: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Deposit error:', error);
+      toast.error('Error processing deposit');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleWithdraw = async (grainType: string) => {
-    const amount = amounts[grainType];
-    if (!amount || parseFloat(amount) <= 0) {
-      toast.error("Please enter a valid amount");
+  const handleWithdraw = async (grainType: string, amount: string) => {
+    if (!isAuthenticated) {
+      toast.error('Please authenticate your wallet first');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/investor/withdraw`, {
+      const response = await fetch(`${API_BASE_URL}/api/investor/withdraw`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: JSON.stringify({ 
           grainType, 
           shares: parseFloat(amount),
@@ -159,354 +124,201 @@ export default function InvestorDashboard() {
       if (response.ok) {
         const result = await response.json();
         toast.success(`Successfully withdrew ${amount} shares from ${grainType} pool`);
-        toast.info(`Transaction Hash: ${result.transactions?.contractTxHash || 'Processing...'}`);
-        setAmounts(prev => ({ ...prev, [grainType]: "" }));
-        // Refresh pools to get updated liquidity
-        fetchPools();
+        console.log('Withdraw result:', result);
       } else {
-        const error = await response.json();
-        throw new Error(error.message || 'Withdrawal failed');
+        const errorData = await response.json();
+        toast.error(errorData.error || 'Withdrawal failed');
       }
     } catch (error) {
-      toast.error(`Failed to withdraw from ${grainType} pool: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      console.error('Withdraw error:', error);
+      toast.error('Error processing withdrawal');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const formatCurrency = (value: string) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(parseFloat(value));
+  const handleDisconnect = () => {
+    disconnect();
+    setIsAuthenticated(false);
+    setUserAddress("");
+    toast.success('Wallet disconnected');
   };
 
-  const formatNumber = (value: string) => {
-    return new Intl.NumberFormat('en-US').format(parseFloat(value));
-  };
-
+  // Show loading state during hydration
+  if (!isClient) {
   return (
-    <div className="min-h-screen animated-bg">
-      {/* Header */}
-      <div className="glass border-b border-border/50">
-        <div className="w-full px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-4xl font-bold gradient-text">Investor Dashboard</h1>
-              <p className="text-muted-foreground mt-2 text-lg">Manage your grain pool investments</p>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="flex gap-2">
-                <Badge variant="secondary" className="bg-agricultural-green/10 text-agricultural-green border-agricultural-green/20 animate-pulse">
-                  Live API Integration
-                </Badge>
-                <Badge variant="outline" className="bg-trust-blue/10 text-trust-blue border-trust-blue/20">
-                  USDT Staking
-                </Badge>
-                {isAuthenticated && (
-                  <Badge variant="default" className="bg-agricultural-green/10 text-agricultural-green border-agricultural-green/20 animate-pulse">
-                    <div className="w-2 h-2 bg-agricultural-green rounded-full mr-2 animate-pulse"></div>
-                    Wallet Connected
-                  </Badge>
-                )}
-              </div>
-              <Button onClick={() => window.location.href = '/investor-login'} variant="gradient" size="lg" className="group">
-                <span className="group-hover:animate-bounce">🔗</span>
-                Connect HashPack
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div>
-          </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
+          <p className="text-emerald-700">Loading...</p>
         </div>
       </div>
+    );
+  }
 
-      {/* Main Content */}
-      <div className="w-full px-8 py-8">
-        {/* Wallet Connection Status */}
-        {isConnected ? (
-          <div className="mb-8 glass rounded-2xl p-6 card-hover">
-            <div className="flex items-center justify-between">
+  // Show wallet connection required if not connected
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen animated-bg flex items-center justify-center">
+        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-emerald-200">
+          <CardContent className="p-8 text-center">
+            <Wallet className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-emerald-800 mb-2">Wallet Required</h2>
+            <p className="text-emerald-600 mb-6">
+              Please connect your HashPack wallet to access the investor dashboard.
+            </p>
+            <Button 
+              onClick={connect}
+              disabled={isConnecting}
+              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+            >
+              {isConnecting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Connecting...
+                </>
+              ) : (
+                'Connect Wallet'
+              )}
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen relative overflow-hidden">
+      {/* Ultra Fancy White-Dominant Background with Modern Green */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50 to-teal-50">
+        <div className="absolute inset-0 opacity-30" style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23F0FDF4' fill-opacity='0.3'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
+        }}></div>
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 animate-pulse-slow"></div>
+      </div>
+
+      {/* Floating Modern Green Shapes */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-r from-emerald-200/30 to-teal-300/30 rounded-full blur-xl animate-float"></div>
+        <div className="absolute top-40 right-20 w-32 h-32 bg-gradient-to-r from-teal-200/30 to-cyan-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '2s'}}></div>
+        <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-gradient-to-r from-green-200/30 to-emerald-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-60 right-1/3 w-16 h-16 bg-gradient-to-r from-mint-200/30 to-teal-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '1s'}}></div>
+      </div>
+
+      {/* Top Navigation */}
+      <div className="relative z-50 bg-gradient-to-r from-white/95 via-white/90 to-white/85 backdrop-blur-3xl border-b border-white/30 shadow-2xl">
+        <div className="px-8 py-4">
+          {/* Header with Logo and Wallet */}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-4 group cursor-pointer">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
+                  <Image
+                    src="/logo.png"
+                    alt="Hedarvest Logo"
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 group-hover:scale-110 transition-transform duration-300"
+                  />
+                </div>
+              </div>
               <div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">Connected Wallet</h3>
-                <p className="text-muted-foreground">
-                  {isAuthenticated ? 'Wallet authenticated and ready for transactions' : 'Authenticating wallet...'}
-                </p>
-                <p className="text-sm font-mono text-muted-foreground mt-2 bg-muted/50 p-2 rounded-lg">
-                  {userAddress}
-                </p>
-              </div>
-              <div className="flex items-center gap-2">
-                {isAuthenticated ? (
-                  <Badge variant="default" className="bg-agricultural-green/10 text-agricultural-green border-agricultural-green/20 animate-pulse">
-                    <div className="w-2 h-2 bg-agricultural-green rounded-full mr-2 animate-pulse"></div>
-                    ✓ Authenticated
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="bg-golden-accent/10 text-golden-accent border-golden-accent/20 animate-pulse">
-                    <div className="w-2 h-2 bg-golden-accent rounded-full mr-2 animate-pulse"></div>
-                    Authenticating...
-                  </Badge>
-                )}
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
+                  Hedarvest
+                </span>
+                <div className="text-xs text-emerald-600 font-medium">Agricultural DeFi Platform</div>
               </div>
             </div>
-          </div>
-        ) : (
-          <div className="mb-8 glass rounded-2xl p-6 card-hover">
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">Connect Your Wallet</h3>
-                <p className="text-muted-foreground">Connect your HashPack wallet to start investing</p>
-              </div>
-              <Button onClick={() => window.location.href = '/investor-login'} variant="gradient" size="lg" className="group">
-                <span className="group-hover:animate-bounce">🔗</span>
-                Connect HashPack
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Main Content - Only show if wallet is authenticated */}
-        {!isAuthenticated ? (
-          <div className="text-center py-12">
-            <div className="max-w-md mx-auto">
-              <h2 className="text-2xl font-bold text-foreground mb-4">Wallet Required</h2>
-              <p className="text-muted-foreground mb-6">
-                Please connect and authenticate your HashPack wallet to access the investor dashboard.
-              </p>
-              <Button onClick={() => window.location.href = '/investor-login'}>
-                Connect HashPack
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <>
-            {/* Overview Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <Card className="card-hover group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground group-hover:text-agricultural-green transition-colors">Total TVL</p>
-                  <p className="text-3xl font-bold group-hover:scale-105 transition-transform">
-                    {formatCurrency(pools.reduce((sum, pool) => sum + parseFloat(pool.availableLiquidity || "0") + parseFloat(pool.totalBorrows || "0"), 0).toString())}
-                  </p>
-                </div>
-                <DollarSign className="h-10 w-10 text-agricultural-green group-hover:scale-110 transition-transform" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="card-hover group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground group-hover:text-trust-blue transition-colors">Average APY</p>
-                  <p className="text-3xl font-bold group-hover:scale-105 transition-transform">
-                    {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.apr, 0) / pools.length).toFixed(1) : '0'}%
-                  </p>
-                </div>
-                <TrendingUp className="h-10 w-10 text-trust-blue group-hover:scale-110 transition-transform" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="card-hover group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground group-hover:text-golden-accent transition-colors">Active Pools</p>
-                  <p className="text-3xl font-bold group-hover:scale-105 transition-transform">{pools.length}</p>
-                </div>
-                <Activity className="h-10 w-10 text-golden-accent group-hover:scale-110 transition-transform" />
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card className="card-hover group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground group-hover:text-foreground transition-colors">Avg Utilization</p>
-                  <p className="text-3xl font-bold group-hover:scale-105 transition-transform">
-                    {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.utilizationRate, 0) / pools.length).toFixed(0) : '0'}%
-                  </p>
-                </div>
-                <BarChart3 className="h-10 w-10 text-foreground group-hover:scale-110 transition-transform" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Available Grain Pools */}
-        <div className="mb-8">
-          <h2 className="text-3xl font-bold gradient-text mb-2">Available Grain Pools</h2>
-          <p className="text-muted-foreground text-lg">Invest in diversified agricultural assets with real-world backing</p>
-        </div>
-
-        {/* Pool Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {poolsLoading ? (
-            // Loading skeletons
-            Array.from({ length: 4 }).map((_, index) => (
-              <Card key={index} className="animate-pulse">
-                <CardHeader>
-                  <div className="h-6 bg-muted rounded w-3/4 mb-2"></div>
-                  <div className="h-4 bg-muted rounded w-1/2"></div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    {Array.from({ length: 4 }).map((_, i) => (
-                      <div key={i}>
-                        <div className="h-4 bg-muted rounded w-full mb-2"></div>
-                        <div className="h-6 bg-muted rounded w-2/3"></div>
+            
+            {/* Wallet Status */}
+            <div className="flex items-center gap-4">
+              <Card className="bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border-emerald-200/50 shadow-xl backdrop-blur-sm">
+                <CardContent className="p-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                      <Wallet className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="text-sm">
+                      <div className="font-bold text-emerald-800">
+                        {userAddress ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}` : 'Connected'}
                       </div>
-                    ))}
-                  </div>
-                  <div className="space-y-3 pt-4 border-t">
-                    <div className="h-10 bg-muted rounded"></div>
-                    <div className="flex gap-3">
-                      <div className="h-10 bg-muted rounded flex-1"></div>
-                      <div className="h-10 bg-muted rounded flex-1"></div>
+                      {hbarBalance && (
+                        <div className="text-xs text-emerald-600 font-mono">
+                          {hbarBalance} HBAR
+                        </div>
+                      )}
                     </div>
                   </div>
                 </CardContent>
               </Card>
-            ))
-          ) : pools.length === 0 ? (
-            // No pools message
-            <div className="col-span-full text-center py-12">
-              <p className="text-muted-foreground text-lg mb-4">No pools available</p>
-              <Button onClick={fetchPools} variant="outline">
-                Retry Loading
+              
+              <Button
+                onClick={handleDisconnect}
+                variant="outline"
+                size="sm"
+                className="text-red-600 border-red-200 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:border-red-300 transition-all duration-300 hover:scale-105 shadow-lg"
+              >
+                <LogOut className="w-4 h-4 mr-2" />
+                Disconnect
               </Button>
             </div>
-          ) : (
-            // Actual pools
-            pools.map((pool) => (
-            <Card key={pool.grainType} className="glass card-hover group">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-2xl font-bold gradient-text group-hover:scale-105 transition-transform">
-                    {pool.grainType} Pool
-                  </CardTitle>
-                  <Badge 
-                    variant="outline" 
-                    className={
-                      pool.utilizationRate > 50 
-                        ? "border-red-200 text-red-700 bg-red-50 animate-pulse" 
-                        : "border-agricultural-green/20 text-agricultural-green bg-agricultural-green/10"
-                    }
-                  >
-                    <div className="w-2 h-2 rounded-full bg-current mr-2 animate-pulse"></div>
-                    {pool.utilizationRate}% utilized
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground font-mono bg-muted/50 p-2 rounded-lg">
-                  {pool.address}
-                </p>
-              </CardHeader>
-              
-              <CardContent className="space-y-6">
-                {/* Pool Stats */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Current Price</p>
-                    <p className="text-lg font-bold text-foreground">
-                      {formatCurrency(pool.price.toString())}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Available Liquidity</p>
-                    <p className="text-lg font-bold text-agricultural-green">
-                      {formatCurrency(pool.availableLiquidity)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Total Borrows</p>
-                    <p className="text-lg font-bold text-foreground">
-                      {formatCurrency(pool.totalBorrows)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">Utilization Rate</p>
-                    <p className="text-lg font-bold text-foreground">
-                      {pool.utilizationRate}%
-                    </p>
-                  </div>
-                </div>
+          </div>
 
-                {/* Action Section */}
-                <div className="space-y-4 pt-4 border-t">
-                  <div>
-                    <label className="text-sm font-medium text-foreground mb-2 block">
-                      Amount (USDT)
-                    </label>
-                    <Input
-                      type="number"
-                      placeholder="Enter USDT amount"
-                      value={amounts[pool.grainType] || ""}
-                      onChange={(e) => handleAmountChange(pool.grainType, e.target.value)}
-                      className="mb-3"
-                      min="0"
-                      step="0.01"
-                    />
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Stake USDT to earn {pool.apr}% APR in {pool.grainType} pool
-                    </p>
+          {/* Compact Tab Navigation */}
+          <div className="flex space-x-2 bg-white/60 backdrop-blur-xl rounded-2xl p-2 shadow-inner border border-white/20">
+            {[
+              { id: 'pools', label: 'Pools', icon: Coins, description: 'Investment' },
+              { id: 'portfolio', label: 'Portfolio', icon: PieChart, description: 'Investments' },
+              { id: 'faucet', label: 'Faucet', icon: Droplets, description: 'Test Tokens' }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              
+              return (
+                <Button
+                  key={tab.id}
+                  variant={isActive ? "default" : "ghost"}
+                  className={`flex-1 h-10 rounded-xl transition-all duration-300 group relative overflow-hidden ${
+                    isActive 
+                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25 scale-105' 
+                      : 'text-emerald-700 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 hover:scale-105 hover:shadow-md'
+                  }`}
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  {isActive && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"></div>
+                  )}
+                  <div className="flex items-center gap-2 relative z-10">
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-emerald-600'}`} />
+                    <div className="flex flex-col items-start">
+                      <span className="font-semibold text-xs">{tab.label}</span>
+                      <span className="text-xs opacity-75">{tab.description}</span>
+                    </div>
                   </div>
-                  
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={() => handleDeposit(pool.grainType)}
-                      disabled={isLoading || !amounts[pool.grainType]}
-                      variant="farmer"
-                      size="lg"
-                      className="flex-1 group"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <span className="group-hover:animate-bounce">💰</span>
-                          Stake USDT
-                          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={() => handleWithdraw(pool.grainType)}
-                      disabled={isLoading || !amounts[pool.grainType]}
-                      variant="outline"
-                      size="lg"
-                      className="flex-1 group"
-                    >
-                      {isLoading ? (
-                        <>
-                          <Loader2 className="w-5 h-5 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <span className="group-hover:animate-bounce">💸</span>
-                          Withdraw
-                          <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            ))
-          )}
+                </Button>
+              );
+            })}
+          </div>
         </div>
-          </>
+      </div>
+
+      {/* Page Content */}
+      <div className="relative z-10 p-8">
+        {activeTab === 'pools' && (
+          <PoolsPage
+            onDeposit={handleDeposit}
+            onWithdraw={handleWithdraw}
+            isLoading={isLoading}
+          />
+        )}
+        
+        {activeTab === 'portfolio' && (
+          <PortfolioPage userAddress={userAddress} />
+        )}
+        
+        {activeTab === 'faucet' && (
+          <FaucetPage userAddress={userAddress} />
         )}
       </div>
     </div>

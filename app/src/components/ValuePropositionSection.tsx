@@ -101,10 +101,12 @@ const ValuePropositionSection = () => {
                   <span className="text-foreground group-hover:text-trust-blue transition-colors">Grow your agricultural business</span>
                 </div>
               </div>
-              <Button variant="agent" size="lg" className="group">
-                <span className="group-hover:animate-bounce">📈</span>
-                Become an Agent
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <Button variant="agent" size="lg" className="group" asChild>
+                <a href="/agent">
+                  <span className="group-hover:animate-bounce">📈</span>
+                  Become an Agent
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </a>
               </Button>
             </div>
           </div>

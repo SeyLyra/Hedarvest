@@ -48,8 +48,8 @@ const Header = () => {
             <Button variant="outline" size="sm" asChild>
               <a href="/agent">Agent Portal</a>
             </Button>
-            <Button variant="farmer" size="sm">
-              Find an Agent
+            <Button variant="farmer" size="sm" asChild>
+              <a href="/farmer-solution">Find an Agent</a>
             </Button>
           </div>
 
@@ -93,8 +93,8 @@ const Header = () => {
               <Button variant="outline" size="sm" className="w-full" asChild>
                 <a href="/agent" onClick={() => setIsMobileMenuOpen(false)}>Agent Portal</a>
               </Button>
-              <Button variant="farmer" size="sm" className="w-full">
-                Find an Agent
+              <Button variant="farmer" size="sm" className="w-full" asChild>
+                <a href="/farmer-solution">Find an Agent</a>
               </Button>
             </nav>
           </div>

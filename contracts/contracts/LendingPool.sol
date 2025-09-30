@@ -4,8 +4,6 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
-// NOTE: Ensure these dependencies (MockPriceOracle, IHederaTokenService, HederaResponseCode) 
-// are available in your compilation environment.
 import "./MockPriceOracle.sol";
 import "./IHederaTokenService.sol";
 import "./HederaResponseCode.sol";
@@ -13,10 +11,9 @@ import "./HederaResponseCode.sol";
 /**
  * @title LendingPool
  * @dev A DeFi lending and borrowing pool for Hedera EVM, using HTS for token transfers.
- * Implements variable interest rate model and liquidation logic.
+ * Supports multiple independent positions per borrower, with position-specific collateral and borrows.
  */
 contract LendingPool is ReentrancyGuard, Ownable, Pausable {
-    // Hedera Token Service system contract address
     IHederaTokenService private constant HTS = IHederaTokenService(address(0x167));
     
     // === Constants ===
@@ -31,51 +28,59 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
     
     // === Pool Configuration & State Variables ===
     string public assetType; // e.g., "Rice", "Corn"
-    address public immutable lendingToken; // The token supplied by investors and borrowed by farmers
-    address public immutable collateralToken; // The token used as collateral
-    address public immutable lpToken; // The LP share token (HTS Token ID)
+    address public immutable lendingToken; // Token supplied by investors and borrowed
+    address public immutable collateralToken; // Token used as collateral
+    address public immutable lpToken; // LP share token (HTS Token ID)
     MockPriceOracle public priceOracle;
 
     // Interest Rate Model Parameters
-    uint256 public baseLTV;
-    uint256 public reserveFactor = 1000;    // 10% of accrued interest goes to reserves
-    uint256 public liquidationBonus = 500;  // 5% bonus for liquidators
-
+    uint256 public baseLTV; // Loan-to-value ratio (e.g., 8000 = 80%)
+    uint256 public reserveFactor = 1000; // 10% of accrued interest goes to reserves
+    uint256 public liquidationBonus = 500; // 5% bonus for liquidators
     uint256 public optimalUtilizationRate = 8000; // 80%
     uint256 public baseRate = 100; // 1%
     uint256 public rateSlope1 = 500; // 5%
     uint256 public rateSlope2 = 3000; // 30%
 
     // Financial Metrics
-    uint256 public totalAssets;    // Total value of the pool (liquid cash + totalBorrows - totalReserves)
-    uint256 public totalBorrows;   // Total principal and interest owed by borrowers
-    uint256 public totalReserves;  // Protocol-owned assets (built from reserve factor split of interest)
-    uint256 public protocolFee;    // Configured protocol fee rate
+    uint256 public totalAssets; // Liquid cash in the pool
+    uint256 public totalBorrows; // Total principal and interest owed by borrowers
+    uint256 public totalReserves; // Protocol-owned assets
+    uint256 public protocolFee; // Configured protocol fee rate (unused; consider removing)
 
-    // LP Supply (CRITICAL FIX: Manual tracking for HTS compatibility)
-    uint256 public lpTokenSupply; 
+    // LP Supply
+    uint256 public lpTokenSupply; // Total LP tokens minted
+    mapping(address => uint256) public lpShares; // Investor LP shares
 
     // Interest Tracking
-    uint256 public lastAccrualBlock;
-    uint256 public borrowIndex = PRECISION; // Used to track interest accrual over time
+    uint256 public lastAccrualBlock; // Block of last interest accrual
+    uint256 public borrowIndex = PRECISION; // Tracks interest accrual over time
 
-    // User Data
-    mapping(address => uint256) public borrows; // Principal balance at time of last update/borrow
-    mapping(address => uint256) public collateral;
-    mapping(address => uint256) public lpShares;
-    mapping(address => uint256) public borrowerBorrowIndex; // Borrower's borrowIndex at time of loan/repay
+    // Borrower Positions
+    struct Position {
+        uint256 collateral; // Collateral amount in this position
+        uint256 borrows; // Borrowed amount (principal + compounded interest) at positionBorrowIndex
+        uint256 positionBorrowIndex; // Borrow index at last update
+        bool active; // Indicates if the position is active
+    }
+    mapping(address => mapping(uint256 => Position)) public borrowerPositions; // borrower => positionId => Position
+    mapping(address => uint256) public borrowerPositionCount; // Tracks number of positions per borrower
+    mapping(address => uint256[]) public borrowerPositionIds; // List of active position IDs per borrower
 
     // === Events ===
+    event PositionCreated(address indexed borrower, uint256 positionId, uint256 timestamp);
+    event PositionClosed(address indexed borrower, uint256 positionId, uint256 timestamp);
     event Deposited(address indexed supporter, uint256 amount, uint256 shares, uint256 timestamp);
     event Withdrawn(address indexed supporter, uint256 amount, uint256 shares, uint256 timestamp);
-    event CollateralDeposited(address indexed borrower, uint256 tokens, uint256 usdValue);
-    event LoanCreated(address indexed borrower, uint256 amount, uint256 borrowIndex);
-    event LoanRepaid(address indexed borrower, uint256 principalRepaid, uint256 interestPaid);
-    event LoanLiquidated(address indexed borrower, uint256 debtRepaid, uint256 collateralSeized);
+    event CollateralDeposited(address indexed borrower, uint256 positionId, uint256 tokens, uint256 usdValue);
+    event CollateralWithdrawn(address indexed borrower, uint256 positionId, uint256 amount, uint256 timestamp);
+    event LoanCreated(address indexed borrower, uint256 positionId, uint256 amount, uint256 borrowIndex);
+    event LoanRepaid(address indexed borrower, uint256 positionId, uint256 principalRepaid, uint256 interestPaid);
+    event LoanLiquidated(address indexed borrower, uint256 positionId, uint256 debtRepaid, uint256 collateralSeized);
     event InterestAccrued(uint256 interestAmount, uint256 newTotalBorrows, uint256 borrowAPR, uint256 timestamp);
     event ParametersUpdated(string parameter, uint256 oldValue, uint256 newValue);
 
-    // === Modifiers and Constructor ===
+    // === Modifiers ===
     modifier validAmount(uint256 amount) {
         require(amount > 0, "Amount must be greater than zero");
         _;
@@ -83,6 +88,11 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
 
     modifier validAddress(address addr) {
         require(addr != address(0), "Invalid address");
+        _;
+    }
+
+    modifier validPosition(address borrower, uint256 positionId) {
+        require(borrowerPositions[borrower][positionId].active, "Invalid or inactive position");
         _;
     }
 
@@ -114,38 +124,18 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         protocolFee = _protocolFee;
         priceOracle = MockPriceOracle(_oracle);
         
-        // Associate this contract with HTS tokens for proper integration
         _associateHTS();
-        
         transferOwnership(_owner);
         lastAccrualBlock = block.number;
     }
 
     // === Internal Helpers ===
     function _associateHTS() private {
-        // Associate this contract with HTS tokens for proper integration
-        // This allows the contract to receive and send HTS tokens
-        // Only attempt association if we're on Hedera network (not in tests)
         if (block.chainid == 296 || block.chainid == 295) { // Hedera testnet or mainnet
-            try HTS.associateToken(address(this), lendingToken) {
-                // Success
-            } catch {
-                // Association may already exist or fail - continue
-            }
-            
-            try HTS.associateToken(address(this), collateralToken) {
-                // Success
-            } catch {
-                // Association may already exist or fail - continue
-            }
-            
-            try HTS.associateToken(address(this), lpToken) {
-                // Success
-            } catch {
-                // Association may already exist or fail - continue
-            }
+            try HTS.associateToken(address(this), lendingToken) {} catch {}
+            try HTS.associateToken(address(this), collateralToken) {} catch {}
+            try HTS.associateToken(address(this), lpToken) {} catch {}
         }
-        // For test environments, we'll handle association in the test setup
     }
 
     function _min(uint256 a, uint256 b) private pure returns (uint256) {
@@ -166,22 +156,63 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         require(c > 0, "Division by zero");
         return (a * b) / c;
     }
-    
-    /**
-     * @dev Calculates the Borrow Annual Percentage Rate (APR) based on utilization.
-     */
+
+    function _removePositionId(address borrower, uint256 positionId) private {
+        uint256[] storage ids = borrowerPositionIds[borrower];
+        for (uint256 i = 0; i < ids.length; i++) {
+            if (ids[i] == positionId) {
+                ids[i] = ids[ids.length - 1];
+                ids.pop();
+                break;
+            }
+        }
+    }
+
+    // === Position Management ===
+    function createPosition() external whenNotPaused returns (uint256) {
+        address borrower = msg.sender;
+        uint256 positionId = borrowerPositionCount[borrower]++;
+        borrowerPositions[borrower][positionId] = Position({
+            collateral: 0,
+            borrows: 0,
+            positionBorrowIndex: borrowIndex,
+            active: true
+        });
+        borrowerPositionIds[borrower].push(positionId);
+        emit PositionCreated(borrower, positionId, block.timestamp);
+        return positionId;
+    }
+
+    function closePosition(uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validPosition(msg.sender, positionId) 
+    {
+        Position storage position = borrowerPositions[msg.sender][positionId];
+        require(position.borrows == 0, "Outstanding debt in position");
+        require(position.collateral == 0, "Collateral must be withdrawn");
+
+        position.active = false;
+        _removePositionId(msg.sender, positionId);
+        emit PositionClosed(msg.sender, positionId, block.timestamp);
+    }
+
+    function getPositionIds(address borrower) external view validAddress(borrower) returns (uint256[] memory) {
+        return borrowerPositionIds[borrower];
+    }
+
+    // === Interest Calculations ===
     function calculateBorrowAPR() internal view returns (uint256) {
-        // totalAssets is used here as a proxy for the total funds available/backed by the pool.
-        if (totalAssets + totalReserves == 0) return baseRate;
+        uint256 totalSupply = totalAssets + totalBorrows;
+        if (totalSupply == 0) return baseRate;
         
         uint256 utilization = utilizationRate();
         require(utilization <= 10000, "Utilization exceeds 100%");
         
         if (utilization <= optimalUtilizationRate) {
-            // Linear rate increase up to optimal utilization
             return baseRate + _safeMulDiv(utilization, rateSlope1, optimalUtilizationRate);
         } else {
-            // Steep rate increase above optimal utilization
             uint256 excessUtilization = utilization - optimalUtilizationRate;
             uint256 excessCapacity = 10000 - optimalUtilizationRate;
             require(excessCapacity > 0, "Invalid optimal utilization rate");
@@ -189,34 +220,29 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         }
     }
     
-    /**
-     * @dev Calculates the borrower's total debt (principal + accrued interest) as of the current block.
-     */
-    function getCurrentBorrowBalance(address borrower) public view validAddress(borrower) returns (uint256) {
-        uint256 principal = borrows[borrower];
+    function getCurrentBorrowBalance(address borrower, uint256 positionId) 
+        public 
+        view 
+        validAddress(borrower) 
+        validPosition(borrower, positionId) 
+        returns (uint256) 
+    {
+        Position storage position = borrowerPositions[borrower][positionId];
+        uint256 principal = position.borrows;
         if (principal == 0) return 0;
 
-        // If accrual has run on this block, use the global borrowIndex
+        uint256 borrowerIndex = position.positionBorrowIndex;
         if (lastAccrualBlock == block.number) {
-             return _safeMulDiv(principal, borrowIndex, borrowerBorrowIndex[borrower]);
+             return _safeMulDiv(principal, borrowIndex, borrowerIndex);
         }
         
-        // Calculate accrued interest since last global accrual for a view function
         uint256 blocksElapsed = block.number - lastAccrualBlock;
         uint256 borrowAPR = calculateBorrowAPR();
         uint256 interestFactor = _safeMulDiv(borrowAPR, blocksElapsed, BLOCKS_PER_YEAR);
-        
-        // Project the borrowIndex forward
         uint256 projectedBorrowIndex = borrowIndex + _safeMulDiv(borrowIndex, interestFactor, 10000);
-
-        return _safeMulDiv(principal, projectedBorrowIndex, borrowerBorrowIndex[borrower]);
+        return _safeMulDiv(principal, projectedBorrowIndex, borrowerIndex);
     }
     
-    // === Interest Accrual ===
-    /**
-     * @dev Accrues interest on all outstanding borrows. This function must be called 
-     * before any state-changing function (deposit, withdraw, createLoan, repayLoan).
-     */
     function accrueInterest() public {
         uint256 currentBlock = block.number;
         if (currentBlock == lastAccrualBlock) return;
@@ -225,23 +251,14 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         
         if (totalBorrows > 0) {
             uint256 borrowAPR = calculateBorrowAPR();
-            
-            // Calculate total interest over the elapsed time
             uint256 interestFactor = _safeMulDiv(borrowAPR, blocksElapsed, BLOCKS_PER_YEAR);
             uint256 interest = _safeMulDiv(totalBorrows, interestFactor, 10000);
             
-            // 1. Update total outstanding debt
             totalBorrows += interest;
             borrowIndex += _safeMulDiv(borrowIndex, interestFactor, 10000);
             
-            // 2. Split interest into reserves (protocol fee)
             uint256 reserves = _safeMulDiv(interest, reserveFactor, 10000);
             totalReserves += reserves;
-            
-            // 3. The remainder increases the total value backing the LP shares
-            // This is the profit for depositors
-            uint256 depositorProfit = _safeSub(interest, reserves);
-            totalAssets += depositorProfit;
             
             emit InterestAccrued(interest, totalBorrows, borrowAPR, block.timestamp);
         }
@@ -249,80 +266,27 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         lastAccrualBlock = currentBlock;
     }
 
-    // === Liquidation (Remains unchanged in core logic) ===
-    function liquidate(address borrower) external nonReentrant whenNotPaused validAddress(borrower) {
-        // Ensure pool state is current
-        accrueInterest(); 
-        uint256 price = priceOracle.getPrice(assetType);
-        require(price > 0, "Invalid price");
-        
-        uint256 collateralAmount = collateral[borrower];
-        require(collateralAmount > 0, "No collateral to liquidate");
-        
-        uint256 collateralUSD = _safeMulDiv(collateralAmount, price, PRECISION);
-        uint256 maxBorrow = _safeMulDiv(collateralUSD, baseLTV, 10000);
-        uint256 currentDebt = getCurrentBorrowBalance(borrower);
-
-        require(currentDebt > 0, "No debt to liquidate");
-        require(currentDebt > maxBorrow, "Position healthy"); // Health check
-
-        uint256 debtToRepay = currentDebt;
-        
-        // Calculate required collateral value including bonus
-        uint256 seizedCollateralValueUSD = _safeMulDiv(debtToRepay, 10000 + liquidationBonus, 10000);
-        uint256 requiredCollateralTokens = _safeMulDiv(seizedCollateralValueUSD, PRECISION, price);
-        uint256 collateralToSeize = _min(requiredCollateralTokens, collateral[borrower]);
-
-        require(collateralToSeize > 0, "Invalid collateral to seize");
-
-        // 1. Liquidator repays the debt (HTS transfer from msg.sender to this)
-        int rc1 = HTS.transferToken(lendingToken, msg.sender, address(this), int64(int256(debtToRepay)));
-        require(rc1 == HederaResponseCodes.SUCCESS, "Repay failed");
-
-        // 2. Update pool state: debt is cleared, and liquid assets increase
-        totalBorrows = _safeSub(totalBorrows, debtToRepay);
-        // Note: totalAssets already represents the total value backing LP shares (liquid + borrowed + interest).
-        // Since the liquidator repaid the debt, the full 'debtToRepay' becomes liquid cash in the pool.
-        totalAssets += debtToRepay; 
-
-        borrows[borrower] = 0;
-        borrowerBorrowIndex[borrower] = 0;
-
-        // 3. Transfer seized collateral to liquidator (HTS transfer from this to msg.sender)
-        collateral[borrower] = _safeSub(collateral[borrower], collateralToSeize);
-        int rc2 = HTS.transferToken(collateralToken, address(this), msg.sender, int64(int256(collateralToSeize)));
-        require(rc2 == HederaResponseCodes.SUCCESS, "Seize transfer failed");
-
-        emit LoanLiquidated(borrower, debtToRepay, collateralToSeize);
-    }
-    
-    // === Investor & Farmer Methods ===
-    
+    // === Core Functions ===
     function deposit(uint256 amount) external nonReentrant whenNotPaused validAmount(amount) {
         accrueInterest();
 
-        // 1. Transfer funds from user to pool (HTS)
         int rc = HTS.transferToken(lendingToken, msg.sender, address(this), int64(int256(amount)));
         require(rc == HederaResponseCodes.SUCCESS, "Transfer failed");
 
         uint256 shares;
-        uint256 totalPoolValue = totalAssets + totalReserves;
+        uint256 totalPoolValue = totalAssets + totalBorrows - totalReserves;
         
-        if (lpTokenSupply == 0) { 
-            // First deposit sets the initial exchange rate 1:1
+        if (lpTokenSupply == 0) {
             shares = amount;
         } else {
-            // Shares = amount * lpTokenSupply / TotalPoolValue
             require(totalPoolValue > 0, "Invalid pool value");
             shares = _safeMulDiv(amount, lpTokenSupply, totalPoolValue);
         }
 
-        // 2. Update state variables
         totalAssets += amount;
         lpShares[msg.sender] += shares;
-        lpTokenSupply += shares; // FIX: Manually track LP token supply
+        lpTokenSupply += shares;
 
-        // 3. Mint LP token to the user (HTS)
         (int64 mintRc,,) = HTS.mintToken(lpToken, int64(int256(shares)), new bytes[](0));
         require(mintRc == HederaResponseCodes.SUCCESS, "LP token mint failed");
         
@@ -332,37 +296,34 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
     function withdraw(uint256 shares) external nonReentrant whenNotPaused validAmount(shares) {
         accrueInterest();
         require(lpShares[msg.sender] >= shares, "Insufficient LP shares");
-
-        require(lpTokenSupply > 0, "Invalid LP supply"); 
+        require(lpTokenSupply > 0, "Invalid LP supply");
         
-        uint256 totalPoolValue = totalAssets + totalReserves;
+        uint256 totalPoolValue = totalAssets + totalBorrows - totalReserves;
         require(totalPoolValue > 0, "No assets to withdraw");
 
-        // Withdraw Amount = shares * Total Pool Value / lpTokenSupply
         uint256 withdrawAmount = _safeMulDiv(shares, totalPoolValue, lpTokenSupply);
-
-        // Safety check to ensure the pool has enough liquid funds to cover the withdrawal
         require(withdrawAmount <= availableLiquidity(), "Insufficient liquidity");
         
-        // 1. Update state variables
         lpShares[msg.sender] = _safeSub(lpShares[msg.sender], shares);
-        lpTokenSupply = _safeSub(lpTokenSupply, shares); // FIX: Update supply
-        
-        // Remove value from totalAssets
-        totalAssets = _safeSub(totalAssets, withdrawAmount); 
+        lpTokenSupply = _safeSub(lpTokenSupply, shares);
+        totalAssets = _safeSub(totalAssets, withdrawAmount);
 
-        // 2. Burn LP token (HTS)
         (int64 burnRc,) = HTS.burnToken(lpToken, int64(int256(shares)), new int64[](0));
         require(burnRc == HederaResponseCodes.SUCCESS, "LP token burn failed");
 
-        // 3. Transfer funds back to user (HTS)
         int rc = HTS.transferToken(lendingToken, address(this), msg.sender, int64(int256(withdrawAmount)));
         require(rc == HederaResponseCodes.SUCCESS, "Withdraw failed");
 
         emit Withdrawn(msg.sender, withdrawAmount, shares, block.timestamp);
     }
 
-    function depositCollateral(uint256 amount) external nonReentrant whenNotPaused validAmount(amount) {
+    function depositCollateral(uint256 amount, uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validAmount(amount) 
+        validPosition(msg.sender, positionId) 
+    {
         accrueInterest();
 
         int rc = HTS.transferToken(collateralToken, msg.sender, address(this), int64(int256(amount)));
@@ -372,14 +333,53 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         require(price > 0, "Invalid price");
         uint256 usdValue = _safeMulDiv(amount, price, PRECISION);
 
-        collateral[msg.sender] += amount;
-        emit CollateralDeposited(msg.sender, amount, usdValue);
+        borrowerPositions[msg.sender][positionId].collateral += amount;
+        emit CollateralDeposited(msg.sender, positionId, amount, usdValue);
     }
 
-    function createLoan(uint256 amount) external nonReentrant whenNotPaused validAmount(amount) {
+    function withdrawCollateral(uint256 amount, uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validAmount(amount) 
+        validPosition(msg.sender, positionId) 
+    {
+        accrueInterest();
+        Position storage position = borrowerPositions[msg.sender][positionId];
+        require(position.collateral >= amount, "Insufficient collateral");
+
+        uint256 price = priceOracle.getPrice(assetType);
+        require(price > 0, "Invalid price");
+
+        uint256 newCollateral = _safeSub(position.collateral, amount);
+        uint256 collateralUSD = _safeMulDiv(newCollateral, price, PRECISION);
+        uint256 maxBorrow = _safeMulDiv(collateralUSD, baseLTV, 10000);
+        uint256 currentDebt = getCurrentBorrowBalance(msg.sender, positionId);
+        require(currentDebt <= maxBorrow, "Withdrawal would make position unhealthy");
+
+        position.collateral = newCollateral;
+        if (position.collateral == 0 && position.borrows == 0) {
+            position.active = false;
+            _removePositionId(msg.sender, positionId);
+        }
+
+        int rc = HTS.transferToken(collateralToken, address(this), msg.sender, int64(int256(amount)));
+        require(rc == HederaResponseCodes.SUCCESS, "Collateral withdrawal failed");
+
+        emit CollateralWithdrawn(msg.sender, positionId, amount, block.timestamp);
+    }
+
+    function createLoan(uint256 amount, uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validAmount(amount) 
+        validPosition(msg.sender, positionId) 
+    {
         accrueInterest();
         
-        uint256 collateralAmount = collateral[msg.sender];
+        Position storage position = borrowerPositions[msg.sender][positionId];
+        uint256 collateralAmount = position.collateral;
         require(collateralAmount > 0, "No collateral deposited");
         
         uint256 price = priceOracle.getPrice(assetType);
@@ -388,111 +388,160 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         uint256 collateralUSD = _safeMulDiv(collateralAmount, price, PRECISION);
         uint256 maxBorrow = _safeMulDiv(collateralUSD, baseLTV, 10000);
         
-        // Need to use current debt (which includes accrued interest) for the safety check
-        uint256 currentDebt = getCurrentBorrowBalance(msg.sender); 
-        uint256 newTotalDebt = currentDebt + amount;
+        uint256 currentDebt = getCurrentBorrowBalance(msg.sender, positionId);
+        uint256 newDebt = currentDebt + amount;
 
-        require(newTotalDebt <= maxBorrow, "Exceeds borrow limit");
+        require(newDebt <= maxBorrow, "Exceeds borrow limit");
         require(amount <= availableLiquidity(), "Insufficient liquidity");
 
-        // Update total borrows and borrower's principal
         totalBorrows += amount;
-        borrows[msg.sender] += amount;
-        borrowerBorrowIndex[msg.sender] = borrowIndex; // Mark this new principal at the current index
-
-        // Update totalAssets (This liquidates pool funds)
+        position.borrows = newDebt;
+        position.positionBorrowIndex = borrowIndex;
         totalAssets = _safeSub(totalAssets, amount);
 
-        // Transfer loan funds to borrower (HTS)
         int rc = HTS.transferToken(lendingToken, address(this), msg.sender, int64(int256(amount)));
         require(rc == HederaResponseCodes.SUCCESS, "Loan transfer failed");
         
-        emit LoanCreated(msg.sender, amount, borrowIndex);
+        emit LoanCreated(msg.sender, positionId, amount, borrowIndex);
     }
 
-    function repayLoan(uint256 amount) external nonReentrant whenNotPaused validAmount(amount) {
-        // Accrue interest up to this block to ensure currentDebt is accurate
-        accrueInterest(); 
+    function repayLoan(uint256 amount, uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validAmount(amount) 
+        validPosition(msg.sender, positionId) 
+    {
+        accrueInterest();
         
-        uint256 currentDebt = getCurrentBorrowBalance(msg.sender);
+        address borrower = msg.sender;
+        uint256 currentDebt = getCurrentBorrowBalance(borrower, positionId);
         require(currentDebt > 0, "No active loan");
 
         uint256 repayAmount = _min(amount, currentDebt);
         
-        // 1. HTS transfer from user to pool
         int rc = HTS.transferToken(lendingToken, msg.sender, address(this), int64(int256(repayAmount)));
         require(rc == HederaResponseCodes.SUCCESS, "Repay transfer failed");
 
-        // Calculate components (principal balance is the amount at last index update)
-        uint256 principalAtLastIndex = borrows[msg.sender];
-        uint256 accruedInterest = currentDebt > principalAtLastIndex ? currentDebt - principalAtLastIndex : 0;
+        Position storage position = borrowerPositions[borrower][positionId];
+        uint256 principalAtLastIndex = position.borrows;
+        uint256 accruedInterest = currentDebt - principalAtLastIndex;
         
-        // Determine how the repayment is split: interest first, then principal.
         uint256 interestRepaid = _min(repayAmount, accruedInterest);
-        uint256 principalRepaid = _safeSub(repayAmount, interestRepaid);
+        uint256 principalRepaid = repayAmount - interestRepaid;
 
-        // 2. Update state variables
-        
-        // A. Handle Principal Repayment
-        borrows[msg.sender] = _safeSub(principalAtLastIndex, principalRepaid);
-        totalBorrows = _safeSub(totalBorrows, repayAmount); // Fix: subtract total repayAmount (principal + interest)
-        
-        // B. Handle Interest Repayment (split interest into reserves and liquid assets)
-        uint256 reservesSplit = _safeMulDiv(interestRepaid, reserveFactor, 10000);
-        uint256 liquiditySplit = _safeSub(interestRepaid, reservesSplit);
-        
-        // Funds repaid become liquid - both principal and interest liquidity split
-        totalReserves += reservesSplit;
-        totalAssets += principalRepaid + liquiditySplit; // Fix: include principal repayment in totalAssets
+        totalBorrows = _safeSub(totalBorrows, repayAmount);
+        totalAssets += repayAmount;
 
-        // Fix: Always update borrower index if there are remaining borrows
-        if (borrows[msg.sender] > 0) {
-            borrowerBorrowIndex[msg.sender] = borrowIndex;
+        uint256 remainingDebt = currentDebt - repayAmount;
+        if (remainingDebt > 0) {
+            position.borrows = remainingDebt;
+            position.positionBorrowIndex = borrowIndex;
         } else {
-            borrowerBorrowIndex[msg.sender] = 0;
+            position.borrows = 0;
+            position.positionBorrowIndex = 0;
+            if (position.collateral == 0) {
+                position.active = false;
+                _removePositionId(borrower, positionId);
+            }
         }
 
-        emit LoanRepaid(msg.sender, principalRepaid, interestRepaid);
+        emit LoanRepaid(borrower, positionId, principalRepaid, interestRepaid);
+    }
+
+    function liquidate(address borrower, uint256 positionId) 
+        external 
+        nonReentrant 
+        whenNotPaused 
+        validAddress(borrower) 
+        validPosition(borrower, positionId) 
+    {
+        accrueInterest();
+        uint256 price = priceOracle.getPrice(assetType);
+        require(price > 0, "Invalid price");
+        
+        Position storage position = borrowerPositions[borrower][positionId];
+        uint256 collateralAmount = position.collateral;
+        require(collateralAmount > 0, "No collateral to liquidate");
+        
+        uint256 collateralUSD = _safeMulDiv(collateralAmount, price, PRECISION);
+        uint256 maxBorrow = _safeMulDiv(collateralUSD, baseLTV, 10000);
+        uint256 currentDebt = getCurrentBorrowBalance(borrower, positionId);
+
+        require(currentDebt > 0, "No debt to liquidate");
+        require(currentDebt > maxBorrow, "Position healthy");
+
+        uint256 debtToRepay = currentDebt;
+        uint256 seizedCollateralValueUSD = _safeMulDiv(debtToRepay, 10000 + liquidationBonus, 10000);
+        uint256 requiredCollateralTokens = _safeMulDiv(seizedCollateralValueUSD, PRECISION, price);
+        uint256 collateralToSeize = _min(requiredCollateralTokens, position.collateral);
+
+        require(collateralToSeize > 0, "Invalid collateral to seize");
+
+        int rc1 = HTS.transferToken(lendingToken, msg.sender, address(this), int64(int256(debtToRepay)));
+        require(rc1 == HederaResponseCodes.SUCCESS, "Repay failed");
+
+        totalBorrows = _safeSub(totalBorrows, debtToRepay);
+        totalAssets += debtToRepay;
+
+        position.borrows = 0;
+        position.positionBorrowIndex = 0;
+        position.collateral = _safeSub(position.collateral, collateralToSeize);
+        if (position.collateral == 0) {
+            position.active = false;
+            _removePositionId(borrower, positionId);
+        }
+
+        int rc2 = HTS.transferToken(collateralToken, address(this), msg.sender, int64(int256(collateralToSeize)));
+        require(rc2 == HederaResponseCodes.SUCCESS, "Seize transfer failed");
+
+        emit LoanLiquidated(borrower, positionId, debtToRepay, collateralToSeize);
     }
 
     // === Views ===
     function utilizationRate() public view returns (uint256) {
-        // Use totalAssets + totalReserves as the total pool value (TVL)
-        uint256 totalPoolValue = totalAssets + totalReserves; 
-        if (totalPoolValue == 0) return 0;
-        return _safeMulDiv(totalBorrows, 10000, totalPoolValue);
+        uint256 totalSupply = totalAssets + totalBorrows;
+        if (totalSupply == 0) return 0;
+        return _safeMulDiv(totalBorrows, 10000, totalSupply);
     }
 
     function availableLiquidity() public view returns (uint256) {
-        // Fix: totalAssets represents liquid cash + depositor profits
-        // For HTS integration, we could also use: IERC20(lendingToken).balanceOf(address(this))
         return totalAssets;
     }
 
     function exchangeRate() public view returns (uint256) {
-        uint256 totalLPSupply = lpTokenSupply; // FIX: Use tracked supply
-        if (totalLPSupply == 0) return PRECISION;
-        uint256 totalPoolValue = totalAssets + totalReserves;
-        return _safeMulDiv(totalPoolValue, PRECISION, totalLPSupply);
+        if (lpTokenSupply == 0) return PRECISION;
+        uint256 totalPoolValue = totalAssets + totalBorrows - totalReserves;
+        return _safeMulDiv(totalPoolValue, PRECISION, lpTokenSupply);
     }
 
     function totalLP() public view returns (uint256) {
-        return lpTokenSupply; // FIX: Use tracked supply
+        return lpTokenSupply;
     }
 
     function currentAPR() external view returns (uint256) {
-        return calculateBorrowAPR(); 
+        return calculateBorrowAPR();
     }
 
-    /**
-     * @dev Returns the collateral amount currently deposited by a specific borrower.
-     */
-    function getCollateralBalance(address borrower) external view validAddress(borrower) returns (uint256) {
-        return collateral[borrower];
+    function getCollateralBalance(address borrower, uint256 positionId) 
+        external 
+        view 
+        validAddress(borrower) 
+        validPosition(borrower, positionId) 
+        returns (uint256) 
+    {
+        return borrowerPositions[borrower][positionId].collateral;
     }
 
-    function getHealthFactor(address borrower) external view validAddress(borrower) returns (uint256) {
-        uint256 collateralAmount = collateral[borrower];
+    function getHealthFactor(address borrower, uint256 positionId) 
+        external 
+        view 
+        validAddress(borrower) 
+        validPosition(borrower, positionId) 
+        returns (uint256) 
+    {
+        Position storage position = borrowerPositions[borrower][positionId];
+        uint256 collateralAmount = position.collateral;
         if (collateralAmount == 0) return 0;
         
         uint256 price = priceOracle.getPrice(assetType);
@@ -501,22 +550,16 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         uint256 collateralUSD = _safeMulDiv(collateralAmount, price, PRECISION);
         uint256 maxBorrow = _safeMulDiv(collateralUSD, baseLTV, 10000);
         
-        // Note: This calls the view function, calculating interest up to the current block.
-        uint256 currentDebt = getCurrentBorrowBalance(borrower); 
-        
-        if (currentDebt == 0) return type(uint256).max; // Infinite health for zero debt
-        // Health Factor = maxBorrow * PRECISION / currentDebt (Liquidation threshold is 1)
+        uint256 currentDebt = getCurrentBorrowBalance(borrower, positionId);
+        if (currentDebt == 0) return type(uint256).max;
         return _safeMulDiv(maxBorrow, PRECISION, currentDebt);
     }
 
-    /**
-     * @dev Returns the LP shares for a specific investor (alias for lpShares mapping).
-     */
     function getInvestorShares(address investor) external view validAddress(investor) returns (uint256) {
         return lpShares[investor];
     }
 
-    // === Admin Functions (Omitted for brevity, but exist in original) ===
+    // === Admin Functions ===
     function pause() external onlyOwner { _pause(); }
     function unpause() external onlyOwner { _unpause(); }
     function updateReserveFactor(uint256 newReserveFactor) external onlyOwner { 
@@ -525,7 +568,6 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         reserveFactor = newReserveFactor;
         emit ParametersUpdated("reserveFactor", oldValue, newReserveFactor);
     }
-    // ... other admin functions
     function updateLiquidationBonus(uint256 newLiquidationBonus) external onlyOwner {
         require(newLiquidationBonus >= MIN_LIQUIDATION_BONUS && newLiquidationBonus <= MAX_LIQUIDATION_BONUS, "Invalid liquidation bonus");
         uint256 oldValue = liquidationBonus;
@@ -559,5 +601,10 @@ contract LendingPool is ReentrancyGuard, Ownable, Pausable {
         
         int rc = HTS.transferToken(token, address(this), msg.sender, int64(int256(amount)));
         require(rc == HederaResponseCodes.SUCCESS, "Emergency withdraw failed");
+
+        if (token == lendingToken) {
+            totalAssets = _safeSub(totalAssets, amount);
+            totalReserves = _safeSub(totalReserves, amount);
+        }
     }
 }

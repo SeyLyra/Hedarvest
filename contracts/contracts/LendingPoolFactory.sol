@@ -4,15 +4,13 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./LendingPool.sol";
 import "./MockPriceOracle.sol";
-// Imports for HTS are handled inside the LendingPool contract, not needed here.
-// NOTE: Removed inheritance from HederaTokenService.
 
 /**
- * @title LendingFactory
- * @dev Deploys, configures, and tracks new instances of the LendingPool and their Oracles.
+ * @title LendingPoolFactory
+ * @dev Deploys, configures, and tracks instances of LendingPool and their Oracles.
  * The owner of this factory controls which pools are created and who owns the resulting pools/oracles.
  */
-contract LendingFactory is Ownable {
+contract LendingPoolFactory is Ownable {
     
     // === Structures ===
     struct PoolInfo {
@@ -29,26 +27,23 @@ contract LendingFactory is Ownable {
         uint256 availableLiquidity;
         uint256 utilizationRate;
         uint256 currentAPR;
+        uint256 activePositions; // New: number of active positions in the pool
     }
 
     // === State Variables ===
-    // Maps the asset type (string) to its configuration and addresses
     mapping(string => PoolInfo) public lendingPools;
-    string[] public allAssets; // Stores all deployed asset types for iteration
+    string[] public allAssets;
 
     // === Events ===
     event PoolCreated(address indexed pool, address indexed oracle, string assetType);
 
     // === Constructor ===
-    constructor() {
-        // Factory is initialized with owner via Ownable
-    }
+    constructor() {}
 
     // === Core Functions ===
     /**
      * @dev Creates and deploys a new LendingPool and a dedicated MockPriceOracle for the asset.
-     * The caller (msg.sender) now takes ownership of both the new Pool and the new Oracle.
-     * **NOTE:** The onlyOwner modifier has been removed to allow public creation.
+     * The caller (msg.sender) takes ownership of both the new Pool and Oracle.
      * @param assetType The unique identifier for the collateral asset (e.g., "Rice").
      * @param lendingToken The address of the lending token (HTS token ID).
      * @param collateralToken The address of the collateral token (HTS token ID).
@@ -75,17 +70,16 @@ contract LendingFactory is Ownable {
         require(lendingToken != collateralToken, "Lending and collateral tokens must be different");
         require(lendingToken != lpToken, "Lending and LP tokens must be different");
         require(collateralToken != lpToken, "Collateral and LP tokens must be different");
-        require(baseLTV > 0 && baseLTV <= 10000, "Invalid LTV (0-10000)");
-        require(protocolFee <= 10000, "Invalid protocol fee (0-10000)");
+        require(baseLTV > 0 && baseLTV <= 9500, "Invalid LTV"); // MAX_BASE_LTV = 9500
+        require(protocolFee <= 2000, "Invalid protocol fee"); // MAX_PROTOCOL_FEE = 2000
         require(initialPrice > 0, "Invalid price");
 
-        // 1. Deploy and configure the Mock Price Oracle
+        // Deploy and configure the Mock Price Oracle
         MockPriceOracle oracle = new MockPriceOracle();
         oracle.setPrice(assetType, initialPrice);
-        // Transfer ownership of the Oracle to the caller (msg.sender)
         oracle.transferOwnership(msg.sender);
 
-        // 2. Deploy the Lending Pool with provided token addresses
+        // Deploy the Lending Pool
         LendingPool newPool = new LendingPool(
             assetType,
             lendingToken,
@@ -94,10 +88,10 @@ contract LendingFactory is Ownable {
             baseLTV,
             protocolFee,
             address(oracle),
-            msg.sender // Sets the caller/owner as the Pool's owner
+            msg.sender
         );
         
-        // 3. Register the new pool
+        // Register the new pool
         lendingPools[assetType] = PoolInfo({
             poolAddress: address(newPool),
             oracleAddress: address(oracle),
@@ -109,7 +103,6 @@ contract LendingFactory is Ownable {
         return (address(newPool), address(oracle));
     }
 
-    
     // === Views ===
     /**
      * @dev Retrieves the PoolInfo struct for a specific asset type.
@@ -132,24 +125,38 @@ contract LendingFactory is Ownable {
 
     /**
      * @dev Retrieves live financial stats from all deployed pools.
-     * Requires cross-contract calls to each LendingPool instance.
      */
     function getPoolStats() external view returns (PoolStats[] memory) {
         PoolStats[] memory stats = new PoolStats[](allAssets.length);
         for (uint256 i = 0; i < allAssets.length; i++) {
-            // Instantiate the LendingPool interface from the stored address
             LendingPool pool = LendingPool(lendingPools[allAssets[i]].poolAddress);
             stats[i] = PoolStats({
                 pool: lendingPools[allAssets[i]].poolAddress,
                 assetType: allAssets[i],
-                // Direct calls to public view functions on LendingPool
                 totalAssets: pool.totalAssets(),
                 totalBorrows: pool.totalBorrows(),
                 availableLiquidity: pool.availableLiquidity(),
                 utilizationRate: pool.utilizationRate(),
-                currentAPR: pool.currentAPR()
+                currentAPR: pool.currentAPR(),
+                activePositions: 0 // Note: Requires position counting logic in LendingPool
             });
         }
         return stats;
+    }
+
+    /**
+     * @dev Retrieves all position IDs for a borrower across a specific pool.
+     * @param borrower The address of the borrower.
+     * @param assetType The asset type of the pool.
+     * @return Array of position IDs.
+     */
+    function getBorrowerPositions(string calldata assetType, address borrower) 
+        external 
+        view 
+        returns (uint256[] memory) 
+    {
+        require(lendingPools[assetType].poolAddress != address(0), "Pool does not exist");
+        LendingPool pool = LendingPool(lendingPools[assetType].poolAddress);
+        return pool.getPositionIds(borrower);
     }
 }
