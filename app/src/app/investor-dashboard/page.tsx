@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -18,6 +19,7 @@ const API_BASE_URL = typeof window !== 'undefined'
   : 'http://localhost:3000';
 
 export default function InvestorDashboard() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState('pools');
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -142,6 +144,11 @@ export default function InvestorDashboard() {
     setIsAuthenticated(false);
     setUserAddress("");
     toast.success('Wallet disconnected');
+    
+    // Redirect to investor login page after disconnection
+    setTimeout(() => {
+      router.push('/investor-login');
+    }, 500); // Small delay to allow toast to show
   };
 
   // Show loading state during hydration

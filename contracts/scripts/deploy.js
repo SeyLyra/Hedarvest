@@ -4,240 +4,191 @@ import hardhat from "hardhat";
 import {
   Client,
   PrivateKey,
+  AccountId,
   TokenCreateTransaction,
   TokenAssociateTransaction,
-  TokenUpdateTransaction,
   TokenType,
-  TokenSupplyType,
-  TokenId,
+  TokenSupplyType
 } from "@hashgraph/sdk";
+
+import fs from "fs";
+import path from "path";
 
 const { ethers, run } = hardhat;
 
-async function main() {
-  // Compile contracts
-  await run("compile");
-  
-  // Get deployer - use the simple approach that works
-  const [deployer] = await ethers.getSigners();
-  console.log("🚀 Deploying contracts with:", deployer.address);
-  
-  // Get the provider to avoid resolveName issues
-  const provider = deployer.provider;
-  
-  // Try to disable ENS resolution
-  if (provider && provider._isProvider) {
-    provider._isProvider = false;
-  }
+/**
+ * Convert an EVM address (0x...) to a Hedera Account ID (0.0.x)
+ */
+function evmAddressToAccountId(evmAddress) {
+  const hex = evmAddress.startsWith("0x") ? evmAddress.slice(2) : evmAddress;
+  const paddedHex = hex.padStart(40, "0");
+  const addressBytes = paddedHex.slice(-40);
+  return `0.0.${parseInt(addressBytes, 16)}`;
+}
 
-  // 1. Initialize Hedera client for HTS token creation
-  const operatorId = process.env.HEDERA_OPERATOR_ID;
+async function main() {
+  console.log("🚀 Starting HTS Lending Platform Deployment...\n");
+
+  await run("compile");
+
+  const [deployer] = await ethers.getSigners();
+  console.log("📍 Deployer:", deployer.address);
+  console.log(
+    "💰 Balance:",
+    ethers.formatEther(await ethers.provider.getBalance(deployer.address)),
+    "HBAR\n"
+  );
+
+  // 1️⃣ Initialize Hedera client
+  const operatorId = AccountId.fromString(process.env.HEDERA_OPERATOR_ID);
   const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY);
   const client = Client.forTestnet().setOperator(operatorId, operatorKey);
 
-  // 2. Create HTS tokens instead of ERC20
-  console.log("⏳ Creating HTS tokens...");
-  
-  // Lending token (like stablecoin)
-  const lendingTokenTx = await new TokenCreateTransaction()
-    .setTokenName("Lending USD")
-    .setTokenSymbol("LUSD")
-    .setTreasuryAccountId(operatorId)
-    .setInitialSupply(1000000)
+  console.log("🔗 Connected to Hedera Testnet as:", operatorId.toString(), "\n");
+
+  // 2️⃣ Create Tokens (AUSD + Collaterals + LP)
+  console.log("🪙 Creating HTS Tokens...\n");
+
+  const ausdTx = await new TokenCreateTransaction()
+    .setTokenName("Agricultural USD")
+    .setTokenSymbol("AUSD")
     .setDecimals(6)
+    .setInitialSupply(10_000_000_000_000)
+    .setTreasuryAccountId(operatorId)
     .setTokenType(TokenType.FungibleCommon)
     .setSupplyType(TokenSupplyType.Infinite)
     .setSupplyKey(operatorKey)
+    .setAdminKey(operatorKey)
     .freezeWith(client)
     .sign(operatorKey);
 
-  const lendingTokenSubmit = await lendingTokenTx.execute(client);
-  const lendingTokenReceipt = await lendingTokenSubmit.getReceipt(client);
-  const lendingTokenId = lendingTokenReceipt.tokenId.toString();
-  const lendingTokenEvm = "0x" + TokenId.fromString(lendingTokenId).toSolidityAddress();
-  
-  console.log("✅ Lending token deployed:", lendingTokenId, `(${lendingTokenEvm})`);
+  const ausdReceipt = await (await ausdTx.execute(client)).getReceipt(client);
+  const ausdTokenId = ausdReceipt.tokenId;
+  const ausdEvm = "0x" + ausdTokenId.toSolidityAddress();
+  console.log(`✅ AUSD deployed: ${ausdTokenId.toString()} (${ausdEvm})\n`);
 
-  // Collateral token (grain collateral)
-  const collateralTokenTx = await new TokenCreateTransaction()
-    .setTokenName("Grain Collateral")
-    .setTokenSymbol("GRAIN")
-    .setTreasuryAccountId(operatorId)
-    .setInitialSupply(1000000)
-    .setDecimals(6)
-    .setTokenType(TokenType.FungibleCommon)
-    .setSupplyType(TokenSupplyType.Infinite)
-    .setSupplyKey(operatorKey)
-    .freezeWith(client)
-    .sign(operatorKey);
+  const grains = ["RICE", "CORN", "WHEAT", "SOYBEAN"];
+  const grainTokens = {};
+  const lpTokens = {};
 
-  const collateralTokenSubmit = await collateralTokenTx.execute(client);
-  const collateralTokenReceipt = await collateralTokenSubmit.getReceipt(client);
-  const collateralTokenId = collateralTokenReceipt.tokenId.toString();
-  const collateralTokenEvm = "0x" + TokenId.fromString(collateralTokenId).toSolidityAddress();
-  
-  console.log("✅ Collateral token deployed:", collateralTokenId, `(${collateralTokenEvm})`);
+  for (const symbol of grains) {
+    const grainTx = await new TokenCreateTransaction()
+      .setTokenName(`${symbol} Token`)
+      .setTokenSymbol(symbol)
+      .setDecimals(6)
+      .setInitialSupply(1_000_000_000_000)
+      .setTreasuryAccountId(operatorId)
+      .setTokenType(TokenType.FungibleCommon)
+      .setSupplyType(TokenSupplyType.Infinite)
+      .setSupplyKey(operatorKey)
+      .setAdminKey(operatorKey)
+      .freezeWith(client)
+      .sign(operatorKey);
 
-  // LP token (for liquidity providers)
-  const lpTokenTx = await new TokenCreateTransaction()
-    .setTokenName("LP Token")
-    .setTokenSymbol("LP")
-    .setTreasuryAccountId(operatorId)
-    .setInitialSupply(1000000)
-    .setDecimals(6)
-    .setTokenType(TokenType.FungibleCommon)
-    .setSupplyType(TokenSupplyType.Infinite)
-    .setSupplyKey(operatorKey)
-    .freezeWith(client)
-    .sign(operatorKey);
+    const receipt = await (await grainTx.execute(client)).getReceipt(client);
+    const id = receipt.tokenId;
+    const evm = "0x" + id.toSolidityAddress();
+    grainTokens[symbol] = { id, evm };
+    console.log(`✅ ${symbol} Token created: ${id.toString()} (${evm})`);
 
-  const lpTokenSubmit = await lpTokenTx.execute(client);
-  const lpTokenReceipt = await lpTokenSubmit.getReceipt(client);
-  const lpTokenId = lpTokenReceipt.tokenId.toString();
-  const lpTokenEvm = "0x" + TokenId.fromString(lpTokenId).toSolidityAddress();
-  
-  console.log("✅ LP token deployed:", lpTokenId, `(${lpTokenEvm})`);
+    const lpTx = await new TokenCreateTransaction()
+      .setTokenName(`${symbol} LP Token`)
+      .setTokenSymbol(`LP-${symbol}`)
+      .setDecimals(6)
+      .setInitialSupply(0)
+      .setTreasuryAccountId(operatorId)
+      .setTokenType(TokenType.FungibleCommon)
+      .setSupplyType(TokenSupplyType.Infinite)
+      .setSupplyKey(operatorKey)
+      .setAdminKey(operatorKey)
+      .freezeWith(client)
+      .sign(operatorKey);
 
-  // 3. Deploy your LendingPoolFactory
-  const Factory = await ethers.getContractFactory("LendingPoolFactory");
-  const factory = await Factory.deploy();
-  const factoryAddress = factory.target;
-  console.log("✅ LendingPoolFactory deployed at:", factoryAddress);
-  
-  // Create a new contract instance to avoid resolveName issues
-  const factoryContract = new ethers.Contract(factoryAddress, Factory.interface, deployer);
+    const lpReceipt = await (await lpTx.execute(client)).getReceipt(client);
+    const lpId = lpReceipt.tokenId;
+    const lpEvm = "0x" + lpId.toSolidityAddress();
+    lpTokens[symbol] = { id: lpId, evm: lpEvm };
+    console.log(`✅ LP-${symbol} Token created: ${lpId.toString()} (${lpEvm})\n`);
+  }
 
-  // 4. Grain configurations
-  const grainConfigs = [
-    { name: "Rice", price: ethers.parseEther("200") },
-    { name: "Corn", price: ethers.parseEther("150") },
-    { name: "Wheat", price: ethers.parseEther("180") },
-    { name: "Soybean", price: ethers.parseEther("300") }
-  ];
-  
-  console.log(`📋 Creating ${grainConfigs.length} pools with HTS tokens...`);
-  
+  // 3️⃣ Deploy PriceOracle
+  console.log("📊 Deploying PriceOracle...");
+  const Oracle = await ethers.getContractFactory("MockPriceOracle");
+  const oracle = await Oracle.deploy();
+  await oracle.waitForDeployment();
+  const oracleAddress = await oracle.getAddress();
+  console.log("✅ PriceOracle deployed at:", oracleAddress, "\n");
+
+  // 4️⃣ Deploy PoolFactory
+  console.log("🏭 Deploying PoolFactory...");
+  const Factory = await ethers.getContractFactory("PoolFactory");
+  const factory = await Factory.deploy(oracleAddress, ausdEvm); // _priceOracle, _htsAddress
+  await factory.waitForDeployment();
+  const factoryAddress = await factory.getAddress();
+  const factoryContractId = evmAddressToAccountId(factoryAddress);
+
+  console.log("✅ PoolFactory deployed at:", factoryAddress);
+  console.log("📋 Hedera Contract ID:", factoryContractId, "\n");
+
+  // 5️⃣ Configure Assets
+  for (const symbol of grains) {
+    console.log(`⚙️ Configuring ${symbol} parameters...`);
+    await (await factory.configureAsset(symbol, 7000, 8500, 500)).wait();
+    console.log(`✅ ${symbol} configured`);
+  }
+
+  // 6️⃣ Create Pools
   const pools = [];
-
-  for (const grain of grainConfigs) {
-    console.log(`\n🌾 Creating ${grain.name} pool...`);
-
-    try {
-      // Use the HTS token addresses instead of MockToken addresses
-      console.log(`🔍 Debug: About to call createPool for ${grain.name}`);
-      console.log(`🔍 Debug: lendingTokenEvm = ${lendingTokenEvm}`);
-      console.log(`🔍 Debug: collateralTokenEvm = ${collateralTokenEvm}`);
-      console.log(`🔍 Debug: lpTokenEvm = ${lpTokenEvm}`);
-      
-      // Now that addresses have "0x" prefix, we can use normal contract calls
-      const tx = await factoryContract.createPool(
-        grain.name,             // assetType
-        lendingTokenEvm,        // lendingToken
-        collateralTokenEvm,     // collateralToken
-        lpTokenEvm,             // lpToken
-        6000,                   // baseLTV (60%)
-        500,                    // protocolFee (5%)
-        grain.price             // initialPrice
-      );
-      
-      const receipt = await tx.wait();
-      
-      // Get pool info from transaction events instead of calling getPool
-      const poolCreatedEvent = receipt.logs.find(log => {
-        try {
-          const parsed = factoryContract.interface.parseLog(log);
-          return parsed && parsed.name === 'PoolCreated';
-        } catch (e) {
-          return false;
-        }
-      });
-      
-      if (poolCreatedEvent) {
-        const parsed = factoryContract.interface.parseLog(poolCreatedEvent);
-        const poolAddress = parsed.args.pool;
-        const oracleAddress = parsed.args.oracle;
-        
-        pools.push({ 
-          grain: grain.name, 
-          poolAddress: poolAddress, 
-          oracleAddress: oracleAddress,
-          price: ethers.formatEther(grain.price)
-        });
-        
-        console.log(`✅ ${grain.name} pool created at:`, poolAddress);
-        console.log(`✅ ${grain.name} oracle at:`, oracleAddress);
-        
-        // Associate the pool contract with HTS tokens and set supply key for LP token
-        try {
-          console.log(`🔗 Associating pool with HTS tokens...`);
-          
-          // Associate lending token
-          const associateLendingTx = await new TokenAssociateTransaction()
-            .setAccountId(operatorId)
-            .setTokenIds([TokenId.fromString(lendingTokenId)])
-            .freezeWith(client)
-            .sign(operatorKey);
-          await associateLendingTx.execute(client);
-          
-          // Associate collateral token
-          const associateCollateralTx = await new TokenAssociateTransaction()
-            .setAccountId(operatorId)
-            .setTokenIds([TokenId.fromString(collateralTokenId)])
-            .freezeWith(client)
-            .sign(operatorKey);
-          await associateCollateralTx.execute(client);
-          
-          // Associate LP token
-          const associateLpTx = await new TokenAssociateTransaction()
-            .setAccountId(operatorId)
-            .setTokenIds([TokenId.fromString(lpTokenId)])
-            .freezeWith(client)
-            .sign(operatorKey);
-          await associateLpTx.execute(client);
-          
-          // Set pool as supply key for LP token (so it can mint/burn)
-          // Note: We need to convert the pool address to a Hedera key format
-          // For now, we'll use the operator key, but in production you'd want to set the pool as supply key
-          const updateLpTokenTx = await new TokenUpdateTransaction()
-            .setTokenId(TokenId.fromString(lpTokenId))
-            .setSupplyKey(operatorKey) // TODO: Set pool address as supply key
-            .freezeWith(client)
-            .sign(operatorKey);
-          await updateLpTokenTx.execute(client);
-          
-          console.log(`✅ Pool associated with HTS tokens`);
-        } catch (assocError) {
-          console.log(`⚠️ Token association failed: ${assocError.message}`);
-        }
-      } else {
-        console.log(`⚠️ ${grain.name} pool created but couldn't extract addresses from events`);
+  for (const symbol of grains) {
+    console.log(`🏊 Creating ${symbol} pool...`);
+    const tx = await factory.createPool(
+      symbol,
+      ausdEvm,
+      grainTokens[symbol].evm,
+      lpTokens[symbol].evm
+    );
+    const receipt = await tx.wait();
+    const poolCreated = receipt.logs.find((log) => {
+      try {
+        const parsed = factory.interface.parseLog(log);
+        return parsed?.name === "PoolCreated";
+      } catch {
+        return false;
       }
+    });
 
-    } catch (error) {
-      console.error(`❌ Failed to create ${grain.name} pool:`, error.message);
-      // Continue with other pools
+    if (poolCreated) {
+      const parsed = factory.interface.parseLog(poolCreated);
+      const poolAddress = parsed.args.poolAddress || parsed.args[1];
+      console.log(`✅ ${symbol} Pool created at: ${poolAddress}`);
+      pools.push({ symbol, poolAddress });
     }
   }
 
-  // 5. Final summary
-  console.log("\n🎉 HTS Deployment Complete!");
-  console.log("\n📋 Deployment Summary:");
-  console.log(`Lending Token (HTS): ${lendingTokenId} (${lendingTokenEvm})`);
-  console.log(`Collateral Token (HTS): ${collateralTokenId} (${collateralTokenEvm})`);
-  console.log(`LP Token (HTS): ${lpTokenId} (${lpTokenEvm})`);
-  console.log(`Factory: ${factoryAddress}`);
-  console.log(`Total Pools: ${pools.length}`);
-  
-  console.log("\n🏊 Deployed Pools:");
-  pools.forEach(pool => {
-    console.log(`\n${pool.grain}:`);
-    console.log(`  Pool: ${pool.poolAddress}`);
-    console.log(`  Oracle: ${pool.oracleAddress}`);
-    console.log(`  Price: $${pool.price}`);
-  });
+  // 7️⃣ Save deployment
+  const deployment = {
+    network: "hedera-testnet",
+    factory: factoryAddress,
+    factoryContractId,
+    oracle: oracleAddress,
+    ausd: { id: ausdTokenId.toString(), evm: ausdEvm },
+    tokens: grainTokens,
+    lpTokens,
+    pools
+  };
+
+  const deployDir = path.join(process.cwd(), "deployments");
+  if (!fs.existsSync(deployDir)) fs.mkdirSync(deployDir);
+  fs.writeFileSync(
+    path.join(deployDir, "hedera-testnet.json"),
+    JSON.stringify(deployment, null, 2)
+  );
+
+  console.log("\n💾 Deployment saved to deployments/hedera-testnet.json");
+  console.log("🎉 Done!");
 }
 
-main().catch((error) => {
-  console.error("💥 Deployment failed:", error);
+main().catch((err) => {
+  console.error("💥 Deployment failed:", err);
   process.exitCode = 1;
 });

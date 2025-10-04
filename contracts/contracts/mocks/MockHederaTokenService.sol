@@ -2,10 +2,10 @@
 pragma solidity ^0.8.19;
 
 interface IHederaTokenService {
-    function associateToken(address account, address token) external returns (int);
     function transferToken(address token, address sender, address receiver, int64 amount) external returns (int);
     function mintToken(address token, int64 amount, bytes[] memory metadata) external returns (int, uint64, int32[] memory);
     function burnToken(address token, int64 amount, int64[] memory serialNumbers) external returns (int, uint64);
+    function isAssociated(address account, address token) external view returns (int);
 }
 
 interface IERC20 {
@@ -13,8 +13,8 @@ interface IERC20 {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
-    function allowance(address owner, address spender) external view returns (uint256);
+    function mint(address to, uint256 amount) external;
+    function burn(uint256 amount) external;
 }
 
 contract MockHederaTokenService is IHederaTokenService {
@@ -28,14 +28,18 @@ contract MockHederaTokenService is IHederaTokenService {
 
     function setToken(address token, bool status) external {
         isToken[token] = status;
-        totalSupply[token] = IERC20(token).totalSupply();
+        if (status) {
+            totalSupply[token] = IERC20(token).totalSupply();
+        }
     }
 
-    function associateToken(address account, address token) external override returns (int) {
+    function associateToken(address account, address token) external {
         require(isToken[token], "Invalid token");
-        require(!associated[account][token], "Already associated");
         associated[account][token] = true;
-        return SUCCESS;
+    }
+
+    function isAssociated(address account, address token) external view override returns (int) {
+        return associated[account][token] ? SUCCESS : TOKEN_NOT_ASSOCIATED_TO_ACCOUNT;
     }
 
     function transferToken(address token, address sender, address receiver, int64 amount) external override returns (int) {
@@ -53,9 +57,9 @@ contract MockHederaTokenService is IHederaTokenService {
         require(isToken[token], "Invalid token");
         require(amount >= 0, "Negative amount");
         uint256 uAmount = uint256(int256(amount));
+        IERC20(token).mint(msg.sender, uAmount);
         totalSupply[token] += uAmount;
-        IERC20(token).transfer(msg.sender, uAmount);
-        return (SUCCESS, uint64(totalSupply[token]), new int32[](0));
+        return (SUCCESS, uint64(amount), new int32[](0));
     }
 
     function burnToken(address token, int64 amount, int64[] memory) external override returns (int, uint64) {
@@ -63,8 +67,8 @@ contract MockHederaTokenService is IHederaTokenService {
         require(amount >= 0, "Negative amount");
         uint256 uAmount = uint256(int256(amount));
         require(IERC20(token).balanceOf(msg.sender) >= uAmount, "Insufficient balance");
-        IERC20(token).transferFrom(msg.sender, address(this), uAmount);
+        IERC20(token).burn(uAmount);
         totalSupply[token] -= uAmount;
-        return (SUCCESS, uint64(totalSupply[token]));
+        return (SUCCESS, uint64(amount));
     }
 }

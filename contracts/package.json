@@ -1,8 +1,12 @@
 {
 	"scripts": {
 		"test": "hardhat test",
+		"test:lending-pool": "hardhat test test/ComprehensiveLendingPool.test.js",
+		"test:pool-factory": "hardhat test test/ComprehensivePoolFactory.test.js",
+		"test:integration": "hardhat test test/SystemIntegration.test.js",
+		"test:security": "hardhat test test/SecurityAndEdgeCases.test.js",
+		"test:all": "node test/run-all-tests.js",
 		"test:comprehensive": "hardhat test test/ComprehensiveLendingPool.test.js",
-		"test:all": "hardhat test",
 		"test:run": "node test/run-tests.js",
 		"compile": "hardhat compile",
 		"deploy": "hardhat run scripts/deploy.js --network hederaTestnet"

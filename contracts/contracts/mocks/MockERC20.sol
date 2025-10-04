@@ -4,7 +4,7 @@ pragma solidity ^0.8.19;
 contract MockERC20 {
     string public name;
     string public symbol;
-    uint8 public constant decimals = 8; // Mimic HTS token decimals
+    uint8 public constant decimals = 6;
     uint256 public totalSupply;
     mapping(address => uint256) public balanceOf;
     mapping(address => mapping(address => uint256)) public allowance;
@@ -12,30 +12,22 @@ contract MockERC20 {
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
 
-    constructor(string memory _name, string memory _symbol, uint256 _totalSupply) {
+    constructor(string memory _name, string memory _symbol, uint256 _initialSupply) {
         name = _name;
         symbol = _symbol;
-        totalSupply = _totalSupply;
-        balanceOf[msg.sender] = _totalSupply;
-        emit Transfer(address(0), msg.sender, _totalSupply);
-    }
-
-    function transfer(address to, uint256 amount) external returns (bool) {
-        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
-        balanceOf[msg.sender] -= amount;
-        balanceOf[to] += amount;
-        emit Transfer(msg.sender, to, amount);
-        return true;
+        if (_initialSupply > 0) {
+            balanceOf[msg.sender] = _initialSupply;
+            totalSupply = _initialSupply;
+            emit Transfer(address(0), msg.sender, _initialSupply);
+        }
     }
 
     function transferFrom(address from, address to, uint256 amount) external returns (bool) {
         require(balanceOf[from] >= amount, "Insufficient balance");
         require(allowance[from][msg.sender] >= amount, "Insufficient allowance");
-        
         balanceOf[from] -= amount;
         balanceOf[to] += amount;
         allowance[from][msg.sender] -= amount;
-        
         emit Transfer(from, to, amount);
         return true;
     }
@@ -47,8 +39,8 @@ contract MockERC20 {
     }
 
     function mint(address to, uint256 amount) external {
-        totalSupply += amount;
         balanceOf[to] += amount;
+        totalSupply += amount;
         emit Transfer(address(0), to, amount);
     }
 
@@ -57,5 +49,13 @@ contract MockERC20 {
         balanceOf[msg.sender] -= amount;
         totalSupply -= amount;
         emit Transfer(msg.sender, address(0), amount);
+    }
+
+    function transfer(address to, uint256 amount) external returns (bool) {
+        require(balanceOf[msg.sender] >= amount, "Insufficient balance");
+        balanceOf[msg.sender] -= amount;
+        balanceOf[to] += amount;
+        emit Transfer(msg.sender, to, amount);
+        return true;
     }
 }

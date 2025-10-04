@@ -220,23 +220,53 @@ export default function InvestorLoginPage() {
         <div className="max-w-7xl mx-auto">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-4 group cursor-pointer">
+              {/* Ultra Fancy Elegant Logo with Multiple Layers */}
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-500"></div>
-                <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
-            <Image
-              src="/logo.png"
-              alt="Hedarvest Logo"
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 group-hover:scale-110 transition-transform duration-300"
-                  />
+                {/* Outer Glow Ring - Animated Pulse */}
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-300 via-emerald-400 to-teal-400 rounded-3xl blur-2xl opacity-60 group-hover:opacity-90 transition-all duration-700 animate-pulse"></div>
+                
+                {/* Middle Glow Ring - Rotating */}
+                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-cyan-400 to-amber-400 rounded-3xl blur-xl opacity-40 group-hover:opacity-70 transition-all duration-500 group-hover:animate-spin" style={{animationDuration: '8s'}}></div>
+                
+                {/* Inner Shadow Ring */}
+                <div className="absolute inset-1 bg-gradient-to-br from-white/20 to-transparent rounded-3xl blur-sm opacity-50 group-hover:opacity-80 transition-opacity duration-500"></div>
+                
+                {/* Gradient Border Container with Shine Effect */}
+                <div className="relative bg-gradient-to-br from-amber-400 via-emerald-500 to-teal-600 p-1.5 rounded-3xl shadow-2xl group-hover:shadow-emerald-500/50 transition-all duration-500 group-hover:scale-110 overflow-hidden">
+                  {/* Animated Shine Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                  
+                  {/* Inner White Background with Gradient */}
+                  <div className="relative bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/30 rounded-[20px] p-3 backdrop-blur-xl">
+                    {/* Logo Image with Enhanced Effects */}
+                    <div className="relative">
+                      <Image
+                        src="/logo.png"
+                        alt="Hedarvest Logo"
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 group-hover:scale-125 group-hover:rotate-6 transition-all duration-500 drop-shadow-xl relative z-10"
+                      />
+                      {/* Logo Inner Glow */}
+                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/30 to-teal-400/30 rounded-xl blur-md group-hover:blur-lg transition-all duration-500"></div>
+                    </div>
+                  </div>
                 </div>
+                
+                {/* Floating Particles Effect */}
+                <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping"></div>
+                <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-emerald-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping" style={{animationDelay: '0.3s'}}></div>
+                <div className="absolute top-0 left-1/2 w-1.5 h-1.5 bg-teal-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping" style={{animationDelay: '0.6s'}}></div>
               </div>
+              
               <div>
-                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300 inline-block">
                   Hedarvest
                 </span>
-                <div className="text-xs text-emerald-600 font-medium">Agricultural DeFi Platform</div>
+                <div className="text-xs text-emerald-600 font-medium flex items-center gap-2">
+                  <span>Agricultural DeFi Platform</span>
+                  <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
+                </div>
               </div>
           </div>
 

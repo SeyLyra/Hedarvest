@@ -866,4 +866,10 @@ interface IHederaTokenService {
     /// @param nftIDs Array of NFT IDs to reject
     /// @return responseCode The response code for the status of the request. SUCCESS is 22.
     function rejectTokens(address rejectingAddress, address[] memory ftAddresses, NftID[] memory nftIDs) external returns (int64 responseCode);
+    
+    /// @notice Check if a token is associated with an account
+    /// @param account The account to check
+    /// @param token The token address to check
+    /// @return responseCode The response code for the status of the request. SUCCESS is 22.
+    function isAssociated(address account, address token) external view returns (int responseCode);
 }
