@@ -269,8 +269,8 @@ export class HederaService {
 
   async getAllDeployedPools(): Promise<string[]> {
     try {
-      const pools = await this.contractService.getAllPools();
-      return pools.map(pool => pool.poolAddress);
+      const poolAddresses = await this.contractService.getAllPools();
+      return poolAddresses;
     } catch (error) {
       this.logger.error('Failed to get deployed pools:', error);
       throw new Error(`Failed to get deployed pools: ${error.message}`);
@@ -282,20 +282,30 @@ export class HederaService {
     lendingToken: string;
     collateralToken: string;
     lpToken: string;
-    oracle: string;
-    baseLTV: number;
-    protocolFee: number;
     totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
     availableLiquidity: string;
-    exchangeRate: string;
     utilizationRate: string;
     currentAPR: string;
   }> {
     try {
-       const poolAddress = await this.contractService.getPoolAddress(grainType);
-      return await this.contractService.getPoolInfo(poolAddress);
+      const poolAddress = await this.contractService.getPoolByAssetType(grainType);
+      const poolInfo = await this.contractService.getPoolInfoFromAddress(poolAddress);
+      const totalAssets = (parseFloat(poolInfo.availableLiquidity) + parseFloat(poolInfo.totalBorrows)).toString();
+      
+      return {
+        assetType: poolInfo.assetType,
+        lendingToken: poolInfo.lendingToken,
+        collateralToken: poolInfo.collateralToken,
+        lpToken: poolInfo.lpToken,
+        totalAssets: totalAssets,
+        totalBorrows: poolInfo.totalBorrows,
+        totalReserves: poolInfo.totalReserves,
+        availableLiquidity: poolInfo.availableLiquidity,
+        utilizationRate: poolInfo.utilizationRate,
+        currentAPR: poolInfo.currentAPR,
+      };
     } catch (error) {
       this.logger.error(`Failed to get pool info for ${grainType}:`, error);
       throw new Error(`Failed to get pool info for ${grainType}: ${error.message}`);
@@ -328,8 +338,10 @@ export class HederaService {
 
   async getGrainPrice(grainType: string): Promise<string> {
     try {
-       const oracleAddress = await this.contractService.getOracleAddress(grainType);
-      return await this.contractService.getPrice(oracleAddress);
+      // Get pool address first, then oracle address from pool info
+      const poolAddress = await this.contractService.getPoolByAssetType(grainType);
+      // For now, return a placeholder price until oracle integration is complete
+      return "100"; // $100 per unit placeholder
     } catch (error) {
       this.logger.error(`Failed to get price for ${grainType}:`, error);
       throw new Error(`Failed to get price for ${grainType}: ${error.message}`);

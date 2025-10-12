@@ -16,10 +16,11 @@ interface HashPackWalletState {
   isHashPackAvailable: boolean;
   hbarBalance: string | null;
   fetchBalance: () => Promise<void>;
+  hashconnect: any;
 }
 
 export const useWalletConnect = (): HashPackWalletState => {
-  const { connect: connectHashPack, disconnect: disconnectHashPack, isConnected, accountId, isLoading, error, hbarBalance, fetchBalance } = useHashPackDirect();
+  const { connect: connectHashPack, disconnect: disconnectHashPack, isConnected, accountId, isLoading, error, hbarBalance, fetchBalance, hashconnect } = useHashPackDirect();
   const [isConnecting, setIsConnecting] = useState(false);
 
   const connect = useCallback(async () => {
@@ -71,6 +72,7 @@ export const useWalletConnect = (): HashPackWalletState => {
     signMessage,
     isHashPackAvailable: isHashPackAvailable(),
     hbarBalance,
-    fetchBalance
+    fetchBalance,
+    hashconnect
   };
 };

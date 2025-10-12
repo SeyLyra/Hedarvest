@@ -112,8 +112,8 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-emerald-600" />
-          <p className="text-emerald-700">Loading portfolio...</p>
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-emerald-500 dark:text-emerald-400" />
+          <p className="text-emerald-700/80 dark:text-emerald-300/70">Loading portfolio...</p>
         </div>
       </div>
     );
@@ -124,13 +124,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-700 via-teal-600 to-green-700 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent">
             Portfolio
           </h1>
-          <p className="text-emerald-600 text-lg font-medium">Track your investments and earnings</p>
+          <p className="text-emerald-600/80 dark:text-emerald-300/70 text-lg font-medium">Track your investments and earnings</p>
           <div className="flex items-center gap-2 mt-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-emerald-600 font-medium">Real-time Updates</span>
+            <div className="w-2 h-2 bg-emerald-400 dark:bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-emerald-600/80 dark:text-emerald-300/80 font-medium">Real-time Updates</span>
           </div>
         </div>
         <div className="flex items-center gap-3">
@@ -138,14 +138,14 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
             variant="outline"
             size="sm"
             onClick={() => setShowValues(!showValues)}
-            className="text-emerald-600 border-emerald-200 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-lg"
+            className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-teal-50/80 dark:hover:from-emerald-500/10 dark:hover:to-teal-500/10 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-md"
           >
             {showValues ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
             {showValues ? 'Hide' : 'Show'} Values
           </Button>
           <Button
             variant="outline"
-            className="text-emerald-600 border-emerald-200 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-lg"
+            className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-teal-50/80 dark:hover:from-emerald-500/10 dark:hover:to-teal-500/10 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-md"
           >
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
@@ -155,13 +155,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
 
       {/* Portfolio Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200">
+        <Card className="bg-gradient-to-br from-emerald-50/70 to-teal-50/70 dark:from-emerald-500/10 dark:to-teal-500/10 border-emerald-200/50 dark:border-emerald-500/15 shadow-md">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-emerald-600" />
+              <DollarSign className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />
               <div>
-                <p className="text-sm text-emerald-600">Total Deposited</p>
-                <p className="text-2xl font-bold text-emerald-800">
+                <p className="text-sm text-emerald-600/80 dark:text-emerald-300/80">Total Deposited</p>
+                <p className="text-2xl font-bold text-emerald-800 dark:text-emerald-200">
                   {showValues ? formatCurrency(totalDeposited) : '••••••'}
                 </p>
               </div>
@@ -169,13 +169,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 to-cyan-50 border-blue-200">
+        <Card className="bg-gradient-to-br from-teal-50/70 to-cyan-50/70 dark:from-teal-500/10 dark:to-cyan-500/10 border-teal-200/50 dark:border-teal-500/15 shadow-md">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
+              <TrendingUp className="w-5 h-5 text-teal-500 dark:text-teal-400" />
               <div>
-                <p className="text-sm text-blue-600">Earned Interest</p>
-                <p className="text-2xl font-bold text-blue-800">
+                <p className="text-sm text-teal-600/80 dark:text-teal-300/80">Earned Interest</p>
+                <p className="text-2xl font-bold text-teal-800 dark:text-teal-200">
                   {showValues ? formatCurrency(totalEarned) : '••••••'}
                 </p>
               </div>
@@ -183,13 +183,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 to-pink-50 border-purple-200">
+        <Card className="bg-gradient-to-br from-green-50/70 to-emerald-50/70 dark:from-green-500/10 dark:to-emerald-500/10 border-green-200/50 dark:border-green-500/15 shadow-md">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <PieChart className="w-5 h-5 text-purple-600" />
+              <PieChart className="w-5 h-5 text-green-500 dark:text-green-400" />
               <div>
-                <p className="text-sm text-purple-600">Current Value</p>
-                <p className="text-2xl font-bold text-purple-800">
+                <p className="text-sm text-green-600/80 dark:text-green-300/80">Current Value</p>
+                <p className="text-2xl font-bold text-green-800 dark:text-green-200">
                   {showValues ? formatCurrency(totalValue) : '••••••'}
                 </p>
               </div>
@@ -197,13 +197,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 to-red-50 border-orange-200">
+        <Card className="bg-gradient-to-br from-lime-50/70 to-green-50/70 dark:from-lime-500/10 dark:to-green-500/10 border-lime-200/50 dark:border-lime-500/15 shadow-md">
           <CardContent className="p-4">
             <div className="flex items-center gap-2">
-              <Activity className="w-5 h-5 text-orange-600" />
+              <Activity className="w-5 h-5 text-lime-500 dark:text-lime-400" />
               <div>
-                <p className="text-sm text-orange-600">Health Score</p>
-                <p className="text-2xl font-bold text-orange-800">
+                <p className="text-sm text-lime-600/80 dark:text-lime-300/80">Health Score</p>
+                <p className="text-2xl font-bold text-lime-800 dark:text-lime-200">
                   {avgHealthScore.toFixed(0)}%
                 </p>
               </div>
@@ -214,24 +214,24 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
 
       {/* Positions */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold text-emerald-800">Your Positions</h2>
+        <h2 className="text-xl font-semibold text-emerald-800 dark:text-emerald-200">Your Positions</h2>
         
         {positions.length === 0 ? (
-          <Card className="bg-white/80 backdrop-blur-sm border-emerald-200">
+          <Card className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 shadow-md">
             <CardContent className="p-8 text-center">
-              <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <PieChart className="w-8 h-8 text-emerald-600" />
+              <div className="w-16 h-16 bg-emerald-100/80 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                <PieChart className="w-8 h-8 text-emerald-500 dark:text-emerald-400" />
               </div>
-              <h3 className="text-lg font-semibold text-emerald-800 mb-2">No Positions Yet</h3>
-              <p className="text-emerald-600">Start investing in pools to see your portfolio here.</p>
+              <h3 className="text-lg font-semibold text-emerald-800 dark:text-emerald-200 mb-2">No Positions Yet</h3>
+              <p className="text-emerald-600/80 dark:text-emerald-300/70">Start investing in pools to see your portfolio here.</p>
             </CardContent>
           </Card>
         ) : (
           positions.map((position) => (
-            <Card key={position.id} className="bg-white/80 backdrop-blur-sm border-emerald-200 hover:shadow-lg transition-all duration-300">
+            <Card key={position.id} className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:shadow-lg transition-all duration-300">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl text-emerald-800">{position.grainType}</CardTitle>
+                  <CardTitle className="text-xl text-emerald-800 dark:text-emerald-200">{position.grainType}</CardTitle>
                   <Badge 
                     variant="secondary" 
                     className={`${getHealthColor(position.healthScore)} border-0`}
@@ -244,30 +244,30 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
               <CardContent className="space-y-4">
                 {/* Position Stats */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-emerald-50 rounded-lg p-3">
-                    <p className="text-xs text-emerald-600 mb-1">Deposited</p>
-                    <p className="font-bold text-emerald-800">
+                  <div className="bg-emerald-50/80 dark:bg-emerald-500/10 rounded-lg p-3">
+                    <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mb-1">Deposited</p>
+                    <p className="font-bold text-emerald-800 dark:text-emerald-200">
                       {showValues ? formatCurrency(position.amountDeposited) : '••••••'}
                     </p>
                   </div>
                   
-                  <div className="bg-blue-50 rounded-lg p-3">
-                    <p className="text-xs text-blue-600 mb-1">LP Tokens</p>
-                    <p className="font-bold text-blue-800">
+                  <div className="bg-teal-50/80 dark:bg-teal-500/10 rounded-lg p-3">
+                    <p className="text-xs text-teal-600/80 dark:text-teal-300/80 mb-1">LP Tokens</p>
+                    <p className="font-bold text-teal-800 dark:text-teal-200">
                       {showValues ? position.lpTokens.toFixed(2) : '••••••'}
                     </p>
                   </div>
                   
-                  <div className="bg-green-50 rounded-lg p-3">
-                    <p className="text-xs text-green-600 mb-1">Earned Interest</p>
-                    <p className="font-bold text-green-800">
+                  <div className="bg-green-50/80 dark:bg-green-500/10 rounded-lg p-3">
+                    <p className="text-xs text-green-600/80 dark:text-green-300/80 mb-1">Earned Interest</p>
+                    <p className="font-bold text-green-800 dark:text-green-200">
                       {showValues ? formatCurrency(position.earnedInterest) : '••••••'}
                     </p>
                   </div>
                   
-                  <div className="bg-purple-50 rounded-lg p-3">
-                    <p className="text-xs text-purple-600 mb-1">Current Value</p>
-                    <p className="font-bold text-purple-800">
+                  <div className="bg-lime-50/80 dark:bg-lime-500/10 rounded-lg p-3">
+                    <p className="text-xs text-lime-600/80 dark:text-lime-300/80 mb-1">Current Value</p>
+                    <p className="font-bold text-lime-800 dark:text-lime-200">
                       {showValues ? formatCurrency(position.currentValue) : '••••••'}
                     </p>
                   </div>
@@ -293,14 +293,14 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
                 </div>
 
                 {/* Pool Info */}
-                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-200">
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-emerald-100 dark:border-emerald-500/15">
                   <div className="text-center">
-                    <p className="text-xs text-gray-600">Pool APR</p>
-                    <p className="font-semibold text-emerald-800">{position.apr}%</p>
+                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Pool APR</p>
+                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{position.apr}%</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-gray-600">Utilization</p>
-                    <p className="font-semibold text-emerald-800">{position.utilizationRate}%</p>
+                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Utilization</p>
+                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{position.utilizationRate}%</p>
                   </div>
                 </div>
               </CardContent>
@@ -310,15 +310,15 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
       </div>
 
       {/* Performance Chart Placeholder */}
-      <Card className="bg-white/80 backdrop-blur-sm border-emerald-200">
+      <Card className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 shadow-md">
         <CardHeader>
-          <CardTitle className="text-emerald-800">Performance Overview</CardTitle>
+          <CardTitle className="text-emerald-800 dark:text-emerald-200">Performance Overview</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="h-64 bg-gradient-to-br from-emerald-50 to-teal-50 rounded-lg flex items-center justify-center">
+          <div className="h-64 bg-gradient-to-br from-emerald-50/70 to-teal-50/70 dark:from-emerald-500/5 dark:to-teal-500/5 rounded-lg flex items-center justify-center">
             <div className="text-center">
-              <PieChart className="w-12 h-12 text-emerald-400 mx-auto mb-2" />
-              <p className="text-emerald-600">Performance chart coming soon</p>
+              <PieChart className="w-12 h-12 text-emerald-400 dark:text-emerald-500 mx-auto mb-2" />
+              <p className="text-emerald-600/80 dark:text-emerald-300/70">Performance chart coming soon</p>
             </div>
           </div>
         </CardContent>

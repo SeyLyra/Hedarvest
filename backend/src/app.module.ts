@@ -7,13 +7,11 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { FarmerModule } from './farmer/farmer.module';
 import { AgentModule } from './agent/agent.module';
-import { PoolModule } from './pool/pool.module';
 import { PoolsModule } from './pools/pools.module';
 import { InvestorModule } from './investor/investor.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { HcsModule } from './hcs/hcs.module';
 import { FaucetModule } from './faucet/faucet.module';
-import { OptimizedModule } from './optimized/optimized.module';
 
 @Module({
   imports: [
@@ -28,12 +26,10 @@ import { OptimizedModule } from './optimized/optimized.module';
     AuthModule,
     FarmerModule,
     AgentModule,
-    PoolModule,
     PoolsModule,
     InvestorModule,
     TransactionModule,
     FaucetModule,
-    OptimizedModule,
   ],
   controllers: [AppController],
   providers: [

@@ -6,12 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets } from "lucide-react";
+import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets, Moon, Sun } from "lucide-react";
 import Image from "next/image";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
 import PoolsPage from "@/components/PoolsPage";
 import PortfolioPage from "@/components/PortfolioPage";
 import FaucetPage from "@/components/FaucetPage";
+import { useTheme } from "next-themes";
 
 // API base URL
 const API_BASE_URL = typeof window !== 'undefined' 
@@ -23,11 +24,14 @@ export default function InvestorDashboard() {
   const [activeTab, setActiveTab] = useState('pools');
   const [isClient, setIsClient] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const { theme, setTheme } = useTheme();
   
   // Wallet integration
-  const { address, isConnected, hbarBalance, fetchBalance, disconnect, connect, isConnecting } = useWalletConnect();
+  const { address, isConnected, hbarBalance, fetchBalance, disconnect, connect, isConnecting, hashconnect } = useWalletConnect();
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [usdtBalance, setUsdtBalance] = useState<string>("0");
+  const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Ensure we're on the client side
   useEffect(() => {
@@ -38,8 +42,27 @@ export default function InvestorDashboard() {
   useEffect(() => {
     if (address) {
       setUserAddress(address);
+      fetchUsdtBalance(address);
     }
   }, [address]);
+
+  // Fetch USDT balance
+  const fetchUsdtBalance = async (walletAddress: string) => {
+    if (!walletAddress) return;
+    
+    setIsLoadingBalance(true);
+    try {
+      const response = await fetch(`/api/faucet/balance/${walletAddress}`);
+      if (response.ok) {
+        const result = await response.json();
+        setUsdtBalance(result.balance || "0");
+      }
+    } catch (error) {
+      console.error('Failed to fetch USDT balance:', error);
+    } finally {
+      setIsLoadingBalance(false);
+    }
+  };
 
   // Authenticate with backend when wallet connects
   useEffect(() => {
@@ -154,10 +177,10 @@ export default function InvestorDashboard() {
   // Show loading state during hydration
   if (!isClient) {
   return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500 mx-auto mb-4"></div>
-          <p className="text-emerald-700">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
+          <p className="text-emerald-700/80">Loading...</p>
         </div>
       </div>
     );
@@ -166,18 +189,18 @@ export default function InvestorDashboard() {
   // Show wallet connection required if not connected
   if (!isConnected) {
     return (
-      <div className="min-h-screen animated-bg flex items-center justify-center">
-        <Card className="w-full max-w-md bg-white/80 backdrop-blur-sm border-emerald-200">
+      <div className="min-h-screen bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711] flex items-center justify-center">
+        <Card className="w-full max-w-md bg-white/95 dark:bg-[#121a16]/95 backdrop-blur-sm border-emerald-100 dark:border-emerald-500/15 shadow-xl">
           <CardContent className="p-8 text-center">
-            <Wallet className="w-16 h-16 text-emerald-600 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-emerald-800 mb-2">Wallet Required</h2>
-            <p className="text-emerald-600 mb-6">
+            <Wallet className="w-16 h-16 text-emerald-500 dark:text-emerald-400 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-emerald-800 dark:text-emerald-200 mb-2">Wallet Required</h2>
+            <p className="text-emerald-600/80 dark:text-emerald-300/70 mb-6">
               Please connect your HashPack wallet to access the investor dashboard.
             </p>
             <Button 
               onClick={connect}
               disabled={isConnecting}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white"
+              className="bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white shadow-lg"
             >
               {isConnecting ? (
                 <>
@@ -195,31 +218,28 @@ export default function InvestorDashboard() {
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Ultra Fancy White-Dominant Background with Modern Green */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50 to-teal-50">
-        <div className="absolute inset-0 opacity-30" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23F0FDF4' fill-opacity='0.3'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-        }}></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 animate-pulse-slow"></div>
+    <div className="min-h-screen relative overflow-hidden bg-white dark:bg-[#0d1410]">
+      {/* Elegant Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/5 via-teal-400/5 to-green-400/5 dark:from-emerald-500/5 dark:via-teal-500/5 dark:to-green-500/5 animate-pulse-slow"></div>
       </div>
 
-      {/* Floating Modern Green Shapes */}
+      {/* Subtle Floating Shapes */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-r from-emerald-200/30 to-teal-300/30 rounded-full blur-xl animate-float"></div>
-        <div className="absolute top-40 right-20 w-32 h-32 bg-gradient-to-r from-teal-200/30 to-cyan-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '2s'}}></div>
-        <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-gradient-to-r from-green-200/30 to-emerald-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '4s'}}></div>
-        <div className="absolute top-60 right-1/3 w-16 h-16 bg-gradient-to-r from-mint-200/30 to-teal-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-20 left-10 w-32 h-32 bg-gradient-to-r from-emerald-200/20 to-teal-200/20 dark:from-emerald-400/5 dark:to-teal-400/5 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute top-40 right-20 w-40 h-40 bg-gradient-to-r from-teal-200/20 to-green-200/20 dark:from-teal-400/5 dark:to-green-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}}></div>
+        <div className="absolute bottom-40 left-1/4 w-36 h-36 bg-gradient-to-r from-green-200/20 to-emerald-200/20 dark:from-green-400/5 dark:to-emerald-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-60 right-1/3 w-28 h-28 bg-gradient-to-r from-mint-200/20 to-teal-200/20 dark:from-emerald-400/5 dark:to-teal-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '1s'}}></div>
       </div>
 
       {/* Top Navigation */}
-      <div className="relative z-50 bg-gradient-to-r from-white/95 via-white/90 to-white/85 backdrop-blur-3xl border-b border-white/30 shadow-2xl">
+      <div className="relative z-50 bg-white/90 dark:bg-[#121a16]/95 backdrop-blur-xl border-b border-emerald-100/50 dark:border-emerald-500/10 shadow-lg">
         <div className="px-8 py-4">
           {/* Header with Logo and Wallet */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4 group cursor-pointer">
               <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-75 group-hover:opacity-100 transition-opacity duration-500"></div>
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity duration-500"></div>
                 <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
                   <Image
                     src="/logo.png"
@@ -231,40 +251,62 @@ export default function InvestorDashboard() {
                 </div>
               </div>
               <div>
-                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-500 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
                   Hedarvest
                 </span>
-                <div className="text-xs text-emerald-600 font-medium">Agricultural DeFi Platform</div>
+                <div className="text-xs text-emerald-600/70 dark:text-emerald-400/60 font-medium">Agricultural DeFi Platform</div>
               </div>
             </div>
             
             {/* Wallet Status */}
-            <div className="flex items-center gap-4">
-              <Card className="bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border-emerald-200/50 shadow-xl backdrop-blur-sm">
+            <div className="flex items-center gap-3">
+              <Card className="bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-500/10 dark:to-teal-500/10 border-emerald-100/60 dark:border-emerald-500/15 shadow-lg backdrop-blur-sm">
                 <CardContent className="p-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25">
+                    <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 rounded-xl flex items-center justify-center shadow-md shadow-emerald-400/20 dark:shadow-emerald-500/10">
                       <Wallet className="w-5 h-5 text-white" />
                     </div>
                     <div className="text-sm">
-                      <div className="font-bold text-emerald-800">
+                      <div className="font-bold text-emerald-800 dark:text-emerald-200">
                         {userAddress ? `${userAddress.slice(0, 6)}...${userAddress.slice(-4)}` : 'Connected'}
                       </div>
+                      <div className="space-y-0.5">
                       {hbarBalance && (
-                        <div className="text-xs text-emerald-600 font-mono">
-                          {hbarBalance} HBAR
+                          <div className="text-xs text-emerald-600/80 dark:text-emerald-300/80 font-mono">
+                            ℏ {hbarBalance} HBAR
+                          </div>
+                        )}
+                        <div className="text-xs text-teal-600/80 dark:text-teal-400/80 font-mono flex items-center gap-1">
+                          {isLoadingBalance ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <span>💵 {usdtBalance} USDT</span>
+                          )}
                         </div>
-                      )}
+                      </div>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               
               <Button
+                onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                variant="outline"
+                size="sm"
+                className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-500/10 transition-all duration-300 hover:scale-105 shadow-md"
+              >
+                {theme === "dark" ? (
+                  <Sun className="w-4 h-4" />
+                ) : (
+                  <Moon className="w-4 h-4" />
+                )}
+              </Button>
+              
+              <Button
                 onClick={handleDisconnect}
                 variant="outline"
                 size="sm"
-                className="text-red-600 border-red-200 hover:bg-gradient-to-r hover:from-red-50 hover:to-pink-50 hover:border-red-300 transition-all duration-300 hover:scale-105 shadow-lg"
+                className="text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20 hover:bg-gradient-to-r hover:from-rose-50 hover:to-red-50 dark:hover:from-rose-500/10 dark:hover:to-red-500/10 hover:border-rose-300 transition-all duration-300 hover:scale-105 shadow-md"
               >
                 <LogOut className="w-4 h-4 mr-2" />
                 Disconnect
@@ -273,7 +315,7 @@ export default function InvestorDashboard() {
           </div>
 
           {/* Compact Tab Navigation */}
-          <div className="flex space-x-2 bg-white/60 backdrop-blur-xl rounded-2xl p-2 shadow-inner border border-white/20">
+          <div className="flex space-x-2 bg-emerald-50/40 dark:bg-emerald-500/5 backdrop-blur-xl rounded-2xl p-2 shadow-inner border border-emerald-100/40 dark:border-emerald-500/10">
             {[
               { id: 'pools', label: 'Pools', icon: Coins, description: 'Investment' },
               { id: 'portfolio', label: 'Portfolio', icon: PieChart, description: 'Investments' },
@@ -288,8 +330,8 @@ export default function InvestorDashboard() {
                   variant={isActive ? "default" : "ghost"}
                   className={`flex-1 h-10 rounded-xl transition-all duration-300 group relative overflow-hidden ${
                     isActive 
-                      ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25 scale-105' 
-                      : 'text-emerald-700 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 hover:scale-105 hover:shadow-md'
+                      ? 'bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 text-white shadow-lg shadow-emerald-400/20 dark:shadow-emerald-500/10 scale-105' 
+                      : 'text-emerald-700 dark:text-emerald-300 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-teal-50/80 dark:hover:from-emerald-500/10 dark:hover:to-teal-500/10 hover:scale-105 hover:shadow-md'
                   }`}
                   onClick={() => setActiveTab(tab.id)}
                 >
@@ -297,7 +339,7 @@ export default function InvestorDashboard() {
                     <div className="absolute inset-0 bg-gradient-to-r from-white/20 to-transparent"></div>
                   )}
                   <div className="flex items-center gap-2 relative z-10">
-                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-emerald-600'}`} />
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-emerald-500 dark:text-emerald-400'}`} />
                     <div className="flex flex-col items-start">
                       <span className="font-semibold text-xs">{tab.label}</span>
                       <span className="text-xs opacity-75">{tab.description}</span>
@@ -325,7 +367,11 @@ export default function InvestorDashboard() {
         )}
         
         {activeTab === 'faucet' && (
-          <FaucetPage userAddress={userAddress} />
+          <FaucetPage 
+            userAddress={userAddress} 
+            onBalanceUpdate={() => fetchUsdtBalance(userAddress)}
+            hashconnect={hashconnect}
+          />
         )}
       </div>
     </div>

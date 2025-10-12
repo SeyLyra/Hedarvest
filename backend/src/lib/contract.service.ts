@@ -1,38 +1,73 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ethers } from 'ethers';
 
-// Updated contract ABIs for LendingFactory and LendingPool
-const LENDING_FACTORY_ABI = [
-  'function getAllPools() external view returns (tuple(address poolAddress, address oracleAddress, string assetType)[])',
-  'function getPool(string) external view returns (tuple(address poolAddress, address oracleAddress, string assetType))',
+// Updated contract ABIs for PoolFactory and LendingPool based on new smart contracts
+const POOL_FACTORY_ABI = [
+  'function getAllPools() external view returns (address[])',
+  'function getPool(string) external view returns (address)',
+  'function isPoolExists(string) external view returns (bool)',
+  'function getPoolInfo(string) external view returns (tuple(address poolAddress, string assetType, address lendingToken, address collateralToken, address lpToken, uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool exists))',
+  'function getPoolStatsByAsset(string) external view returns (tuple(address poolAddress, string assetType, uint256 totalAssets, uint256 totalBorrows, uint256 totalReserves, uint256 availableLiquidity, uint256 utilizationRate, uint256 borrowRate, uint256 supplyRate, uint256 activePositions))',
+  'function getBorrowerPositions(string, address) external view returns (uint256[])',
+  'function getAllBorrowerPositions(address) external view returns (tuple(string assetType, address poolAddress, uint256[] positionIds, uint256 totalCollateral, uint256 totalDebt, uint256 averageHealthFactor)[])',
+  'function getPositionDetails(string, address, uint256) external view returns (uint256 collateral, uint256 debt, uint256 healthFactor, bool active, uint256 maxBorrowCapacity, uint256 availableToBorrow)',
+  'function isAssetConfigured(string) external view returns (bool)',
+  'function getAssetConfig(string) external view returns (uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool configured)',
 ];
 
 const LENDING_POOL_ABI = [
-  'function assetType() external view returns (string)',
+  // Core pool information
+  'function getAssetType() external view returns (string)',
+  'function getCollateralToken() external view returns (address)',
   'function lendingToken() external view returns (address)',
   'function collateralToken() external view returns (address)',
   'function lpToken() external view returns (address)',
-  'function priceOracle() external view returns (address)',
-  'function baseLTV() external view returns (uint256)',
-  'function protocolFee() external view returns (uint256)',
-  'function totalAssets() external view returns (uint256)',
-  'function totalBorrows() external view returns (uint256)',
-  'function totalReserves() external view returns (uint256)',
+  
+  // Pool statistics
+  'function getPoolStats() external view returns (uint256 totalAssets, uint256 totalBorrows, uint256 totalReserves, uint256 utilizationRate, uint256 borrowRate, uint256 supplyRate, uint256 activePositions, uint256 availableLiquidity)',
   'function availableLiquidity() external view returns (uint256)',
-  'function exchangeRate() external view returns (uint256)',
   'function utilizationRate() external view returns (uint256)',
   'function currentAPR() external view returns (uint256)',
-  'function borrows(address) external view returns (uint256)',
-  'function collateral(address) external view returns (uint256)',
-  'function lpShares(address) external view returns (uint256)',
-  'function deposit(uint256 amount) external',
-  'function withdraw(uint256 shares) external',
-  'function depositCollateral(uint256 amount) external',
-  'function createLoan(uint256 amount) external',
-  'function repayLoan(uint256 amount) external',
-  'function liquidate(address borrower) external',
-  'function getCurrentBorrowBalance(address borrower) external view returns (uint256)',
+  'function getTVL() external view returns (uint256)',
+  
+  // Interest rate functions
+  'function getUtilizationRate() external view returns (uint256)',
+  'function getBorrowRate() external view returns (uint256)',
+  'function getSupplyRate() external view returns (uint256)',
   'function accrueInterest() external',
+  
+  // Liquidity provider functions
+  'function deposit(uint256 amount) external',
+  'function withdraw(uint256 lpAmount) external',
+  'function getLPBalance(address user) external view returns (uint256)',
+  
+  // Position management functions
+  'function createPosition() external returns (uint256)',
+  'function depositCollateral(uint256 positionId, uint256 amount) external',
+  'function depositCollateralWithToken(uint256 positionId, address tokenAddress, uint256 amount) external',
+  'function borrow(uint256 positionId, uint256 amount) external',
+  'function repay(uint256 positionId, uint256 amount) external',
+  'function withdrawCollateral(uint256 positionId, uint256 amount) external',
+  'function closePosition(uint256 positionId) external',
+  
+  // Position query functions
+  'function getUserPositions(address user) external view returns (uint256[])',
+  'function getPositionDetails(address borrower, uint256 positionId) external view returns (uint256 collateral, uint256 debt, uint256 healthFactor, bool active, uint256 maxBorrowCapacity, uint256 availableToBorrow)',
+  'function getPositionDebt(address borrower, uint256 positionId) external view returns (uint256)',
+  'function getHealthFactor(address borrower, uint256 positionId) external view returns (uint256)',
+  'function getUserTotalCollateral(address user) external view returns (uint256)',
+  'function getUserSummary(address user) external view returns (uint256 totalCollateral, uint256 totalDebt, uint256 totalPositions, uint256 activePositions, uint256 lpBalance, uint256 averageHealthFactor)',
+  
+  // Collateral validation functions
+  'function isValidCollateral(address tokenAddress) external view returns (bool)',
+  'function validateCollateralDeposit(address tokenAddress, uint256 amount) external view returns (bool valid, string memory reason)',
+  'function getCollateralTokenInfo() external view returns (address tokenAddress, string memory assetName, bool isAssociated)',
+  'function canUserDepositToken(address user, address tokenAddress) external view returns (bool canDeposit, string memory reason)',
+  'function getValidCollateralTokens() external view returns (address[] memory tokens, string[] memory names)',
+  
+  // Risk parameters
+  'function getRiskParameters() external view returns (uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, uint256 minHealthFactor)',
+  'function getInterestRateModel() external view returns (uint256 baseRate, uint256 slope1, uint256 slope2, uint256 optimalUtilization, uint256 reserveFactor)',
 ];
 
 const MOCK_TOKEN_ABI = [
@@ -59,29 +94,67 @@ export class ContractService {
     this.initializeProvider();
   }
 
-  // Get token addresses from environment
+  // Get contract addresses from deployment data
+  getFactoryAddress(): string {
+    return (
+      process.env.POOL_FACTORY_ADDRESS ||
+      '0x5Cd3acdbfc7DDd2f61Cb07Bb15C8B12Bb62375D5'
+    );
+  }
+
+  getOracleAddress(): string {
+    return (
+      process.env.PRICE_ORACLE_ADDRESS ||
+      '0x022968dd00b5F11932AF0794a533e049c983bD6F'
+    );
+  }
+
   getLendingTokenAddress(): string {
-    return process.env.LENDING_TOKEN_ADDRESS || '';
+    return (
+      process.env.LENDING_TOKEN_ADDRESS ||
+      '0x00000000000000000000000000000000006a10d6'
+    );
   }
 
-  // Get specific pool addresses
-  getPoolAddresses(): { [key: string]: string } {
-    return {
-      rice: process.env.RICE_POOL_ADDRESS || '',
-      corn: process.env.CORN_POOL_ADDRESS || '',
-      wheat: process.env.WHEAT_POOL_ADDRESS || '',
-      soybean: process.env.SOYBEAN_POOL_ADDRESS || '',
-    };
-  }
 
-  // Get specific oracle addresses
-  getOracleAddresses(): { [key: string]: string } {
-    return {
-      rice: process.env.RICE_ORACLE_ADDRESS || '',
-      corn: process.env.CORN_ORACLE_ADDRESS || '',
-      wheat: process.env.WHEAT_ORACLE_ADDRESS || '',
-      soybean: process.env.SOYBEAN_ORACLE_ADDRESS || '',
-    };
+  // Get all pools with complete information dynamically
+  async getAllPoolsInfo(): Promise<Array<{
+    assetType: string;
+    poolAddress: string;
+    lendingToken: string;
+    collateralToken: string;
+    lpToken: string;
+    baseLTV: number;
+    liquidationThreshold: number;
+    liquidationBonus: number;
+  }>> {
+    try {
+      const factory = new ethers.Contract(
+        this.getFactoryAddress(),
+        POOL_FACTORY_ABI,
+        this.wallet,
+      );
+      
+      const allPoolsInfo = await factory.getAllPoolsInfo();
+      
+      return allPoolsInfo.map((poolInfo: any) => ({
+        assetType: poolInfo.assetType,
+        poolAddress: poolInfo.poolAddress,
+        lendingToken: poolInfo.lendingToken,
+        collateralToken: poolInfo.collateralToken,
+        lpToken: poolInfo.lpToken,
+        baseLTV: Number(poolInfo.baseLTV),
+        liquidationThreshold: Number(poolInfo.liquidationThreshold),
+        liquidationBonus: Number(poolInfo.liquidationBonus),
+      }));
+    } catch (error) {
+      this.logger.error('Failed to get all pools info:', error);
+      throw new Error(
+        `Failed to get all pools info: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
   }
 
   private initializeProvider(): void {
@@ -100,30 +173,28 @@ export class ContractService {
     }
   }
 
-  // LendingFactory interactions
-  async getAllPools(): Promise<
-    Array<{ poolAddress: string; oracleAddress: string; assetType: string }>
-  > {
+  // PoolFactory interactions
+  async getAllPools(): Promise<string[]> {
     const maxRetries = 3;
     const baseDelay = 1000; // 1 second
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const factoryAddress = process.env.LENDING_FACTORY_ADDRESS;
+        const factoryAddress = this.getFactoryAddress();
         this.logger.log(
           `Attempt ${attempt}: Attempting to get pools from factory at: ${factoryAddress}`,
         );
 
         if (!factoryAddress || factoryAddress.includes('XXXX')) {
           this.logger.warn(
-            'LENDING_FACTORY_ADDRESS not set or using placeholder value',
+            'POOL_FACTORY_ADDRESS not set or using placeholder value',
           );
           return [];
         }
 
         const factory = new ethers.Contract(
           factoryAddress,
-          LENDING_FACTORY_ABI,
+          POOL_FACTORY_ABI,
           this.wallet,
         );
 
@@ -153,6 +224,59 @@ export class ContractService {
     return [];
   }
 
+  async getPoolInfo(assetType: string): Promise<{
+    poolAddress: string;
+    assetType: string;
+    lendingToken: string;
+    collateralToken: string;
+    lpToken: string;
+    baseLTV: number;
+    liquidationThreshold: number;
+    liquidationBonus: number;
+    exists: boolean;
+  }> {
+    try {
+      const allPoolsInfo = await this.getAllPoolsInfo();
+      const poolInfo = allPoolsInfo.find(pool => 
+        pool.assetType.toLowerCase() === assetType.toLowerCase()
+      );
+      
+      if (!poolInfo) {
+        return {
+          poolAddress: '',
+          assetType,
+          lendingToken: '',
+          collateralToken: '',
+          lpToken: '',
+          baseLTV: 0,
+          liquidationThreshold: 0,
+          liquidationBonus: 0,
+          exists: false,
+        };
+      }
+      
+      return {
+        poolAddress: poolInfo.poolAddress,
+        assetType: poolInfo.assetType,
+        lendingToken: poolInfo.lendingToken,
+        collateralToken: poolInfo.collateralToken,
+        lpToken: poolInfo.lpToken,
+        baseLTV: poolInfo.baseLTV,
+        liquidationThreshold: poolInfo.liquidationThreshold,
+        liquidationBonus: poolInfo.liquidationBonus,
+        exists: true,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to get pool info for ${assetType}:`, error);
+      throw new Error(
+        `Failed to get pool info for ${assetType}: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+
   private calculateUtilization(
     availableLiquidity: string,
     totalBorrows: string,
@@ -167,12 +291,11 @@ export class ContractService {
   async getPoolByAssetType(assetType: string): Promise<string> {
     try {
       const factory = new ethers.Contract(
-        process.env.LENDING_FACTORY_ADDRESS!,
-        LENDING_FACTORY_ABI,
+        this.getFactoryAddress(),
+        POOL_FACTORY_ABI,
         this.wallet,
       );
-      const poolInfo = await factory.getPool(assetType);
-      return poolInfo.poolAddress;
+      return await factory.getPool(assetType);
     } catch (error) {
       this.logger.error(`Failed to get pool for ${assetType}:`, error);
       throw new Error(
@@ -184,21 +307,18 @@ export class ContractService {
   }
 
   // Get pool info directly from blockchain
-  async getPoolInfo(poolAddress: string): Promise<{
+  async getPoolInfoFromAddress(poolAddress: string): Promise<{
     assetType: string;
     lendingToken: string;
     collateralToken: string;
     lpToken: string;
-    oracle: string;
-    baseLTV: number;
-    protocolFee: number;
     totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
     availableLiquidity: string;
-    exchangeRate: string;
     utilizationRate: string;
     currentAPR: string;
+    activePositions: string;
   }> {
     try {
       const pool = new ethers.Contract(
@@ -207,53 +327,27 @@ export class ContractService {
         this.wallet,
       );
 
-      const [
-        assetType,
-        lendingToken,
-        collateralToken,
-        lpToken,
-        oracle,
-        baseLTV,
-        protocolFee,
-        totalAssets,
-        totalBorrows,
-        totalReserves,
-        availableLiquidity,
-        exchangeRate,
-        utilizationRate,
-        currentAPR,
-      ] = await Promise.all([
-        pool.assetType(),
-        pool.lendingToken(),
-        pool.collateralToken(),
-        pool.lpToken(),
-        pool.priceOracle(),
-        pool.baseLTV(),
-        pool.protocolFee(),
-        pool.totalAssets(),
-        pool.totalBorrows(),
-        pool.totalReserves(),
-        pool.availableLiquidity(),
-        pool.exchangeRate(),
-        pool.utilizationRate(),
-        pool.currentAPR(),
-      ]);
+      const [assetType, lendingToken, collateralToken, lpToken, poolStats] =
+        await Promise.all([
+          pool.getAssetType(),
+          pool.lendingToken(),
+          pool.getCollateralToken(),
+          pool.lpToken(),
+          pool.getPoolStats(),
+        ]);
 
       return {
         assetType,
         lendingToken,
         collateralToken,
         lpToken,
-        oracle,
-        baseLTV: Number(baseLTV),
-        protocolFee: Number(protocolFee),
-        totalAssets: totalAssets.toString(),
-        totalBorrows: totalBorrows.toString(),
-        totalReserves: totalReserves.toString(),
-        availableLiquidity: availableLiquidity.toString(),
-        exchangeRate: exchangeRate.toString(),
-        utilizationRate: utilizationRate.toString(),
-        currentAPR: currentAPR.toString(),
+        totalAssets: poolStats.totalAssets.toString(),
+        totalBorrows: poolStats.totalBorrows.toString(),
+        totalReserves: poolStats.totalReserves.toString(),
+        availableLiquidity: poolStats.availableLiquidity.toString(),
+        utilizationRate: poolStats.utilizationRate.toString(),
+        currentAPR: poolStats.borrowRate.toString(),
+        activePositions: poolStats.activePositions.toString(),
       };
     } catch (error) {
       this.logger.error(`Failed to get pool info for ${poolAddress}:`, error);
@@ -302,33 +396,27 @@ export class ContractService {
   async getPoolStatsByAssetType(assetType: string): Promise<{
     assetType: string;
     poolAddress: string;
-    oracleAddress: string;
     lendingTokenAddress: string;
     baseLtv: number;
-    protocolFee: number;
     availableLiquidity: string;
     totalBorrows: string;
     totalReserves: string;
     utilizationRate: string;
-    exchangeRate: string;
     currentAPR: string;
   }> {
     try {
       const poolAddress = await this.getPoolByAssetType(assetType);
-      const poolInfo = await this.getPoolInfo(poolAddress);
+      const poolInfo = await this.getPoolInfoFromAddress(poolAddress);
 
       return {
         assetType: poolInfo.assetType,
         poolAddress,
-        oracleAddress: poolInfo.oracle,
         lendingTokenAddress: poolInfo.lendingToken,
-        baseLtv: poolInfo.baseLTV,
-        protocolFee: poolInfo.protocolFee,
+        baseLtv: 0, // Will be fetched from risk parameters if needed
         availableLiquidity: poolInfo.availableLiquidity,
         totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,
         utilizationRate: poolInfo.utilizationRate,
-        exchangeRate: poolInfo.exchangeRate,
         currentAPR: poolInfo.currentAPR,
       };
     } catch (error) {
@@ -386,7 +474,8 @@ export class ContractService {
     }
   }
 
-  // Farmer functions
+
+  // Legacy method - creates position and deposits collateral
   async depositCollateral(
     poolAddress: string,
     amount: string,
@@ -397,10 +486,20 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.depositCollateral(amount);
+      
+      // Create position first
+      const createTx = await pool.createPosition();
+      await createTx.wait();
+      
+      // Get the position ID from the transaction receipt
+      const receipt = await createTx.wait();
+      const positionId = receipt.logs[0].args.positionId || 1; // Fallback to 1 if not found
+      
+      // Deposit collateral to the position
+      const tx = await pool.depositCollateral(positionId, amount);
       await tx.wait();
 
-      this.logger.log(`Deposited ${amount} collateral to pool ${poolAddress}`);
+      this.logger.log(`Deposited ${amount} collateral to position ${positionId} in pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(
@@ -415,6 +514,8 @@ export class ContractService {
     }
   }
 
+
+  // Legacy method - creates loan (borrows from position 1)
   async createLoan(poolAddress: string, amount: string): Promise<string> {
     try {
       const pool = new ethers.Contract(
@@ -422,7 +523,7 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.createLoan(amount);
+      const tx = await pool.borrow(1, amount); // Use position 1 as default
       await tx.wait();
 
       this.logger.log(`Created loan of ${amount} in pool ${poolAddress}`);
@@ -437,6 +538,7 @@ export class ContractService {
     }
   }
 
+  // Legacy method - repays loan (repays position 1)
   async repayLoan(poolAddress: string, amount: string): Promise<string> {
     try {
       const pool = new ethers.Contract(
@@ -444,7 +546,7 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.repayLoan(amount);
+      const tx = await pool.repay(1, amount); // Use position 1 as default
       await tx.wait();
 
       this.logger.log(`Repaid loan of ${amount} in pool ${poolAddress}`);
@@ -458,6 +560,8 @@ export class ContractService {
       );
     }
   }
+
+
 
   async liquidate(
     poolAddress: string,
@@ -489,43 +593,12 @@ export class ContractService {
     }
   }
 
-  // Get borrower position
-  async getBorrowerPosition(
-    poolAddress: string,
-    borrowerAddress: string,
-  ): Promise<{
-    borrowBalance: string;
-    collateralAmount: string;
-  }> {
-    try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      const [borrowBalance, collateralAmount] = await Promise.all([
-        pool.getCurrentBorrowBalance(borrowerAddress),
-        pool.collateral(borrowerAddress),
-      ]);
 
-      return {
-        borrowBalance: borrowBalance.toString(),
-        collateralAmount: collateralAmount.toString(),
-      };
-    } catch (error) {
-      this.logger.error(
-        `Failed to get borrower position for ${borrowerAddress}:`,
-        error,
-      );
-      throw new Error(
-        `Failed to get borrower position: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
-    }
-  }
 
-  // Get LP shares for an investor
+
+
+
+  // Legacy method - get LP shares
   async getLPShares(
     poolAddress: string,
     investorAddress: string,
@@ -536,8 +609,8 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const shares = await pool.lpShares(investorAddress);
-      return shares.toString();
+      const balance = await pool.getLPBalance(investorAddress);
+      return balance.toString();
     } catch (error) {
       this.logger.error(
         `Failed to get LP shares for ${investorAddress}:`,
@@ -550,6 +623,11 @@ export class ContractService {
       );
     }
   }
+
+
+
+
+
 
   // Token interactions
   async getTokenInfo(tokenAddress: string): Promise<{
@@ -631,6 +709,8 @@ export class ContractService {
     return this.getTokenBalance(collateralTokenAddress, userAddress);
   }
 
+
+
   // Oracle interactions
   async getPrice(oracleAddress: string): Promise<string> {
     try {
@@ -676,7 +756,7 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      return await pool.collateralToken();
+      return await pool.getCollateralToken();
     } catch (error) {
       this.logger.error(
         `Failed to get collateral token address for ${assetType}:`,
@@ -690,25 +770,7 @@ export class ContractService {
     }
   }
 
-  async getOracleAddress(assetType: string): Promise<string> {
-    try {
-      const poolAddress = await this.getPoolAddress(assetType);
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      return await pool.priceOracle();
-    } catch (error) {
-      this.logger.error(
-        `Failed to get oracle address for ${assetType}:`,
-        error,
-      );
-      throw new Error(
-        `Failed to get oracle address for ${assetType}: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
-      );
-    }
-  }
+
+
+
 }

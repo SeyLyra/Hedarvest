@@ -98,8 +98,8 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-emerald-600" />
-          <p className="text-emerald-700">Loading pools...</p>
+          <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-emerald-500 dark:text-emerald-400" />
+          <p className="text-emerald-700/80 dark:text-emerald-300/70">Loading pools...</p>
         </div>
       </div>
     );
@@ -110,19 +110,19 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-800 via-emerald-700 to-teal-800 bg-clip-text text-transparent">
+          <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-700 via-teal-600 to-green-700 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent">
             Investment Pools
           </h1>
-          <p className="text-emerald-600 text-lg">Discover and invest in agricultural lending pools</p>
+          <p className="text-emerald-600/80 dark:text-emerald-300/70 text-lg">Discover and invest in agricultural lending pools</p>
           <div className="flex items-center gap-2 mt-2">
-            <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-            <span className="text-sm text-emerald-600 font-medium">Live Data</span>
+            <div className="w-2 h-2 bg-emerald-400 dark:bg-emerald-500 rounded-full animate-pulse"></div>
+            <span className="text-sm text-emerald-600/80 dark:text-emerald-300/80 font-medium">Live Data</span>
           </div>
         </div>
         <Button
           onClick={fetchPools}
           variant="outline"
-          className="text-emerald-600 border-emerald-200 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-teal-50 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-lg"
+          className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-gradient-to-r hover:from-emerald-50/80 hover:to-teal-50/80 dark:hover:from-emerald-500/10 dark:hover:to-teal-500/10 hover:border-emerald-300 transition-all duration-300 hover:scale-105 shadow-md"
         >
           <RefreshCw className="w-4 h-4 mr-2" />
           Refresh
@@ -131,15 +131,15 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
 
       {/* Stats Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <Card className="bg-gradient-to-br from-emerald-50 via-emerald-100 to-teal-50 border-emerald-200/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+        <Card className="bg-gradient-to-br from-emerald-50/70 to-teal-50/70 dark:from-emerald-500/10 dark:to-teal-500/10 border-emerald-200/50 dark:border-emerald-500/15 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25">
+              <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 rounded-xl flex items-center justify-center shadow-md shadow-emerald-400/20 dark:shadow-emerald-500/10">
                 <DollarSign className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-emerald-600 mb-1">Total Value Locked</p>
-                <p className="text-3xl font-bold bg-gradient-to-r from-emerald-800 to-teal-800 bg-clip-text text-transparent">
+                <p className="text-sm font-medium text-emerald-600/80 dark:text-emerald-300/80 mb-1">Total Value Locked</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
                   ${formatNumber(pools.reduce((sum, pool) => sum + parseFloat(pool.availableLiquidity), 0).toString())}
                 </p>
               </div>
@@ -147,15 +147,15 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-blue-50 via-blue-100 to-cyan-50 border-blue-200/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+        <Card className="bg-gradient-to-br from-teal-50/70 to-cyan-50/70 dark:from-teal-500/10 dark:to-cyan-500/10 border-teal-200/50 dark:border-teal-500/15 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/25">
+              <div className="w-12 h-12 bg-gradient-to-br from-teal-400 to-cyan-500 dark:from-teal-500 dark:to-cyan-500 rounded-xl flex items-center justify-center shadow-md shadow-teal-400/20 dark:shadow-teal-500/10">
                 <TrendingUp className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-blue-600 mb-1">Average APR</p>
-                <p className="text-3xl font-bold bg-gradient-to-r from-blue-800 to-cyan-800 bg-clip-text text-transparent">
+                <p className="text-sm font-medium text-teal-600/80 dark:text-teal-300/80 mb-1">Average APR</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-teal-700 to-cyan-700 dark:from-teal-400 dark:to-cyan-400 bg-clip-text text-transparent">
                   {(pools.reduce((sum, pool) => sum + pool.apr, 0) / pools.length).toFixed(1)}%
                 </p>
               </div>
@@ -163,15 +163,15 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-purple-50 via-purple-100 to-pink-50 border-purple-200/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+        <Card className="bg-gradient-to-br from-green-50/70 to-emerald-50/70 dark:from-green-500/10 dark:to-emerald-500/10 border-green-200/50 dark:border-green-500/15 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-xl flex items-center justify-center shadow-lg shadow-purple-500/25">
+              <div className="w-12 h-12 bg-gradient-to-br from-green-400 to-emerald-500 dark:from-green-500 dark:to-emerald-500 rounded-xl flex items-center justify-center shadow-md shadow-green-400/20 dark:shadow-green-500/10">
                 <Activity className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-purple-600 mb-1">Active Pools</p>
-                <p className="text-3xl font-bold bg-gradient-to-r from-purple-800 to-pink-800 bg-clip-text text-transparent">
+                <p className="text-sm font-medium text-green-600/80 dark:text-green-300/80 mb-1">Active Pools</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-green-700 to-emerald-700 dark:from-green-400 dark:to-emerald-400 bg-clip-text text-transparent">
                   {pools.length}
                 </p>
               </div>
@@ -179,15 +179,15 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
           </CardContent>
         </Card>
 
-        <Card className="bg-gradient-to-br from-orange-50 via-orange-100 to-red-50 border-orange-200/50 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
+        <Card className="bg-gradient-to-br from-lime-50/70 to-green-50/70 dark:from-lime-500/10 dark:to-green-500/10 border-lime-200/50 dark:border-lime-500/15 shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105">
           <CardContent className="p-6">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/25">
+              <div className="w-12 h-12 bg-gradient-to-br from-lime-400 to-green-500 dark:from-lime-500 dark:to-green-500 rounded-xl flex items-center justify-center shadow-md shadow-lime-400/20 dark:shadow-lime-500/10">
                 <Activity className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-sm font-medium text-orange-600 mb-1">Avg Utilization</p>
-                <p className="text-3xl font-bold bg-gradient-to-r from-orange-800 to-red-800 bg-clip-text text-transparent">
+                <p className="text-sm font-medium text-lime-600/80 dark:text-lime-300/80 mb-1">Avg Utilization</p>
+                <p className="text-3xl font-bold bg-gradient-to-r from-lime-700 to-green-700 dark:from-lime-400 dark:to-green-400 bg-clip-text text-transparent">
                   {(pools.reduce((sum, pool) => sum + pool.utilizationRate, 0) / pools.length).toFixed(1)}%
                 </p>
               </div>
@@ -199,25 +199,25 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
       {/* Pools Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
         {pools.map((pool) => (
-          <Card key={pool.id} className="bg-gradient-to-br from-white/90 via-white/80 to-white/70 backdrop-blur-xl border-white/20 shadow-xl hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
+          <Card key={pool.id} className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-xl border-emerald-100/60 dark:border-emerald-500/15 shadow-xl hover:shadow-2xl transition-all duration-500 hover:scale-105 group">
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/25 group-hover:scale-110 transition-transform duration-300">
+                  <div className="w-12 h-12 bg-gradient-to-br from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 rounded-xl flex items-center justify-center shadow-md shadow-emerald-400/20 dark:shadow-emerald-500/10 group-hover:scale-110 transition-transform duration-300">
                     <Coins className="w-6 h-6 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-2xl font-bold bg-gradient-to-r from-emerald-800 to-teal-800 bg-clip-text text-transparent">
+                    <CardTitle className="text-2xl font-bold bg-gradient-to-r from-emerald-700 to-teal-700 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
                       {pool.grainType}
                     </CardTitle>
-                    <p className="text-sm text-emerald-600 font-mono">
+                    <p className="text-sm text-emerald-600/70 dark:text-emerald-400/60 font-mono">
                       {pool.address.slice(0, 6)}...{pool.address.slice(-4)}
                     </p>
                   </div>
                 </div>
                 <Badge 
                   variant="secondary" 
-                  className={`${getUtilizationColor(pool.utilizationRate)} border-0 shadow-lg px-3 py-1`}
+                  className={`${getUtilizationColor(pool.utilizationRate)} border-0 shadow-md px-3 py-1`}
                 >
                   {pool.utilizationRate}% utilized
                 </Badge>
@@ -227,20 +227,20 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
             <CardContent className="space-y-4">
               {/* Pool Stats */}
               <div className="grid grid-cols-2 gap-4">
-                <div className="bg-emerald-50 rounded-lg p-3">
-                  <p className="text-xs text-emerald-600 mb-1">TVL</p>
-                  <p className="font-bold text-emerald-800">${formatNumber(pool.availableLiquidity)}</p>
+                <div className="bg-emerald-50/80 dark:bg-emerald-500/10 rounded-lg p-3">
+                  <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mb-1">TVL</p>
+                  <p className="font-bold text-emerald-800 dark:text-emerald-200">${formatNumber(pool.availableLiquidity)}</p>
                 </div>
-                <div className="bg-blue-50 rounded-lg p-3">
-                  <p className="text-xs text-blue-600 mb-1">APR</p>
-                  <p className="font-bold text-blue-800">{pool.apr}%</p>
+                <div className="bg-teal-50/80 dark:bg-teal-500/10 rounded-lg p-3">
+                  <p className="text-xs text-teal-600/80 dark:text-teal-300/80 mb-1">APR</p>
+                  <p className="font-bold text-teal-800 dark:text-teal-200">{pool.apr}%</p>
                 </div>
               </div>
 
               {/* Price */}
-              <div className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-600 mb-1">Current Price</p>
-                <p className="font-bold text-gray-800">${pool.price.toFixed(2)}</p>
+              <div className="bg-slate-50/80 dark:bg-slate-500/10 rounded-lg p-3">
+                <p className="text-xs text-slate-600 dark:text-slate-300/80 mb-1">Current Price</p>
+                <p className="font-bold text-slate-800 dark:text-slate-200">${pool.price.toFixed(2)}</p>
               </div>
 
               {/* Utilization Bar */}
@@ -268,7 +268,7 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
                     placeholder="Amount"
                     value={amounts[pool.grainType] || ''}
                     onChange={(e) => setAmounts(prev => ({ ...prev, [pool.grainType]: e.target.value }))}
-                    className="flex-1"
+                    className="flex-1 border-emerald-200 focus:border-emerald-400"
                   />
                 </div>
                 
@@ -276,7 +276,7 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
                   <Button
                     onClick={() => handleDeposit(pool.grainType)}
                     disabled={isLoading}
-                    className="flex-1 bg-emerald-500 hover:bg-emerald-600 text-white"
+                    className="flex-1 bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white shadow-md"
                   >
                     {isLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -290,7 +290,7 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
                     onClick={() => handleWithdraw(pool.grainType)}
                     disabled={isLoading}
                     variant="outline"
-                    className="flex-1 text-emerald-600 border-emerald-200 hover:bg-emerald-50"
+                    className="flex-1 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-500/10"
                   >
                     {isLoading ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -308,11 +308,11 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
 
       {pools.length === 0 && (
         <div className="text-center py-12">
-          <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Coins className="w-8 h-8 text-emerald-600" />
+          <div className="w-16 h-16 bg-emerald-100/80 dark:bg-emerald-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Coins className="w-8 h-8 text-emerald-500 dark:text-emerald-400" />
           </div>
-          <h3 className="text-lg font-semibold text-emerald-800 mb-2">No Pools Available</h3>
-          <p className="text-emerald-600">Check back later for new investment opportunities.</p>
+          <h3 className="text-lg font-semibold text-emerald-800 dark:text-emerald-200 mb-2">No Pools Available</h3>
+          <p className="text-emerald-600/80 dark:text-emerald-300/70">Check back later for new investment opportunities.</p>
         </div>
       )}
     </div>

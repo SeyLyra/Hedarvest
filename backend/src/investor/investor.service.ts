@@ -40,7 +40,10 @@ export class InvestorService {
       );
 
       // Get updated pool info
-      const poolInfo = await this.contractService.getPoolInfo(poolAddress);
+      const poolInfo = await this.contractService.getPoolInfoFromAddress(poolAddress);
+
+      // Calculate total assets
+      const totalAssets = (parseFloat(poolInfo.availableLiquidity) + parseFloat(poolInfo.totalBorrows)).toString();
 
       // Log transaction in database
       const transaction = await this.transactionService.logTransaction({
@@ -53,7 +56,7 @@ export class InvestorService {
           amount,
           depositorAddress,
           contractTxHash: contractTxHash,
-          newTotalAssets: poolInfo.totalAssets,
+          newTotalAssets: totalAssets,
         },
       });
 
@@ -62,7 +65,7 @@ export class InvestorService {
         pool: {
           assetType: poolInfo.assetType,
           address: poolAddress,
-          totalAssets: poolInfo.totalAssets,
+          totalAssets: totalAssets,
         },
         deposit: {
           amount,
@@ -114,7 +117,10 @@ export class InvestorService {
       );
 
       // Get updated pool info
-      const poolInfo = await this.contractService.getPoolInfo(poolAddress);
+      const poolInfo = await this.contractService.getPoolInfoFromAddress(poolAddress);
+
+      // Calculate total assets
+      const totalAssets = (parseFloat(poolInfo.availableLiquidity) + parseFloat(poolInfo.totalBorrows)).toString();
 
       // Log transaction in database
       const transaction = await this.transactionService.logTransaction({
@@ -127,7 +133,7 @@ export class InvestorService {
           shares,
           depositorAddress,
           contractTxHash: contractTxHash,
-          newTotalAssets: poolInfo.totalAssets,
+          newTotalAssets: totalAssets,
         },
       });
 
@@ -136,7 +142,7 @@ export class InvestorService {
         pool: {
           assetType: poolInfo.assetType,
           address: poolAddress,
-          totalAssets: poolInfo.totalAssets,
+          totalAssets: totalAssets,
         },
         withdrawal: {
           shares,
@@ -170,45 +176,43 @@ export class InvestorService {
     this.logger.log('Getting available pools from blockchain...');
     
     try {
-      // Get pools directly from contract service
-      const pools = await this.contractService.getAllPools();
+      // Get all pools info from contract service
+      const allPoolsInfo = await this.contractService.getAllPoolsInfo();
       
-      this.logger.log(`Retrieved ${pools.length} pools from blockchain`);
+      this.logger.log(`Retrieved ${allPoolsInfo.length} pools from blockchain`);
       
       // Format pools for investor display with real smart contract data
       const formattedPools: any[] = [];
-      for (let i = 0; i < pools.length; i++) {
-        const pool = pools[i];
+      for (let i = 0; i < allPoolsInfo.length; i++) {
+        const poolInfo = allPoolsInfo[i];
         
         try {
           // Get real pool statistics from smart contract
-          this.logger.log(`Getting stats for ${pool.assetType} pool at ${pool.poolAddress}`);
-          const poolStats = await this.contractService.getPoolInfo(pool.poolAddress);
+          this.logger.log(`Getting stats for ${poolInfo.assetType} pool at ${poolInfo.poolAddress}`);
+          const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
           
           formattedPools.push({
             id: i + 1,
-            assetType: pool.assetType,
-            address: pool.poolAddress,
+            assetType: poolInfo.assetType,
+            address: poolInfo.poolAddress,
             availableLiquidity: poolStats.availableLiquidity || "0",
             totalBorrows: poolStats.totalBorrows || "0",
             utilizationRate: poolStats.utilizationRate || "0",
             currentAPR: poolStats.currentAPR || "0",
-            exchangeRate: poolStats.exchangeRate || "0",
             createdAt: new Date(),
           });
         } catch (poolError) {
-          this.logger.error(`Failed to get stats for pool ${pool.assetType}:`, poolError);
-          this.logger.error(`Pool address: ${pool.poolAddress}`);
+          this.logger.error(`Failed to get stats for pool ${poolInfo.assetType}:`, poolError);
+          this.logger.error(`Pool address: ${poolInfo.poolAddress}`);
           // Fallback to basic info if stats fail
           formattedPools.push({
             id: i + 1,
-            assetType: pool.assetType,
-            address: pool.poolAddress,
+            assetType: poolInfo.assetType,
+            address: poolInfo.poolAddress,
             availableLiquidity: "0",
             totalBorrows: "0",
             utilizationRate: "0",
             currentAPR: "0",
-            exchangeRate: "0",
             createdAt: new Date(),
           });
         }
@@ -239,8 +243,7 @@ export class InvestorService {
         liquidity: poolStats.availableLiquidity,
         totalBorrows: poolStats.totalBorrows,
         utilizationRate: poolStats.utilizationRate,
-        totalAssets: (parseFloat(poolStats.availableLiquidity) + parseFloat(poolStats.totalBorrows)).toString(),
-        exchangeRate: poolStats.exchangeRate,
+        totalAssets: poolStats.totalAssets,
       };
     } catch (error) {
       this.logger.error(`Failed to get pool stats for ${assetType}:`, error);
@@ -252,8 +255,8 @@ export class InvestorService {
     this.logger.log(`Getting portfolio for investor: ${address}`);
     
     try {
-      // Get all pools from smart contracts
-      const pools = await this.contractService.getAllPools();
+      // Get all pools info from smart contracts
+      const allPoolsInfo = await this.contractService.getAllPoolsInfo();
       
       const positions: any[] = [];
       let totalValue = 0;
@@ -261,38 +264,36 @@ export class InvestorService {
       let totalDeposits = 0;
       
       // Get investor's position in each pool
-      for (const pool of pools) {
+      for (const poolInfo of allPoolsInfo) {
         try {
           // Get investor's LP shares
-          const lpShares = await this.contractService.getLPShares(pool.poolAddress, address);
+          const lpShares = await this.contractService.getLPShares(poolInfo.poolAddress, address);
           
           if (Number(lpShares) > 0) {
-            // Get current pool info
-            const poolInfo = await this.contractService.getPoolInfo(pool.poolAddress);
+            // Get current pool stats
+            const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
             
-            // Calculate position value using exchange rate
-            const exchangeRate = Number(poolInfo.exchangeRate) / 1e18;
-            const positionValue = (Number(lpShares) * exchangeRate) / 1e18;
-            const yieldEarned = positionValue - (Number(lpShares) / 1e18); // Simplified yield calculation
+            // Calculate position value (simplified - using LP shares as approximate value)
+            const positionValue = Number(lpShares) / 1e18;
+            const yieldEarned = positionValue * 0.05; // Simplified yield calculation (5% estimate)
             
             positions.push({
-              assetType: pool.assetType,
-              poolAddress: pool.poolAddress,
+              assetType: poolInfo.assetType,
+              poolAddress: poolInfo.poolAddress,
               shares: lpShares,
-              shareValue: exchangeRate,
               positionValue: positionValue,
               yieldEarned: yieldEarned,
-              apr: Number(poolInfo.currentAPR) / 100, // Convert basis points to percentage
-              utilizationRate: poolInfo.utilizationRate,
+              apr: Number(poolStats.currentAPR) / 100, // Convert basis points to percentage
+              utilizationRate: poolStats.utilizationRate,
               createdAt: new Date()
             });
             
             totalValue += positionValue;
             totalYield += yieldEarned;
-            totalDeposits += Number(lpShares) / 1e18;
+            totalDeposits += positionValue;
           }
         } catch (poolError) {
-          this.logger.warn(`Failed to get position for ${pool.assetType}:`, poolError);
+          this.logger.warn(`Failed to get position for ${poolInfo.assetType}:`, poolError);
         }
       }
       

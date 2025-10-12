@@ -131,7 +131,7 @@ export default function InvestorLoginPage() {
     // Check if HashPack is in extensions
     const extensions = (window as any).chrome?.runtime?.getManifest ? 'Chrome extensions available' : 'No Chrome extensions API';
     
-    alert(`HashPack Detection Results:\n${Object.entries(checks).map(([key, value]) => `${key}: ${value ? '✅' : '❌'}`).join('\n')}\n\nFound properties: ${hashpackProps.join(', ') || 'None'}\n\nHashPack specific: ${Object.entries(hashpackChecks).filter(([k,v]) => v).map(([k,v]) => k).join(', ') || 'None'}`);
+    alert(`HashPack Detection Results:\n${Object.entries(checks).map(([key, value]: [string, boolean]) => `${key}: ${value ? '✅' : '❌'}`).join('\n')}\n\nFound properties: ${hashpackProps.join(', ') || 'None'}\n\nHashPack specific: ${Object.entries(hashpackChecks).filter(([k, v]: [string, boolean]) => v).map(([k, v]: [string, boolean]) => k).join(', ') || 'None'}`);
   };
 
   const testDirectConnection = async () => {
@@ -170,7 +170,7 @@ export default function InvestorLoginPage() {
       windowHashpack: typeof window !== 'undefined' ? !!(window as any).hashpack : false
     };
     
-    alert(`Debug Info:\n${Object.entries(debugInfo).map(([key, value]) => `${key}: ${value}`).join('\n')}`);
+    alert(`Debug Info:\n${Object.entries(debugInfo).map(([key, value]: [string, any]) => `${key}: ${value}`).join('\n')}`);
   };
 
   // Check for existing connection on page load
@@ -260,10 +260,10 @@ export default function InvestorLoginPage() {
               </div>
               
               <div>
-                <span className="text-3xl font-black bg-gradient-to-r from-emerald-700 via-teal-600 to-cyan-600 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300 inline-block">
+                <span className="text-3xl font-bold text-foreground group-hover:scale-105 transition-transform duration-300 inline-block">
                   Hedarvest
                 </span>
-                <div className="text-xs text-emerald-600 font-medium flex items-center gap-2">
+                <div className="text-sm text-muted-foreground flex items-center gap-2">
                   <span>Agricultural DeFi Platform</span>
                   <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
                 </div>
@@ -432,7 +432,6 @@ export default function InvestorLoginPage() {
                     <div className={`w-16 h-16 bg-gradient-to-r ${item.color} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300`}>
                       <item.icon className="w-8 h-8 text-white" />
                           </div>
-                    <div className="text-4xl mb-4 group-hover:animate-bounce">{item.emoji}</div>
                     <h3 className="text-xl font-bold text-emerald-800 mb-4 group-hover:text-emerald-600 transition-colors">{item.title}</h3>
                     <p className="text-emerald-700 group-hover:text-emerald-800 transition-colors">{item.desc}</p>
                     <div className="mt-6 w-full h-1 bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
@@ -446,9 +445,9 @@ export default function InvestorLoginPage() {
               <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-4xl blur-3xl"></div>
               <div className="relative bg-gradient-to-br from-emerald-50/95 to-teal-50/95 backdrop-blur-xl rounded-4xl p-16 border border-emerald-200/50 shadow-xl">
                 <div className="text-center mb-16">
-                  <h2 className="text-5xl md:text-6xl font-black text-emerald-800 mb-8">
+                  <h2 className="text-5xl md:text-6xl font-bold text-foreground mb-8">
                   Why Invest in{" "}
-                    <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                    <span className="gradient-text">
                     Agricultural Assets?
                   </span>
                 </h2>
@@ -465,7 +464,6 @@ export default function InvestorLoginPage() {
                     { emoji: "⚡", title: "Innovation", desc: "Be part of the blockchain revolution in agriculture, combining traditional farming with cutting-edge technology.", color: "from-green-400 to-emerald-500", icon: Zap }
                   ].map((item, index) => (
                     <div key={index} className="text-center group cursor-pointer">
-                      <div className="text-8xl mb-6 group-hover:animate-bounce">{item.emoji}</div>
                       <div className="w-16 h-16 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
                         <item.icon className="w-8 h-8 text-white" />
                       </div>
@@ -487,9 +485,9 @@ export default function InvestorLoginPage() {
         <div className="w-full px-8">
           <div className="max-w-6xl mx-auto">
             <div className="text-center mb-16">
-              <h2 className="text-5xl font-black text-emerald-800 mb-6">
+              <h2 className="text-5xl font-bold text-foreground mb-6">
                 Ready to Start{" "}
-                <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
+                <span className="gradient-text">
                   Investing?
                 </span>
               </h2>

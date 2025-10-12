@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { grainType, amount } = body;
+    const { grainType, amount, depositorAddress } = body;
 
     // Validate input
-    if (!grainType || !amount) {
+    if (!grainType || !amount || !depositorAddress) {
       return NextResponse.json(
-        { error: 'Missing required fields: grainType and amount' },
+        { error: 'Missing required fields: grainType, amount, and depositorAddress' },
         { status: 400 }
       );
     }
@@ -20,34 +22,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mock validation - check if grain type is valid
-    const validGrainTypes = ['Rice', 'Corn', 'Wheat', 'Soybean'];
-    if (!validGrainTypes.includes(grainType)) {
+    console.log('💰 Deposit request:', { grainType, amount, depositorAddress });
+
+    // Call backend API
+    const response = await fetch(`${BACKEND_URL}/api/investor/deposit`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        grainType,
+        amount: parseFloat(amount),
+        depositorAddress,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Backend deposit failed:', result);
       return NextResponse.json(
-        { error: 'Invalid grain type' },
-        { status: 400 }
+        { error: result.message || 'Deposit failed' },
+        { status: response.status }
       );
     }
 
-    // Mock processing delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Deposit successful:', result);
 
-    // Mock successful deposit
-    const mockResponse = {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      grainType,
-      amount,
-      timestamp: new Date().toISOString(),
-      message: `Successfully deposited ${amount} tokens to ${grainType} pool`
-    };
-
-    return NextResponse.json(mockResponse, { status: 200 });
+    return NextResponse.json(result, { status: 200 });
 
   } catch (error) {
-    console.error('Deposit API error:', error);
+    console.error('❌ Deposit API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

@@ -1,14 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { grainType, shares } = body;
+    const { grainType, shares, depositorAddress } = body;
 
     // Validate input
-    if (!grainType || !shares) {
+    if (!grainType || !shares || !depositorAddress) {
       return NextResponse.json(
-        { error: 'Missing required fields: grainType and shares' },
+        { error: 'Missing required fields: grainType, shares, and depositorAddress' },
         { status: 400 }
       );
     }
@@ -20,34 +22,39 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Mock validation - check if grain type is valid
-    const validGrainTypes = ['Rice', 'Corn', 'Wheat', 'Soybean'];
-    if (!validGrainTypes.includes(grainType)) {
+    console.log('💸 Withdraw request:', { grainType, shares, depositorAddress });
+
+    // Call backend API
+    const response = await fetch(`${BACKEND_URL}/api/investor/withdraw`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        grainType,
+        shares: parseFloat(shares),
+        depositorAddress,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok) {
+      console.error('❌ Backend withdrawal failed:', result);
       return NextResponse.json(
-        { error: 'Invalid grain type' },
-        { status: 400 }
+        { error: result.message || 'Withdrawal failed' },
+        { status: response.status }
       );
     }
 
-    // Mock processing delay
-    await new Promise(resolve => setTimeout(resolve, 500));
+    console.log('✅ Withdrawal successful:', result);
 
-    // Mock successful withdrawal
-    const mockResponse = {
-      success: true,
-      transactionHash: `0x${Math.random().toString(16).substr(2, 64)}`,
-      grainType,
-      shares,
-      timestamp: new Date().toISOString(),
-      message: `Successfully withdrew ${shares} shares from ${grainType} pool`
-    };
-
-    return NextResponse.json(mockResponse, { status: 200 });
+    return NextResponse.json(result, { status: 200 });
 
   } catch (error) {
-    console.error('Withdraw API error:', error);
+    console.error('❌ Withdraw API error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }
     );
   }

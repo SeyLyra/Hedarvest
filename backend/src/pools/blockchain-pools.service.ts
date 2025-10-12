@@ -15,11 +15,11 @@ export class BlockchainPoolsService {
   async getAllPools() {
     try {
       this.logger.log('Fetching all pools from blockchain...');
-      const pools = await this.contractService.getAllPools();
+      const poolAddresses = await this.contractService.getAllPools();
       
-      this.logger.log(`Retrieved ${pools.length} pools from blockchain`);
+      this.logger.log(`Retrieved ${poolAddresses.length} pools from blockchain`);
       
-      if (pools.length === 0) {
+      if (poolAddresses.length === 0) {
         this.logger.warn('No pools found from blockchain - this might indicate:');
         this.logger.warn('1. LENDING_FACTORY_ADDRESS not set correctly');
         this.logger.warn('2. Smart contracts not deployed');
@@ -29,28 +29,26 @@ export class BlockchainPoolsService {
       
       // Get detailed info for each pool
       const detailedPools: any[] = [];
-      for (const poolInfo of pools) {
+      for (const poolAddress of poolAddresses) {
         try {
-          const poolDetails = await this.contractService.getPoolInfo(poolInfo.poolAddress);
+          const poolDetails = await this.contractService.getPoolInfoFromAddress(poolAddress);
           detailedPools.push({
             assetType: poolDetails.assetType,
-            poolAddress: poolInfo.poolAddress,
-            oracleAddress: poolInfo.oracleAddress,
+            poolAddress: poolAddress,
             lendingTokenAddress: poolDetails.lendingToken,
-            baseLtv: poolDetails.baseLTV,
-            protocolFee: poolDetails.protocolFee,
+            collateralTokenAddress: poolDetails.collateralToken,
+            lpTokenAddress: poolDetails.lpToken,
             availableLiquidity: poolDetails.availableLiquidity,
             totalBorrows: poolDetails.totalBorrows,
             totalReserves: poolDetails.totalReserves,
             utilizationRate: poolDetails.utilizationRate,
             currentAPR: poolDetails.currentAPR,
-            exchangeRate: poolDetails.exchangeRate,
             isActive: true,
             createdAt: new Date(),
             updatedAt: new Date(),
           });
         } catch (error) {
-          this.logger.warn(`Failed to get details for pool ${poolInfo.poolAddress}:`, error);
+          this.logger.warn(`Failed to get details for pool ${poolAddress}:`, error);
         }
       }
       
@@ -70,16 +68,13 @@ export class BlockchainPoolsService {
       return {
         assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
-        oracleAddress: poolStats.oracleAddress,
         lendingTokenAddress: poolStats.lendingTokenAddress,
         baseLtv: poolStats.baseLtv,
-        protocolFee: poolStats.protocolFee,
         availableLiquidity: poolStats.availableLiquidity,
         totalBorrows: poolStats.totalBorrows,
         totalReserves: poolStats.totalReserves,
         utilizationRate: poolStats.utilizationRate,
         currentAPR: poolStats.currentAPR,
-        exchangeRate: poolStats.exchangeRate,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -99,16 +94,13 @@ export class BlockchainPoolsService {
       return {
         assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
-        oracleAddress: poolStats.oracleAddress,
         lendingTokenAddress: poolStats.lendingTokenAddress,
         baseLtv: poolStats.baseLtv,
-        protocolFee: poolStats.protocolFee,
         availableLiquidity: poolStats.availableLiquidity,
         totalBorrows: poolStats.totalBorrows,
         totalReserves: poolStats.totalReserves,
         utilizationRate: poolStats.utilizationRate,
         currentAPR: poolStats.currentAPR,
-        exchangeRate: poolStats.exchangeRate,
         isActive: true,
         // Additional calculated fields
         totalAssets: (parseFloat(poolStats.availableLiquidity) + parseFloat(poolStats.totalBorrows)).toString(),
@@ -135,23 +127,20 @@ export class BlockchainPoolsService {
   async getPoolInfoByAddress(poolAddress: string) {
     try {
       this.logger.log(`Fetching pool info for address: ${poolAddress} from blockchain`);
-      const poolInfo = await this.contractService.getPoolInfo(poolAddress);
+      const poolInfo = await this.contractService.getPoolInfoFromAddress(poolAddress);
       
       return {
         assetType: poolInfo.assetType,
         poolAddress,
-        oracleAddress: poolInfo.oracle,
         lendingTokenAddress: poolInfo.lendingToken,
         collateralTokenAddress: poolInfo.collateralToken,
         lpTokenAddress: poolInfo.lpToken,
-        baseLtv: poolInfo.baseLTV,
-        protocolFee: poolInfo.protocolFee,
         availableLiquidity: poolInfo.availableLiquidity,
         totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,
         utilizationRate: poolInfo.utilizationRate,
         currentAPR: poolInfo.currentAPR,
-        exchangeRate: poolInfo.exchangeRate,
+        activePositions: poolInfo.activePositions,
         isActive: true,
         createdAt: new Date(),
         updatedAt: new Date(),

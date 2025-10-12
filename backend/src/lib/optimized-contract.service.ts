@@ -24,30 +24,37 @@ export class OptimizedContractService {
    */
   async getAllPools(): Promise<any[]> {
     try {
-      // Use RPC for current state (real-time)
-      const pools = await this.contractService.getAllPools();
-      
+      // Use RPC for current state (real-time) - returns array of addresses
+      const poolAddresses = await this.contractService.getAllPools();
+
+      // Get detailed info for each pool
+      const allPoolsInfo = await this.contractService.getAllPoolsInfo();
+
       // Enhance with historical data from Mirror Node
       const enrichedPools = await Promise.all(
-        pools.map(async (pool) => {
+        allPoolsInfo.map(async (poolInfo) => {
           try {
-            const contractInfo = await this.mirrorNodeService.getContractInfo(pool.poolAddress);
-            const recentTransactions = await this.mirrorNodeService.getContractTransactions(
-              pool.poolAddress, 
-              10
-            );
-            
+            const contractInfo = await this.mirrorNodeService.getContractInfo(poolInfo.poolAddress);
+            const recentTransactions =
+              await this.mirrorNodeService.getContractTransactions(
+                poolInfo.poolAddress,
+                10,
+              );
+
             return {
-              ...pool,
+              ...poolInfo,
               contractInfo,
               recentActivity: recentTransactions.length,
               lastTransaction: recentTransactions[0]?.consensus_timestamp
             };
           } catch (error) {
-            this.logger.warn(`Failed to enrich pool ${pool.poolAddress}:`, error.message);
-            return pool;
+            this.logger.warn(
+              `Failed to enrich pool ${poolInfo.poolAddress}:`,
+              error.message,
+            );
+            return poolInfo;
           }
-        })
+        }),
       );
 
       return enrichedPools;
@@ -91,14 +98,15 @@ export class OptimizedContractService {
     try {
       // Get current state from RPC
       const currentStats = await this.contractService.getPoolStatsByAssetType(assetType);
-      
+
       // Enhance with historical data from Mirror Node
       const poolAddress = await this.getPoolByAssetType(assetType);
       const contractTransactions = await this.mirrorNodeService.getContractTransactions(poolAddress, 50);
-      
+
       // Calculate historical metrics
-      const historicalMetrics = this.calculateHistoricalMetrics(contractTransactions);
-      
+      const historicalMetrics =
+        this.calculateHistoricalMetrics(contractTransactions);
+
       return {
         ...currentStats,
         historical: historicalMetrics,
@@ -297,28 +305,27 @@ export class OptimizedContractService {
   async getUserPortfolio(userAddress: string): Promise<any> {
     try {
       // Get current positions from RPC
-      const pools = await this.getAllPools();
-      const userPositions = [];
+      const allPoolsInfo = await this.contractService.getAllPoolsInfo();
+      const userPositions: any[] = [];
       
-      for (const pool of pools) {
+      for (const poolInfo of allPoolsInfo) {
         try {
-          const lpShares = await this.contractService.getLPShares(pool.poolAddress, userAddress);
-          const collateral = await this.contractService.getBorrowerPosition(pool.poolAddress, userAddress);
+          const lpShares = await this.contractService.getLPShares(poolInfo.poolAddress, userAddress);
           
-          if (Number(lpShares) > 0 || Number(collateral.collateralAmount) > 0) {
-            const poolInfo = await this.contractService.getPoolInfo(pool.poolAddress);
-            // TODO: Fix type issue with userPositions array
-            // userPositions.push({
-            //   poolAddress: pool.poolAddress,
-            //   assetType: poolInfo.assetType,
-            //   lpShares: lpShares.toString(),
-            //   collateral: collateral.collateralAmount.toString(),
-            //   borrowBalance: collateral.borrowBalance.toString(),
-            //   poolInfo
-            // });
+          if (Number(lpShares) > 0) {
+            const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
+            userPositions.push({
+              poolAddress: poolInfo.poolAddress,
+              assetType: poolInfo.assetType,
+              lpShares: lpShares.toString(),
+              availableLiquidity: poolStats.availableLiquidity,
+              totalBorrows: poolStats.totalBorrows,
+              utilizationRate: poolStats.utilizationRate,
+              currentAPR: poolStats.currentAPR,
+            });
           }
         } catch (error) {
-          this.logger.warn(`Failed to get position for pool ${pool.poolAddress}:`, error.message);
+          this.logger.warn(`Failed to get position for pool ${poolInfo.poolAddress}:`, error.message);
         }
       }
 

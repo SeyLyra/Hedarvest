@@ -192,9 +192,9 @@ export class PoolsService {
     this.logger.log('Starting sync from LendingFactory contract...');
     
     try {
-      // Get all pools from the factory contract
-      const factoryPools = await this.contractService.getAllPools();
-      this.logger.log(`Found ${factoryPools.length} pools in factory contract`);
+      // Get all pools info from the factory contract
+      const allPoolsInfo = await this.contractService.getAllPoolsInfo();
+      this.logger.log(`Found ${allPoolsInfo.length} pools in factory contract`);
 
       const syncResults = {
         created: 0,
@@ -202,10 +202,10 @@ export class PoolsService {
         errors: 0,
       };
 
-      for (const factoryPool of factoryPools) {
+      for (const factoryPool of allPoolsInfo) {
         try {
-          // Get detailed pool info from the contract
-          const poolInfo = await this.contractService.getPoolInfo(factoryPool.poolAddress);
+          // Get detailed pool stats from the contract
+          const poolStats = await this.contractService.getPoolInfoFromAddress(factoryPool.poolAddress);
           
           // Check if pool already exists in database
           const existingPool = await this.prisma.pool.findUnique({
@@ -217,31 +217,29 @@ export class PoolsService {
             await this.prisma.pool.update({
               where: { id: existingPool.id },
               data: {
-                oracleAddress: factoryPool.oracleAddress,
-                lendingTokenAddress: poolInfo.lendingToken,
-                baseLtv: poolInfo.baseLTV,
-                protocolFee: poolInfo.protocolFee,
-                liquidity: poolInfo.availableLiquidity,
-                totalBorrows: poolInfo.totalBorrows,
-                totalReserves: poolInfo.totalReserves,
-                utilizationRate: poolInfo.utilizationRate,
+                lendingTokenAddress: factoryPool.lendingToken,
+                baseLtv: factoryPool.baseLTV,
+                liquidity: poolStats.availableLiquidity,
+                totalBorrows: poolStats.totalBorrows,
+                totalReserves: poolStats.totalReserves,
+                utilizationRate: poolStats.utilizationRate,
                 updatedAt: new Date(),
               },
             });
             syncResults.updated++;
-            this.logger.log(`Updated pool: ${poolInfo.assetType}`);
+            this.logger.log(`Updated pool: ${factoryPool.assetType}`);
           } else {
             // Create new pool record
             await this.createPoolRecord({
-              grainType: poolInfo.assetType,
+              grainType: factoryPool.assetType,
               poolAddress: factoryPool.poolAddress,
-              oracleAddress: factoryPool.oracleAddress,
-              lendingTokenAddress: poolInfo.lendingToken,
-              baseLtv: poolInfo.baseLTV,
-              protocolFee: poolInfo.protocolFee,
+              oracleAddress: '',
+              lendingTokenAddress: factoryPool.lendingToken,
+              baseLtv: factoryPool.baseLTV,
+              protocolFee: 0,
             });
             syncResults.created++;
-            this.logger.log(`Created pool: ${poolInfo.assetType}`);
+            this.logger.log(`Created pool: ${factoryPool.assetType}`);
           }
         } catch (poolError) {
           syncResults.errors++;
@@ -252,7 +250,7 @@ export class PoolsService {
       // Publish HCS event for sync completion
       try {
         await this.hcsService.publishEvent('PoolSyncCompleted', {
-          totalPools: factoryPools.length,
+          totalPools: allPoolsInfo.length,
           created: syncResults.created,
           updated: syncResults.updated,
           errors: syncResults.errors,
