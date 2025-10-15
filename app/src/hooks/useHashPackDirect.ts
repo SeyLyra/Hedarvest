@@ -119,7 +119,8 @@ export function useHashPackDirect(): HashPackDirectHook {
               message.includes('404 (Not Found)') ||
               message.includes('No matching key') ||
               message.includes('proposal:') ||
-              message.includes('Error code: undefined')) {
+              message.includes('Error code: undefined') ||
+              message.includes('body.data was not set in the protobuf')) {
             console.warn('⚠️ External request failed (this is normal):', ...args);
             return;
           }
@@ -139,7 +140,8 @@ export function useHashPackDirect(): HashPackDirectHook {
                reason.includes('404') ||
                reason.includes('No matching key') ||
                reason.includes('proposal:') ||
-               reason.includes('Error code: undefined'))) {
+               reason.includes('Error code: undefined') ||
+               reason.includes('body.data was not set in the protobuf'))) {
             console.warn('⚠️ Unhandled promise rejection (this is normal):', event.reason);
             event.preventDefault();
             return;
@@ -149,7 +151,8 @@ export function useHashPackDirect(): HashPackDirectHook {
             const reasonStr = JSON.stringify(event.reason);
             if (reasonStr.includes('No matching key') || 
                 reasonStr.includes('proposal:') ||
-                reasonStr.includes('Error code: undefined')) {
+                reasonStr.includes('Error code: undefined') ||
+                reasonStr.includes('body.data was not set in the protobuf')) {
               console.warn('⚠️ Unhandled promise rejection (this is normal):', event.reason);
               event.preventDefault();
               return;

@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
       id: index + 1,
       grainType: pool.assetType || pool.grainType,
       address: pool.address || pool.poolAddress,
-      lendingTokenAddress: pool.lendingTokenAddress, // Add the token contract address
+      lendingTokenAddress: pool.lendingToken || pool.lendingTokenAddress, // Add the token contract address
       price: 250.00, // Default price - can be fetched from oracle later
       availableLiquidity: pool.availableLiquidity || "0",
       totalBorrows: pool.totalBorrows || "0",

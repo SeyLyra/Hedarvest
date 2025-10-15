@@ -197,6 +197,7 @@ export class InvestorService {
             id: i + 1,
             assetType: poolInfo.assetType,
             address: poolInfo.poolAddress,
+            lendingTokenAddress: poolInfo.lendingToken, // Add the lending token address
             availableLiquidity: poolStats.availableLiquidity || "0",
             totalBorrows: poolStats.totalBorrows || "0",
             utilizationRate: poolStats.utilizationRate || "0",

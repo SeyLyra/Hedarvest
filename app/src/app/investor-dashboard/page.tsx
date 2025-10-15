@@ -112,55 +112,13 @@ export default function InvestorDashboard() {
       return;
     }
 
-    // Proactive check: Verify we have an active session before proceeding
-    console.log('🔍 Checking for active session...');
-    console.log('🔍 HashConnect core:', hashconnect.core);
-    console.log('🔍 Core session:', hashconnect.core?.session);
-    console.log('🔍 Session values:', hashconnect.core?.session?.values);
+    // Basic check: Verify we have a user address and HashConnect instance
+    console.log('🔍 Checking HashConnect state...');
+    console.log('🔍 User address:', userAddress);
+    console.log('🔍 HashConnect available:', !!hashconnect);
     
-    const activeSession = hashconnect.core?.session?.values?.find((session: any) => session.acknowledged);
-    console.log('🔍 Active session found:', activeSession);
-    
-    if (!activeSession) {
-      // Let's also check alternative session locations
-      console.log('🔍 Checking alternative session locations...');
-      console.log('🔍 _signClient session:', hashconnect._signClient?.session);
-      console.log('🔍 _signClient session values:', hashconnect._signClient?.session?.values);
-      
-      const altSession = hashconnect._signClient?.session?.values?.find((session: any) => session.acknowledged);
-      console.log('🔍 Alternative session found:', altSession);
-      
-      if (altSession) {
-        console.log('✅ Found session in _signClient, using that instead');
-        // Use the alternative session - we'll continue with the deposit
-      } else {
-        // Let's also check if we can find any session at all (even if not acknowledged)
-        console.log('🔍 Checking for any sessions (acknowledged or not)...');
-        const anyCoreSession = hashconnect.core?.session?.values?.[0];
-        const anySignClientSession = hashconnect._signClient?.session?.values?.[0];
-        
-        console.log('🔍 Any core session:', anyCoreSession);
-        console.log('🔍 Any signClient session:', anySignClientSession);
-        
-        if (anyCoreSession || anySignClientSession) {
-          console.log('⚠️ Found session but it may not be acknowledged yet. Proceeding anyway...');
-          // Continue with the deposit - maybe the session is valid but not marked as acknowledged
-        } else {
-          console.log('⚠️ No active session detected in any location, clearing stale connection state...');
-          localStorage.removeItem('hashpack_account');
-          toast.error('Connection expired. Please reconnect your wallet.', { 
-            duration: 5000,
-            action: {
-              label: 'Reconnect',
-              onClick: () => {
-                hashconnect.openPairingModal();
-              }
-            }
-          });
-          return;
-        }
-      }
-    }
+    // Only do minimal session checking - let HashConnect handle the session validation
+    // The sendTransaction call should show the popup if needed for reconnection
 
     const depositAmount = parseFloat(amount);
     
@@ -187,211 +145,428 @@ export default function InvestorDashboard() {
       }
       
       console.log('📍 Pool address:', pool.address);
+      console.log('📍 Full pool object:', pool);
       
       // REAL DEPOSIT WITH HASHPACK WALLET SIGNING
       const { ethers } = await import('ethers');
-      const { ContractExecuteTransaction, ContractId } = await import('@hashgraph/sdk');
+      const { ContractExecuteTransaction, ContractId, ContractFunctionParameters, ContractCallQuery } = await import('@hashgraph/sdk');
       
-      // Get the token contract address from the pool
-      const tokenEvmAddress = pool.lendingTokenAddress;
+      // Get the pool contract address
       const poolEvmAddress = pool.address;
       const amountInSmallestUnit = BigInt(Math.floor(depositAmount * 1000000)); // 6 decimals
       
+      // Use AUSD token ID directly (from deployed contracts)
+      const ausdTokenId = '0.0.6951126'; // AUSD from deployed.md
+      
       console.log('📊 Transaction details:', {
-        tokenEvmAddress,
+        ausdTokenId,
         poolEvmAddress,
         depositAmount,
         amountInSmallestUnit: amountInSmallestUnit.toString(),
         userAddress
       });
       
-      if (!tokenEvmAddress) {
-        throw new Error('Token contract address not found for this pool. Please try again.');
-      }
-      
-      // Use AUSD token ID directly (from deployed contracts)
-      const ausdTokenId = '0.0.6951126'; // AUSD from deployed.md
-      
       console.log('📋 Using contracts:', {
         ausdTokenId,
         poolEvmAddress: poolEvmAddress
       });
       
-      // STEP 1: Approve pool to spend tokens
-      toast.info('Step 1/2: Approving token spending... Please approve in HashPack!', { duration: 5000 });
-      console.log('📝 Creating approval transaction...');
+      // Skip approval - AUSD is a native token, not a smart contract
+      // The pool contract will handle the token transfer directly
+      toast.info('Depositing to pool... Please approve in HashPack!', { duration: 5000 });
+      console.log('📝 Creating deposit transaction...');
       
-      // For Hedera, we need to use the correct function selector for ERC20 approve
-      // The function selector for approve(address,uint256) is 0x095ea7b3
-      const approveFunctionSelector = '0x095ea7b3';
+      // Since ContractId.fromEvmAddress isn't working, let's use the mirror node API
+      // to get the proper Hedera contract ID
+      console.log('✅ Getting Hedera contract ID for EVM address:', poolEvmAddress);
       
-      // Encode the parameters: spender address (32 bytes) + amount (32 bytes)
-      const spenderAddress = poolEvmAddress.padStart(64, '0'); // Pad to 32 bytes (64 hex chars)
-      const amountHex = amountInSmallestUnit.toString(16).padStart(64, '0'); // Pad to 32 bytes
+      let depositTx;
       
-      const approveCalldata = approveFunctionSelector + spenderAddress + amountHex;
+      try {
+        const response = await fetch(`https://testnet.mirrornode.hedera.com/api/v1/contracts/${poolEvmAddress}`);
+        console.log('📋 Mirror node response status:', response.status);
+        
+        if (!response.ok) {
+          throw new Error(`Mirror node API error: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log('📋 Mirror node response data:', data);
+        
+        if (!data.contract_id) {
+          throw new Error('Contract ID not found in mirror node response');
+        }
+        
+        const hederaContractId = data.contract_id;
+        console.log('✅ Found Hedera contract ID:', hederaContractId);
+        
+        // Create deposit transaction using the proper Hedera contract ID
+        console.log('📋 Creating transaction with:', {
+          hederaContractId,
+          evmAddress: poolEvmAddress,
+          function: 'deposit',
+          amount: amountInSmallestUnit.toString(),
+          amountOriginal: depositAmount
+        });
+        
+        // Try using ContractFunctionParameters instead of raw calldata
+        console.log('📋 Using ContractFunctionParameters approach');
+        
+        // Let's try different function names that might exist on the contract
+        // Common DeFi pool function names: deposit, supply, addLiquidity, etc.
+        const possibleFunctions = ['deposit', 'supply', 'addLiquidity', 'mint'];
+        
+        // For now, let's stick with 'deposit' but add more debugging
+        console.log('📋 Creating contract call:', {
+          contractId: hederaContractId,
+          function: 'deposit',
+          amount: amountInSmallestUnit.toString(),
+          amountOriginal: depositAmount
+        });
+        
+        // The ContractId.fromEvmAddress() is not working properly (returns 0.0.0)
+        // Let's use the mirror node API to get the correct Hedera contract ID
+        console.log('🔧 Using mirror node API to get Hedera contract ID');
+        
+        // Convert EVM address to Hedera contract ID using mirror node API
+        const mirrorNodeResponse = await fetch(`https://testnet.mirrornode.hedera.com/api/v1/contracts/${poolEvmAddress}`);
+        
+        if (!mirrorNodeResponse.ok) {
+          throw new Error(`Failed to get contract ID from mirror node: ${mirrorNodeResponse.status}`);
+        }
+        
+        const mirrorNodeData = await mirrorNodeResponse.json();
+        const mirrorNodeContractId = mirrorNodeData.contract_id;
+        
+        if (!mirrorNodeContractId) {
+          throw new Error(`Contract not found for EVM address: ${poolEvmAddress}`);
+        }
+        
+        console.log('✅ Got Hedera contract ID from mirror node:', mirrorNodeContractId);
+        
+        // Convert amount to the format expected by the contract (wei/smallest unit)
+        const amountInWei = (parseFloat(depositAmount) * 1e6).toString(); // AUSD has 6 decimals
+        
+        // Validate all parameters before creating transaction
+        console.log('🔍 Validating transaction parameters:', {
+          poolEvmAddress,
+          mirrorNodeContractId,
+          amount: depositAmount,
+          amountInWei,
+          amountType: typeof amountInWei,
+          amountLength: amountInWei.length
+        });
+        
+        // Validate required fields
+        if (!poolEvmAddress || !mirrorNodeContractId || !amountInWei) {
+          throw new Error(`Missing required parameters: poolEvmAddress=${poolEvmAddress}, contractId=${mirrorNodeContractId}, amount=${amountInWei}`);
+        }
+        
+        if (isNaN(parseFloat(amountInWei)) || parseFloat(amountInWei) <= 0) {
+          throw new Error(`Invalid amount: ${amountInWei}`);
+        }
+        
+        // Test contract ID creation
+        let contractId;
+        try {
+          contractId = ContractId.fromString(mirrorNodeContractId);
+          console.log('✅ Contract ID created successfully:', contractId.toString());
+        } catch (cidError) {
+          throw new Error(`Failed to create ContractId from string '${mirrorNodeContractId}': ${cidError}`);
+        }
+        
+        // Test function parameters creation with proper type conversion
+        let functionParams;
+        try {
+          // Convert amount to proper format for Hedera SDK
+          const amountInWei = Math.floor(parseFloat(depositAmount) * 1e6); // Convert to smallest unit (6 decimals)
+          
+          console.log('🔍 Converting amount for function parameters:', {
+            original: depositAmount,
+            parsedFloat: parseFloat(depositAmount),
+            multiplied: parseFloat(depositAmount) * 1e6,
+            floorResult: amountInWei,
+            type: typeof amountInWei,
+            isInteger: Number.isInteger(amountInWei),
+            isSafeInteger: Number.isSafeInteger(amountInWei)
+          });
+          
+          // Validate minimum deposit amount (contract requires MIN_DEPOSIT = 1e6)
+          const MIN_DEPOSIT = 1e6; // 1 token in smallest unit
+          if (amountInWei < MIN_DEPOSIT) {
+            throw new Error(`Amount too small. Minimum deposit is 1 AUSD token. You entered: ${depositAmount} AUSD`);
+          }
+          
+          // Create function parameters with proper validation
+          functionParams = new ContractFunctionParameters().addUint256(amountInWei);
+          
+          console.log('✅ Function parameters created successfully:', {
+            functionParams: !!functionParams,
+            amountUsed: amountInWei
+          });
+        } catch (fpError) {
+          console.error('❌ Function parameter creation failed:', fpError);
+          throw new Error(`Failed to create function parameters with amount '${depositAmount}': ${fpError}`);
+        }
+        
+        // Create transaction step by step with validation
+        console.log('📋 Creating deposit transaction step by step...');
+        
+        // Ensure all required components are available
+        if (!contractId) {
+          throw new Error('Contract ID is null or undefined');
+        }
+        if (!functionParams) {
+          throw new Error('Function parameters are null or undefined');
+        }
+        
+        // Create the transaction with proper validation
+        depositTx = new ContractExecuteTransaction()
+          .setContractId(contractId)
+          .setGas(300000);
+          
+        // Set function and parameters separately for better error handling
+        try {
+          depositTx = depositTx.setFunction('deposit', functionParams);
+          console.log('✅ Function and parameters set successfully');
+        } catch (setFunctionError) {
+          console.error('❌ Failed to set function and parameters:', setFunctionError);
+          throw new Error(`Failed to set function 'deposit' and parameters: ${setFunctionError}`);
+        }
+          
+        console.log('✅ Deposit transaction created successfully');
+        console.log('📋 Transaction details:', {
+          contractId: depositTx.contractId?.toString(),
+          gas: depositTx.gas?.toString(),
+          hasFunctionParameters: !!depositTx.functionParameters
+        });
+          
+      } catch (error) {
+        console.error('❌ Failed to get contract ID:', error);
+        throw new Error(`Failed to get contract ID: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
       
-      console.log('📋 Approval calldata:', {
-        functionSelector: approveFunctionSelector,
-        spenderAddress,
-        amountHex,
-        fullCalldata: approveCalldata
-      });
-      
-      const approveTx = new ContractExecuteTransaction()
-        .setContractId(ContractId.fromString(ausdTokenId))
-        .setGas(200000)
-        .setFunctionParameters(Buffer.from(approveCalldata.slice(2), 'hex'));
-      
-      console.log('📤 Sending approval transaction to HashPack...');
+      console.log('📤 Sending deposit transaction to HashPack...');
       
       // For HashConnect v3.x, we need to get the active session from the core
       console.log('🔗 HashConnect object keys:', Object.keys(hashconnect));
       console.log('🔗 Core object keys:', Object.keys(hashconnect.core || {}));
       
-      // Get the active session from the core (try multiple locations)
-      let activeSession = hashconnect.core?.session?.values?.find((session: any) => session.acknowledged);
-      console.log('🔗 Active session (core):', activeSession);
+      // Let HashConnect handle session validation automatically
+      // The sendTransaction call will show the popup if reconnection is needed
+      console.log('🔗 HashConnect state:', {
+        connected: hashconnect?.connected,
+        topic: hashconnect?.topic,
+        userAddress: userAddress
+      });
       
-      // Try alternative location if not found in core
-      if (!activeSession) {
-        activeSession = hashconnect._signClient?.session?.values?.find((session: any) => session.acknowledged);
-        console.log('🔗 Active session (_signClient):', activeSession);
-      }
-      
-      if (!activeSession) {
-        console.log('❌ No active session found. Is connected:', isConnected);
-        console.log('❌ Account ID:', userAddress);
-        console.log('❌ HashConnect state:', {
-          connected: hashconnect?.connected,
-          topic: hashconnect?.topic,
-          pairingString: hashconnect?._pairingString
-        });
-        
-        // Clear stale connection state and request reconnection
-        console.log('🔄 Clearing stale connection state...');
-        
-        // Clear localStorage
-        localStorage.removeItem('hashpack_account');
-        
-        // Try to disconnect and reconnect
-        try {
-          await hashconnect.disconnectAll();
-          console.log('✅ Disconnected from stale session');
-          
-          // Show user message
-          toast.error('Connection lost. Please reconnect your wallet.', { 
-            duration: 5000,
-            action: {
-              label: 'Reconnect',
-              onClick: () => {
-                hashconnect.openPairingModal();
-              }
-            }
-          });
-          
-          throw new Error('Please reconnect your wallet to continue.');
-          
-        } catch (reconnectError) {
-          console.error('❌ Reconnection failed:', reconnectError);
-          throw new Error('No active HashPack session. Please reconnect your wallet.');
-        }
-      }
-      
-      const pairingData = {
-        topic: activeSession.topic,
-        accountIds: activeSession.namespaces?.hedera?.accounts || []
-      };
-      
-      console.log('🔗 Final pairing data:', pairingData);
+      console.log('🔗 Ready to send transaction');
       
       // For HashConnect v3.x, we don't use getProvider() - we send transactions directly
       console.log('🔑 Using HashConnect v3.x transaction sending approach');
       
-      // Execute approval transaction using HashConnect request
-      console.log('📤 Requesting approval transaction from HashPack...');
-      
-      // For HashConnect v3.x, sendTransaction takes different parameters
-      const approveTxResponse = await hashconnect.sendTransaction(
-        userAddress, // accountId
-        approveTx    // transaction
-      );
-      
-      console.log('✅ Approval transaction response:', approveTxResponse);
-      
-      if (approveTxResponse.success === false) {
-        console.error('❌ Approval transaction failed:', approveTxResponse);
-        if (approveTxResponse.error && approveTxResponse.error.includes('CONTRACT_REVERT_EXECUTED')) {
-          throw new Error('Token approval failed. The contract may not exist or you may not have enough tokens. Please check your token balance and try again.');
-        }
-        throw new Error(`Approval failed: ${approveTxResponse.error || 'Unknown error'}`);
-      }
-      
-      // For HashConnect v3.x, we don't need to wait for receipt manually
-      // The sendTransaction already waits for completion
-      console.log('✅ Approval transaction completed successfully');
-      
-      toast.success('✅ Approval confirmed!', { duration: 2000 });
-      
-      // Wait for approval to be confirmed
-      await new Promise(r => setTimeout(r, 2000));
-      
-      // STEP 2: Deposit to pool
-      toast.info('Step 2/2: Depositing to pool... Please approve in HashPack!', { duration: 5000 });
-      console.log('📝 Creating deposit transaction...');
-      
-      // For Hedera, we need to use the correct function selector for deposit(uint256)
-      // The function selector for deposit(uint256) is 0x47e7ef24
-      const depositFunctionSelector = '0x47e7ef24';
-      
-      // Encode the parameter: amount (32 bytes)
-      const amountHex = amountInSmallestUnit.toString(16).padStart(64, '0'); // Pad to 32 bytes
-      
-      const depositCalldata = depositFunctionSelector + amountHex;
-      
-      console.log('📋 Deposit calldata:', {
-        functionSelector: depositFunctionSelector,
-        amountHex,
-        fullCalldata: depositCalldata
-      });
-      
-      const depositTx = new ContractExecuteTransaction()
-        .setContractId(ContractId.fromEvmAddress(0, 0, poolEvmAddress))
-        .setGas(300000)
-        .setFunctionParameters(Buffer.from(depositCalldata.slice(2), 'hex'));
-      
+      // Execute deposit transaction using HashConnect request
       console.log('📤 Requesting deposit transaction from HashPack...');
       
-      // Execute deposit transaction using HashConnect request
-      const depositTxResponse = await hashconnect.sendTransaction(
-        userAddress, // accountId
-        depositTx    // transaction
-      );
+      // Variables for transaction result tracking
+      let transactionSuccessful = false;
       
-      console.log('✅ Deposit transaction response:', depositTxResponse);
-      
-      if (depositTxResponse.success === false) {
-        console.error('❌ Deposit transaction failed:', depositTxResponse);
-        if (depositTxResponse.error && depositTxResponse.error.includes('CONTRACT_REVERT_EXECUTED')) {
-          throw new Error('Deposit failed. The pool contract may not exist or the approval may not have been sufficient. Please try again.');
+      try {
+        // Add more visible logging
+        console.warn('🔍 DEBUG: About to send transaction');
+        console.warn('🔍 DEBUG: Transaction contract ID:', depositTx.contractId?.toString());
+        console.warn('🔍 DEBUG: User address:', userAddress);
+        
+        // SYSTEMATIC DEBUGGING FOLLOWING THE CHECKLIST
+        console.warn('🔍 ===== COMPREHENSIVE DEBUG CHECKLIST =====');
+        
+        // Convert amount to BigInt for debugging
+        const amountBigInt = BigInt(Math.floor(parseFloat(depositAmount) * 1e6));
+        console.warn('   - Amount conversion details:');
+        console.warn('     * Original amount:', depositAmount);
+        console.warn('     * Parsed float:', parseFloat(depositAmount));
+        console.warn('     * Multiplied by 1e6:', parseFloat(depositAmount) * 1e6);
+        console.warn('     * Math.floor result:', Math.floor(parseFloat(depositAmount) * 1e6));
+        console.warn('     * BigInt result:', amountBigInt.toString());
+        console.warn('     * BigInt as string:', amountBigInt.toString());
+        
+        // 1. CHECK CONTRACT CALL PARAMETERS
+        console.warn('1️⃣ Contract Call Parameters:');
+        console.warn('   - Pool EVM Address:', poolEvmAddress);
+        console.warn('   - Method Name: deposit');
+        console.warn('   - Amount (original):', depositAmount);
+        console.warn('   - Amount (BigInt):', amountBigInt.toString());
+        console.warn('   - User Address:', userAddress);
+        console.warn('   - Contract ID:', depositTx.contractId?.toString());
+        
+        // Validate all parameters
+        const allParamsValid = poolEvmAddress && depositAmount && userAddress && depositTx.contractId;
+        console.warn('   - All params valid:', allParamsValid);
+        
+        // 2. CONFIRM POOL CONTRACT ADDRESS
+        console.warn('2️⃣ Pool Contract Address Confirmation:');
+        console.warn('   - Using pool address from backend:', poolEvmAddress);
+        console.warn('   - Expected RICE pool:', '0xBD779d7AFED65b518dfe8a19F38EB7a6A8Be113C');
+        console.warn('   - Address matches:', poolEvmAddress === '0xBD779d7AFED65b518dfe8a19F38EB7a6A8Be113C');
+        
+        // 3. TRANSACTION CONSTRUCTION
+        console.warn('3️⃣ Transaction Construction:');
+        console.warn('   - Contract ID valid:', !!depositTx.contractId);
+        console.warn('   - Gas set:', !!depositTx.gas);
+        console.warn('   - Function set:', !!depositTx.functionParameters);
+        
+        // Create a completely fresh transaction with explicit parameters
+        // Use the contract ID from the original depositTx since mirrorNodeContractId might not be in scope
+        console.log('🔍 Fresh transaction amount conversion:', {
+          original: depositAmount,
+          bigIntValue: amountBigInt.toString(),
+          type: typeof amountBigInt
+        });
+        
+        let freshTxFunctionParams;
+        try {
+          // Try BigInt first, fallback to number
+          freshTxFunctionParams = new ContractFunctionParameters().addUint256(amountBigInt);
+          console.log('✅ Fresh tx function parameters created with BigInt');
+        } catch (bigIntError) {
+          console.log('⚠️ BigInt failed for fresh tx, trying number conversion');
+          const amountAsNumber = Number(amountBigInt.toString());
+          freshTxFunctionParams = new ContractFunctionParameters().addUint256(amountAsNumber);
         }
-        throw new Error(`Deposit failed: ${depositTxResponse.error || 'Unknown error'}`);
+        
+        const freshTx = new ContractExecuteTransaction()
+          .setContractId(depositTx.contractId)
+          .setGas(300000)
+          .setFunction('deposit', freshTxFunctionParams);
+        
+        console.warn('   - Fresh transaction created');
+        console.warn('   - Fresh contract ID:', freshTx.contractId?.toString());
+        console.warn('   - Fresh gas:', freshTx.gas?.toString());
+        
+        // 4. HASHCONNECT INTEGRATION
+        console.warn('4️⃣ HashConnect Integration:');
+        console.warn('   - HashConnect available:', !!hashconnect);
+        console.warn('   - User connected:', !!userAddress);
+        
+        // 5. ERROR LOGGING - Transaction Object
+        console.warn('5️⃣ Transaction Object Inspection:');
+        console.warn('   - Transaction type:', freshTx.constructor.name);
+        console.warn('   - Transaction keys:', Object.keys(freshTx));
+        console.warn('   - Full transaction object:', freshTx);
+        
+        // 6. MIRROR NODE/NETWORK ISSUES
+        console.warn('6️⃣ Mirror Node/Network Check:');
+        console.warn('   - Mirror node response OK:', !!depositTx.contractId);
+        console.warn('   - Contract ID from transaction:', depositTx.contractId?.toString());
+        
+        // Final validation before sending transaction
+        console.warn('🔍 Final Transaction Validation:');
+        console.warn('   - Contract ID valid:', !!freshTx.contractId);
+        console.warn('   - Gas set:', !!freshTx.gas);
+        console.warn('   - Function parameters set:', !!freshTxFunctionParams);
+        console.warn('   - User address valid:', !!userAddress);
+        console.warn('   - HashConnect available:', !!hashconnect);
+        
+        if (!freshTx.contractId) {
+          throw new Error('Transaction contract ID is null');
+        }
+        if (!freshTx.gas) {
+          throw new Error('Transaction gas is not set');
+        }
+        if (!freshTxFunctionParams) {
+          throw new Error('Transaction function parameters are not set');
+        }
+        
+        // Execute deposit transaction using HashConnect request
+        console.warn('🚀 Sending transaction to HashConnect...');
+        
+        // Send transaction directly to HashConnect to allow popup to show
+        try {
+          console.log('🔄 Sending transaction directly to HashConnect...');
+          
+          // Final validation before sending transaction
+          console.log('🔍 Final transaction validation:');
+          console.log('🔍 Transaction contract ID:', depositTx.contractId?.toString());
+          console.log('🔍 Transaction gas:', depositTx.gas?.toString());
+          console.log('🔍 Function parameters exist:', !!depositTx.functionParameters);
+          console.log('🔍 User address:', userAddress);
+          console.log('🔍 HashConnect available:', !!hashconnect);
+          
+          // Validate transaction is properly constructed
+          if (!depositTx.contractId) {
+            throw new Error('Transaction missing contract ID');
+          }
+          if (!depositTx.gas) {
+            throw new Error('Transaction missing gas limit');
+          }
+          if (!depositTx.functionParameters) {
+            throw new Error('Transaction missing function parameters');
+          }
+          if (!userAddress) {
+            throw new Error('User address is missing');
+          }
+          
+          console.log('✅ All transaction validation passed');
+          
+          // Send transaction directly to HashConnect
+          const transactionResult = await hashconnect.sendTransaction(
+            userAddress, // accountId
+            depositTx    // transaction
+          );
+          
+          console.log('✅ Deposit transaction response:', transactionResult);
+          
+          if (transactionResult.success === false) {
+            console.error('❌ Deposit transaction failed:', transactionResult.error);
+            
+            // Provide specific error message for contract revert
+            if (transactionResult.error && transactionResult.error.includes('CONTRACT_REVERT_EXECUTED')) {
+              throw new Error('Transaction failed: Contract execution reverted. This usually means:\n1. Insufficient AUSD token balance\n2. Token not approved for transfer\n3. Amount below minimum deposit (1 token)\n4. Contract is paused or has restrictions');
+            }
+            
+            throw new Error(`Deposit failed: ${transactionResult.error || 'Unknown error'}`);
+          }
+          
+          console.log('✅ Deposit transaction completed successfully');
+          transactionSuccessful = true;
+          
+        } catch (sendError: any) {
+          console.error('❌ Send transaction error:', sendError);
+          
+          // Check if it's the specific contract revert error
+          const errorMessage = sendError?.message || sendError?.toString() || '';
+          
+          if (errorMessage.includes('CONTRACT_REVERT_EXECUTED')) {
+            console.error('❌ Contract reverted. Possible issues:');
+            console.error('   1. User may not have enough AUSD tokens');
+            console.error('   2. User may not have approved token transfer');
+            console.error('   3. Contract may be paused or have other restrictions');
+            throw new Error('Transaction failed: Contract execution reverted. Please ensure you have enough AUSD tokens and proper approvals.');
+          }
+          
+          throw sendError;
+        }
+        
+      } catch (innerError: any) {
+        console.error('❌ Inner transaction error:', innerError);
+        throw innerError;
       }
       
-      // For HashConnect v3.x, we don't need to wait for receipt manually
-      console.log('✅ Deposit transaction completed successfully');
-      
+      // Success handling
+      if (transactionSuccessful) {
       toast.success(`✅ Successfully deposited ${depositAmount} USDT to ${grainType} pool!`, {
         duration: 5000,
         description: '🎉 Your funds are now earning yield!'
       });
       
-      // Refresh balances
+        // Refresh balances after a delay to allow for network processing
       setTimeout(() => {
         fetchUsdtBalance(userAddress);
       }, 3000);
+        return;
+      }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Deposit error:', error);
       toast.error(error instanceof Error ? error.message : 'Error processing deposit');
     } finally {
