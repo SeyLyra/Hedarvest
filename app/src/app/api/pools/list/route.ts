@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
     console.log('📡 Fetching pools from backend:', BACKEND_URL);
     
     // Fetch real pool data from backend
-    const response = await fetch(`${BACKEND_URL}/api/investor/pools`, {
+    const response = await fetch(`${BACKEND_URL}/investor/pools`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
       id: index + 1,
       grainType: pool.assetType || pool.grainType,
       address: pool.address || pool.poolAddress,
+      lendingTokenAddress: pool.lendingTokenAddress, // Add the token contract address
       price: 250.00, // Default price - can be fetched from oracle later
       availableLiquidity: pool.availableLiquidity || "0",
       totalBorrows: pool.totalBorrows || "0",

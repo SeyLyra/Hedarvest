@@ -19,6 +19,22 @@ const API_BASE_URL = typeof window !== 'undefined'
   ? (window as any).location?.origin || 'http://localhost:3000'
   : 'http://localhost:3000';
 
+// USDT Token ID (from backend environment)
+const USDT_TOKEN_ID = '0.0.6951126';
+
+// Helper to get topic from HashConnect session
+const getTopicFromSession = (hc: any): string | null => {
+  try {
+    if (hc.topic) return hc.topic;
+    if (hc._signClient?.session?.values?.length > 0) {
+      return hc._signClient.session.values[0].topic;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 export default function InvestorDashboard() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState('pools');
@@ -91,36 +107,293 @@ export default function InvestorDashboard() {
   };
 
   const handleDeposit = async (grainType: string, amount: string) => {
-    if (!isAuthenticated) {
-      toast.error('Please authenticate your wallet first');
+    if (!userAddress || !hashconnect) {
+      toast.error('Please connect your wallet first');
+      return;
+    }
+
+    // Proactive check: Verify we have an active session before proceeding
+    console.log('🔍 Checking for active session...');
+    console.log('🔍 HashConnect core:', hashconnect.core);
+    console.log('🔍 Core session:', hashconnect.core?.session);
+    console.log('🔍 Session values:', hashconnect.core?.session?.values);
+    
+    const activeSession = hashconnect.core?.session?.values?.find((session: any) => session.acknowledged);
+    console.log('🔍 Active session found:', activeSession);
+    
+    if (!activeSession) {
+      // Let's also check alternative session locations
+      console.log('🔍 Checking alternative session locations...');
+      console.log('🔍 _signClient session:', hashconnect._signClient?.session);
+      console.log('🔍 _signClient session values:', hashconnect._signClient?.session?.values);
+      
+      const altSession = hashconnect._signClient?.session?.values?.find((session: any) => session.acknowledged);
+      console.log('🔍 Alternative session found:', altSession);
+      
+      if (altSession) {
+        console.log('✅ Found session in _signClient, using that instead');
+        // Use the alternative session - we'll continue with the deposit
+      } else {
+        // Let's also check if we can find any session at all (even if not acknowledged)
+        console.log('🔍 Checking for any sessions (acknowledged or not)...');
+        const anyCoreSession = hashconnect.core?.session?.values?.[0];
+        const anySignClientSession = hashconnect._signClient?.session?.values?.[0];
+        
+        console.log('🔍 Any core session:', anyCoreSession);
+        console.log('🔍 Any signClient session:', anySignClientSession);
+        
+        if (anyCoreSession || anySignClientSession) {
+          console.log('⚠️ Found session but it may not be acknowledged yet. Proceeding anyway...');
+          // Continue with the deposit - maybe the session is valid but not marked as acknowledged
+        } else {
+          console.log('⚠️ No active session detected in any location, clearing stale connection state...');
+          localStorage.removeItem('hashpack_account');
+          toast.error('Connection expired. Please reconnect your wallet.', { 
+            duration: 5000,
+            action: {
+              label: 'Reconnect',
+              onClick: () => {
+                hashconnect.openPairingModal();
+              }
+            }
+          });
+          return;
+        }
+      }
+    }
+
+    const depositAmount = parseFloat(amount);
+    
+    if (depositAmount <= 0) {
+      toast.error('Please enter a valid amount');
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/investor/deposit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          grainType, 
-          amount: parseFloat(amount),
-          depositorAddress: userAddress
-        })
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        toast.success(`Successfully deposited ${amount} tokens to ${grainType} pool`);
-        console.log('Deposit result:', result);
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || 'Deposit failed');
+      toast.info(`💰 Depositing ${depositAmount} USDT to ${grainType} pool...`, { duration: 3000 });
+      
+      console.log('💰 Deposit request:', { grainType, amount: depositAmount, userAddress });
+      
+      // Get pool address
+      const poolsResponse = await fetch('/api/pools/list');
+      const poolsData = await poolsResponse.json();
+      console.log('📊 Available pools:', poolsData.data.map((p: any) => ({ grainType: p.grainType, address: p.address })));
+      const pool = poolsData.data.find((p: any) => p.grainType.toUpperCase() === grainType.toUpperCase());
+      
+      if (!pool) {
+        const availableTypes = poolsData.data.map((p: any) => p.grainType).join(', ');
+        throw new Error(`Pool not found for ${grainType}. Available types: ${availableTypes}`);
       }
+      
+      console.log('📍 Pool address:', pool.address);
+      
+      // REAL DEPOSIT WITH HASHPACK WALLET SIGNING
+      const { ethers } = await import('ethers');
+      const { ContractExecuteTransaction, ContractId } = await import('@hashgraph/sdk');
+      
+      // Get the token contract address from the pool
+      const tokenEvmAddress = pool.lendingTokenAddress;
+      const poolEvmAddress = pool.address;
+      const amountInSmallestUnit = BigInt(Math.floor(depositAmount * 1000000)); // 6 decimals
+      
+      console.log('📊 Transaction details:', {
+        tokenEvmAddress,
+        poolEvmAddress,
+        depositAmount,
+        amountInSmallestUnit: amountInSmallestUnit.toString(),
+        userAddress
+      });
+      
+      if (!tokenEvmAddress) {
+        throw new Error('Token contract address not found for this pool. Please try again.');
+      }
+      
+      // Use AUSD token ID directly (from deployed contracts)
+      const ausdTokenId = '0.0.6951126'; // AUSD from deployed.md
+      
+      console.log('📋 Using contracts:', {
+        ausdTokenId,
+        poolEvmAddress: poolEvmAddress
+      });
+      
+      // STEP 1: Approve pool to spend tokens
+      toast.info('Step 1/2: Approving token spending... Please approve in HashPack!', { duration: 5000 });
+      console.log('📝 Creating approval transaction...');
+      
+      // For Hedera, we need to use the correct function selector for ERC20 approve
+      // The function selector for approve(address,uint256) is 0x095ea7b3
+      const approveFunctionSelector = '0x095ea7b3';
+      
+      // Encode the parameters: spender address (32 bytes) + amount (32 bytes)
+      const spenderAddress = poolEvmAddress.padStart(64, '0'); // Pad to 32 bytes (64 hex chars)
+      const amountHex = amountInSmallestUnit.toString(16).padStart(64, '0'); // Pad to 32 bytes
+      
+      const approveCalldata = approveFunctionSelector + spenderAddress + amountHex;
+      
+      console.log('📋 Approval calldata:', {
+        functionSelector: approveFunctionSelector,
+        spenderAddress,
+        amountHex,
+        fullCalldata: approveCalldata
+      });
+      
+      const approveTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(ausdTokenId))
+        .setGas(200000)
+        .setFunctionParameters(Buffer.from(approveCalldata.slice(2), 'hex'));
+      
+      console.log('📤 Sending approval transaction to HashPack...');
+      
+      // For HashConnect v3.x, we need to get the active session from the core
+      console.log('🔗 HashConnect object keys:', Object.keys(hashconnect));
+      console.log('🔗 Core object keys:', Object.keys(hashconnect.core || {}));
+      
+      // Get the active session from the core (try multiple locations)
+      let activeSession = hashconnect.core?.session?.values?.find((session: any) => session.acknowledged);
+      console.log('🔗 Active session (core):', activeSession);
+      
+      // Try alternative location if not found in core
+      if (!activeSession) {
+        activeSession = hashconnect._signClient?.session?.values?.find((session: any) => session.acknowledged);
+        console.log('🔗 Active session (_signClient):', activeSession);
+      }
+      
+      if (!activeSession) {
+        console.log('❌ No active session found. Is connected:', isConnected);
+        console.log('❌ Account ID:', userAddress);
+        console.log('❌ HashConnect state:', {
+          connected: hashconnect?.connected,
+          topic: hashconnect?.topic,
+          pairingString: hashconnect?._pairingString
+        });
+        
+        // Clear stale connection state and request reconnection
+        console.log('🔄 Clearing stale connection state...');
+        
+        // Clear localStorage
+        localStorage.removeItem('hashpack_account');
+        
+        // Try to disconnect and reconnect
+        try {
+          await hashconnect.disconnectAll();
+          console.log('✅ Disconnected from stale session');
+          
+          // Show user message
+          toast.error('Connection lost. Please reconnect your wallet.', { 
+            duration: 5000,
+            action: {
+              label: 'Reconnect',
+              onClick: () => {
+                hashconnect.openPairingModal();
+              }
+            }
+          });
+          
+          throw new Error('Please reconnect your wallet to continue.');
+          
+        } catch (reconnectError) {
+          console.error('❌ Reconnection failed:', reconnectError);
+          throw new Error('No active HashPack session. Please reconnect your wallet.');
+        }
+      }
+      
+      const pairingData = {
+        topic: activeSession.topic,
+        accountIds: activeSession.namespaces?.hedera?.accounts || []
+      };
+      
+      console.log('🔗 Final pairing data:', pairingData);
+      
+      // For HashConnect v3.x, we don't use getProvider() - we send transactions directly
+      console.log('🔑 Using HashConnect v3.x transaction sending approach');
+      
+      // Execute approval transaction using HashConnect request
+      console.log('📤 Requesting approval transaction from HashPack...');
+      
+      // For HashConnect v3.x, sendTransaction takes different parameters
+      const approveTxResponse = await hashconnect.sendTransaction(
+        userAddress, // accountId
+        approveTx    // transaction
+      );
+      
+      console.log('✅ Approval transaction response:', approveTxResponse);
+      
+      if (approveTxResponse.success === false) {
+        console.error('❌ Approval transaction failed:', approveTxResponse);
+        if (approveTxResponse.error && approveTxResponse.error.includes('CONTRACT_REVERT_EXECUTED')) {
+          throw new Error('Token approval failed. The contract may not exist or you may not have enough tokens. Please check your token balance and try again.');
+        }
+        throw new Error(`Approval failed: ${approveTxResponse.error || 'Unknown error'}`);
+      }
+      
+      // For HashConnect v3.x, we don't need to wait for receipt manually
+      // The sendTransaction already waits for completion
+      console.log('✅ Approval transaction completed successfully');
+      
+      toast.success('✅ Approval confirmed!', { duration: 2000 });
+      
+      // Wait for approval to be confirmed
+      await new Promise(r => setTimeout(r, 2000));
+      
+      // STEP 2: Deposit to pool
+      toast.info('Step 2/2: Depositing to pool... Please approve in HashPack!', { duration: 5000 });
+      console.log('📝 Creating deposit transaction...');
+      
+      // For Hedera, we need to use the correct function selector for deposit(uint256)
+      // The function selector for deposit(uint256) is 0x47e7ef24
+      const depositFunctionSelector = '0x47e7ef24';
+      
+      // Encode the parameter: amount (32 bytes)
+      const amountHex = amountInSmallestUnit.toString(16).padStart(64, '0'); // Pad to 32 bytes
+      
+      const depositCalldata = depositFunctionSelector + amountHex;
+      
+      console.log('📋 Deposit calldata:', {
+        functionSelector: depositFunctionSelector,
+        amountHex,
+        fullCalldata: depositCalldata
+      });
+      
+      const depositTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromEvmAddress(0, 0, poolEvmAddress))
+        .setGas(300000)
+        .setFunctionParameters(Buffer.from(depositCalldata.slice(2), 'hex'));
+      
+      console.log('📤 Requesting deposit transaction from HashPack...');
+      
+      // Execute deposit transaction using HashConnect request
+      const depositTxResponse = await hashconnect.sendTransaction(
+        userAddress, // accountId
+        depositTx    // transaction
+      );
+      
+      console.log('✅ Deposit transaction response:', depositTxResponse);
+      
+      if (depositTxResponse.success === false) {
+        console.error('❌ Deposit transaction failed:', depositTxResponse);
+        if (depositTxResponse.error && depositTxResponse.error.includes('CONTRACT_REVERT_EXECUTED')) {
+          throw new Error('Deposit failed. The pool contract may not exist or the approval may not have been sufficient. Please try again.');
+        }
+        throw new Error(`Deposit failed: ${depositTxResponse.error || 'Unknown error'}`);
+      }
+      
+      // For HashConnect v3.x, we don't need to wait for receipt manually
+      console.log('✅ Deposit transaction completed successfully');
+      
+      toast.success(`✅ Successfully deposited ${depositAmount} USDT to ${grainType} pool!`, {
+        duration: 5000,
+        description: '🎉 Your funds are now earning yield!'
+      });
+      
+      // Refresh balances
+      setTimeout(() => {
+        fetchUsdtBalance(userAddress);
+      }, 3000);
+      
     } catch (error) {
-      console.error('Deposit error:', error);
-      toast.error('Error processing deposit');
+      console.error('❌ Deposit error:', error);
+      toast.error(error instanceof Error ? error.message : 'Error processing deposit');
     } finally {
       setIsLoading(false);
     }

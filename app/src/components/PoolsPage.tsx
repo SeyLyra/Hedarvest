@@ -41,17 +41,23 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
   const fetchPools = async () => {
     setPoolsLoading(true);
     try {
+      console.log('🏊 Fetching pools from /api/pools/list...');
       const response = await fetch('/api/pools/list');
+      console.log('   Response status:', response.status);
+      
       if (response.ok) {
         const result = await response.json();
+        console.log('   Result:', result);
+        
         if (result.success && result.data) {
+          console.log('✅ Setting pools:', result.data.length, 'pools');
           setPools(result.data);
         } else {
           console.error('Failed to fetch pools:', result.error);
           toast.error('Failed to load pools');
         }
       } else {
-        console.error('Failed to fetch pools');
+        console.error('Failed to fetch pools, status:', response.status);
         toast.error('Failed to load pools');
       }
     } catch (error) {

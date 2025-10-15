@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
     console.log('💸 Withdraw request:', { grainType, shares, depositorAddress });
 
     // Call backend API
-    const response = await fetch(`${BACKEND_URL}/api/investor/withdraw`, {
+    const response = await fetch(`${BACKEND_URL}/investor/withdraw`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

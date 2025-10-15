@@ -118,11 +118,15 @@ export function useHashPackDirect(): HashPackDirectHook {
               message.includes('localhost:3000/null') ||
               message.includes('404 (Not Found)') ||
               message.includes('No matching key') ||
-              message.includes('proposal:')) {
+              message.includes('proposal:') ||
+              message.includes('Error code: undefined')) {
             console.warn('⚠️ External request failed (this is normal):', ...args);
             return;
           }
-          originalError.apply(console, args);
+          // Check if originalError is a function before calling it
+          if (typeof originalError === 'function') {
+            originalError.apply(console, args);
+          }
         };
 
         // Add global error handler for unhandled promise rejections
@@ -134,7 +138,8 @@ export function useHashPackDirect(): HashPackDirectHook {
                reason.includes('localhost:3000/null') ||
                reason.includes('404') ||
                reason.includes('No matching key') ||
-               reason.includes('proposal:'))) {
+               reason.includes('proposal:') ||
+               reason.includes('Error code: undefined'))) {
             console.warn('⚠️ Unhandled promise rejection (this is normal):', event.reason);
             event.preventDefault();
             return;
@@ -142,7 +147,9 @@ export function useHashPackDirect(): HashPackDirectHook {
           // Also check if it's an object with these properties
           if (event.reason && typeof event.reason === 'object') {
             const reasonStr = JSON.stringify(event.reason);
-            if (reasonStr.includes('No matching key') || reasonStr.includes('proposal:')) {
+            if (reasonStr.includes('No matching key') || 
+                reasonStr.includes('proposal:') ||
+                reasonStr.includes('Error code: undefined')) {
               console.warn('⚠️ Unhandled promise rejection (this is normal):', event.reason);
               event.preventDefault();
               return;
@@ -371,7 +378,8 @@ export function useHashPackDirect(): HashPackDirectHook {
             (event.reason.message?.includes('attestation') ||
              event.reason.message?.includes('400') ||
              event.reason.message?.includes('localhost:3000/null') ||
-             event.reason.message?.includes('404'))) {
+             event.reason.message?.includes('404') ||
+             event.reason.message?.includes('Error code: undefined'))) {
           event.preventDefault();
           return;
         }

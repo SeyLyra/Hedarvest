@@ -7,6 +7,7 @@ const POOL_FACTORY_ABI = [
   'function getPool(string) external view returns (address)',
   'function isPoolExists(string) external view returns (bool)',
   'function getPoolInfo(string) external view returns (tuple(address poolAddress, string assetType, address lendingToken, address collateralToken, address lpToken, uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool exists))',
+  'function getAllPoolsInfo() external view returns (tuple(address poolAddress, string assetType, address lendingToken, address collateralToken, address lpToken, uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool exists)[])',
   'function getPoolStatsByAsset(string) external view returns (tuple(address poolAddress, string assetType, uint256 totalAssets, uint256 totalBorrows, uint256 totalReserves, uint256 availableLiquidity, uint256 utilizationRate, uint256 borrowRate, uint256 supplyRate, uint256 activePositions))',
   'function getBorrowerPositions(string, address) external view returns (uint256[])',
   'function getAllBorrowerPositions(address) external view returns (tuple(string assetType, address poolAddress, uint256[] positionIds, uint256 totalCollateral, uint256 totalDebt, uint256 averageHealthFactor)[])',

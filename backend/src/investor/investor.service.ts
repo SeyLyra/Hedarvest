@@ -177,9 +177,11 @@ export class InvestorService {
     
     try {
       // Get all pools info from contract service
+      this.logger.log('Calling contractService.getAllPoolsInfo()...');
       const allPoolsInfo = await this.contractService.getAllPoolsInfo();
       
       this.logger.log(`Retrieved ${allPoolsInfo.length} pools from blockchain`);
+      this.logger.log('Pools info:', JSON.stringify(allPoolsInfo, null, 2));
       
       // Format pools for investor display with real smart contract data
       const formattedPools: any[] = [];
