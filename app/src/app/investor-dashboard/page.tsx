@@ -245,7 +245,7 @@ export default function InvestorDashboard() {
         console.log('✅ Got Hedera contract ID from mirror node:', mirrorNodeContractId);
         
         // Convert amount to the format expected by the contract (wei/smallest unit)
-        const amountInWei = (parseFloat(depositAmount) * 1e6).toString(); // AUSD has 6 decimals
+        const amountInWei = (parseFloat(String(depositAmount || '0')) * 1e6).toString(); // AUSD has 6 decimals
         
         // Validate all parameters before creating transaction
         console.log('🔍 Validating transaction parameters:', {
@@ -279,12 +279,12 @@ export default function InvestorDashboard() {
         let functionParams;
         try {
           // Convert amount to proper format for Hedera SDK
-          const amountInWei = Math.floor(parseFloat(depositAmount) * 1e6); // Convert to smallest unit (6 decimals)
+          const amountInWei = Math.floor(parseFloat(String(depositAmount || '0')) * 1e6); // Convert to smallest unit (6 decimals)
           
           console.log('🔍 Converting amount for function parameters:', {
             original: depositAmount,
-            parsedFloat: parseFloat(depositAmount),
-            multiplied: parseFloat(depositAmount) * 1e6,
+            parsedFloat: parseFloat(String(depositAmount || '0')),
+            multiplied: parseFloat(String(depositAmount || '0')) * 1e6,
             floorResult: amountInWei,
             type: typeof amountInWei,
             isInteger: Number.isInteger(amountInWei),
@@ -381,12 +381,12 @@ export default function InvestorDashboard() {
         console.warn('🔍 ===== COMPREHENSIVE DEBUG CHECKLIST =====');
         
         // Convert amount to BigInt for debugging
-        const amountBigInt = BigInt(Math.floor(parseFloat(depositAmount) * 1e6));
+        const amountBigInt = BigInt(Math.floor(parseFloat(String(depositAmount || '0')) * 1e6));
         console.warn('   - Amount conversion details:');
         console.warn('     * Original amount:', depositAmount);
-        console.warn('     * Parsed float:', parseFloat(depositAmount));
-        console.warn('     * Multiplied by 1e6:', parseFloat(depositAmount) * 1e6);
-        console.warn('     * Math.floor result:', Math.floor(parseFloat(depositAmount) * 1e6));
+        console.warn('     * Parsed float:', parseFloat(String(depositAmount || '0')));
+        console.warn('     * Multiplied by 1e6:', parseFloat(String(depositAmount || '0')) * 1e6);
+        console.warn('     * Math.floor result:', Math.floor(parseFloat(String(depositAmount || '0')) * 1e6));
         console.warn('     * BigInt result:', amountBigInt.toString());
         console.warn('     * BigInt as string:', amountBigInt.toString());
         
@@ -426,7 +426,7 @@ export default function InvestorDashboard() {
         let freshTxFunctionParams;
         try {
           // Try BigInt first, fallback to number
-          freshTxFunctionParams = new ContractFunctionParameters().addUint256(amountBigInt);
+          freshTxFunctionParams = new ContractFunctionParameters().addUint256(Number(amountBigInt));
           console.log('✅ Fresh tx function parameters created with BigInt');
         } catch (bigIntError) {
           console.log('⚠️ BigInt failed for fresh tx, trying number conversion');
@@ -435,7 +435,7 @@ export default function InvestorDashboard() {
         }
         
         const freshTx = new ContractExecuteTransaction()
-          .setContractId(depositTx.contractId)
+          .setContractId(depositTx.contractId!)
           .setGas(300000)
           .setFunction('deposit', freshTxFunctionParams);
         

@@ -9,6 +9,8 @@ datasource db {
 
 model Farmer {
   id            Int      @id @default(autoincrement())
+  email         String?  @unique
+  password      String?
   memberNumber  String   @unique
   phoneNumber   String
   nationalId    String?

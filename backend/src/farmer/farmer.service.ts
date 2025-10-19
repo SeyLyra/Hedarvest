@@ -1,8 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto } from './dto';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto } from './dto';
 import { TransactionService } from '../transaction/transaction.service';
 import { HederaService } from '../lib/hedera.service';
+import * as bcrypt from 'bcryptjs';
+import { JwtService } from '@nestjs/jwt';
 
 @Injectable()
 export class FarmerService {
@@ -10,6 +12,7 @@ export class FarmerService {
     private prisma: PrismaService,
     private transactionService: TransactionService,
     private hederaService: HederaService,
+    private jwtService: JwtService,
   ) {}
 
   async registerFarmer(registerFarmerDto: RegisterFarmerDto) {
@@ -191,5 +194,128 @@ export class FarmerService {
     });
 
     return { success: true, transactionId: hederaResult.transactionId };
+  }
+
+  async registerFarmerWithAuth(farmerRegisterDto: FarmerRegisterDto) {
+    const { email, password, walletAddress, phoneNumber, nationalId } = farmerRegisterDto;
+
+    // Check if farmer already exists by email or wallet
+    const existingFarmer = await this.prisma.farmer.findFirst({
+      where: {
+        OR: [
+          { email },
+          { walletAddress }
+        ]
+      }
+    });
+
+    if (existingFarmer) {
+      throw new BadRequestException('Farmer already registered with this email or wallet');
+    }
+
+    // Hash password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Create farmer with authentication
+    const farmer = await this.prisma.farmer.create({
+      data: {
+        email,
+        password: hashedPassword,
+        walletAddress,
+        phoneNumber: phoneNumber || 'N/A',
+        memberNumber: `MBR-${Date.now()}`,
+      },
+    });
+
+    // Generate JWT token
+    const token = this.jwtService.sign({
+      sub: farmer.id,
+      email: farmer.email,
+      type: 'farmer'
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'farmer_registration',
+      ref: `farmer_${farmer.id}`,
+      entity: 'Farmer',
+      meta: {
+        email,
+        walletAddress,
+        phoneNumber,
+        nationalId,
+      },
+    });
+
+    return {
+      farmer: {
+        id: farmer.id,
+        email: farmer.email,
+        walletAddress: farmer.walletAddress,
+        memberNumber: farmer.memberNumber,
+        phoneNumber: farmer.phoneNumber,
+      },
+      token
+    };
+  }
+
+  async loginFarmer(farmerLoginDto: FarmerLoginDto) {
+    const { email, password } = farmerLoginDto;
+
+    // Find farmer by email
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { email }
+    });
+
+    if (!farmer) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Check if farmer has password (for backward compatibility)
+    if (!farmer.password) {
+      throw new UnauthorizedException('Please register with email and password first');
+    }
+
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(password, farmer.password);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    // Generate JWT token
+    const token = this.jwtService.sign({
+      sub: farmer.id,
+      email: farmer.email,
+      type: 'farmer'
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'farmer_login',
+      ref: `farmer_${farmer.id}`,
+      entity: 'Farmer',
+      meta: { email },
+    });
+
+    return {
+      farmer: {
+        id: farmer.id,
+        email: farmer.email,
+        walletAddress: farmer.walletAddress,
+        memberNumber: farmer.memberNumber,
+        phoneNumber: farmer.phoneNumber,
+      },
+      token
+    };
+  }
+
+  async getFarmerByEmail(email: string) {
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { email }
+    });
+    if (!farmer) {
+      throw new NotFoundException('Farmer not found');
+    }
+    return farmer;
   }
 }

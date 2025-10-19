@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
 import { FarmerService } from './farmer.service';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto } from './dto';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OtpService } from '../lib/otp.service';
 import { IsString } from 'class-validator';
@@ -65,5 +65,15 @@ export class FarmerController {
   async verifyOtp(@Body() body: VerifyOtpBody) {
     const farmer = await this.farmerService.getFarmerByMemberNumber(body.memberNumber);
     return this.otpService.verifyOtpForFarmer(farmer.id, body.otpCode);
+  }
+
+  @Post('register-with-auth')
+  async registerWithAuth(@Body() farmerRegisterDto: FarmerRegisterDto) {
+    return this.farmerService.registerFarmerWithAuth(farmerRegisterDto);
+  }
+
+  @Post('login')
+  async login(@Body() farmerLoginDto: FarmerLoginDto) {
+    return this.farmerService.loginFarmer(farmerLoginDto);
   }
 }

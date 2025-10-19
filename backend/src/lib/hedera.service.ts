@@ -10,6 +10,7 @@ import {
   TokenId,
   AccountBalanceQuery,
   TokenInfoQuery,
+  TokenAssociateTransaction,
 } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 import { ContractService } from './contract.service';
@@ -217,6 +218,280 @@ export class HederaService {
     } catch (error) {
       this.logger.error('Failed to get token info:', error);
       throw new Error(`Token info query failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Associate a token with an account using the operator's credentials
+   * @param accountId The account ID to associate the token with
+   * @param tokenId The token ID to associate
+   * @returns Transaction result with status
+   */
+  async associateToken(
+    accountId: string,
+    tokenId: string,
+  ): Promise<{ transactionId: string; status: string }> {
+    try {
+      const accountIdObj = AccountId.fromString(accountId);
+      const tokenIdObj = TokenId.fromString(tokenId);
+
+      // Create token association transaction using operator's credentials
+      const transaction = new TokenAssociateTransaction()
+        .setAccountId(accountIdObj)
+        .setTokenIds([tokenIdObj]);
+
+      // Sign with operator private key (this service is using operator credentials)
+      const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
+      const signedTx = await transaction.freezeWith(this.client).sign(operatorKey);
+
+      // Submit and get receipt
+      const executeResult = await signedTx.execute(this.client);
+      const receipt = await executeResult.getReceipt(this.client);
+
+      if (receipt.status.toString() === 'SUCCESS') {
+        this.logger.log(`Association SUCCESS for ${accountId} with token ${tokenId}`);
+        return {
+          transactionId: executeResult.transactionId.toString(),
+          status: receipt.status.toString(),
+        };
+      } else {
+        this.logger.warn(`Association FAILED for ${accountId} with token ${tokenId}: ${receipt.status.toString()}`);
+        return {
+          transactionId: executeResult.transactionId.toString(),
+          status: receipt.status.toString(),
+        };
+      }
+    } catch (error) {
+      this.logger.error(`Failed to associate token ${tokenId} with account ${accountId}:`, error);
+      throw new Error(`Token association failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Associate a token with an account using user's private key
+   * @param accountId The account ID to associate the token with
+   * @param privateKey The user's private key (PEM format or hex string)
+   * @param tokenId The token ID to associate
+   * @returns Transaction result with status
+   */
+  async associateTokenWithUserKey(
+    accountId: string,
+    privateKey: string,
+    tokenId: string,
+  ): Promise<{ transactionId: string; status: string }> {
+    try {
+      const accountIdObj = AccountId.fromString(accountId);
+      const tokenIdObj = TokenId.fromString(tokenId);
+      
+      // Parse the private key - handle both hex and PEM formats
+      let userPrivateKey: PrivateKey;
+      try {
+        // Try as hex string first (most common format)
+        userPrivateKey = PrivateKey.fromString(privateKey);
+      } catch {
+        // If that fails, might be PEM format or other, let SDK handle it
+        userPrivateKey = PrivateKey.fromString(privateKey);
+      }
+
+      // Create token association transaction
+      const transaction = new TokenAssociateTransaction()
+        .setAccountId(accountIdObj)
+        .setTokenIds([tokenIdObj]);
+
+      // Sign with user's private key
+      const signedTx = await transaction.freezeWith(this.client).sign(userPrivateKey);
+
+      // Submit and get receipt
+      const executeResult = await signedTx.execute(this.client);
+      const receipt = await executeResult.getReceipt(this.client);
+
+      if (receipt.status.toString() === 'SUCCESS') {
+        this.logger.log(`Association SUCCESS for ${accountId} with token ${tokenId}`);
+        return {
+          transactionId: executeResult.transactionId.toString(),
+          status: receipt.status.toString(),
+        };
+      } else {
+        this.logger.warn(`Association FAILED for ${accountId} with token ${tokenId}: ${receipt.status.toString()}`);
+        return {
+          transactionId: executeResult.transactionId.toString(),
+          status: receipt.status.toString(),
+        };
+      }
+    } catch (error) {
+      this.logger.error(`Failed to associate token ${tokenId} with account ${accountId} using user key:`, error);
+      throw new Error(`Token association with user key failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Check if an account is associated with a token
+   * @param accountId The account ID to check
+   * @param tokenId The token ID to check
+   * @returns Association status and token info if associated
+   */
+  async checkTokenAssociation(
+    accountId: string,
+    tokenId: string,
+  ): Promise<{ isAssociated: boolean; tokenInfo?: any }> {
+    try {
+      const accountIdObj = AccountId.fromString(accountId);
+      const balanceQuery = new AccountBalanceQuery().setAccountId(accountIdObj);
+      const balance = await balanceQuery.execute(this.client);
+
+      // Check if the token exists in the account's token balances
+      const tokenIdObj = TokenId.fromString(tokenId);
+      const isAssociated = balance.tokens ? balance.tokens.get(tokenIdObj) !== undefined : false;
+
+      let tokenInfo: any = undefined;
+      if (isAssociated) {
+        try {
+          tokenInfo = await this.getTokenInfo(tokenId);
+        } catch (err) {
+          this.logger.warn(`Could not get token info for ${tokenId}`, err);
+        }
+      }
+
+      return {
+        isAssociated: isAssociated || false,
+        tokenInfo,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to check token association for account ${accountId} and token ${tokenId}:`, error);
+      throw new Error(`Token association check failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Helper to ensure token association before operations
+   * @param accountId The account ID
+   * @param tokenId The token ID
+   * @param userPrivateKey Optional user private key - if provided, will use user key for association
+   * @returns Association result
+   */
+  async ensureTokenAssociation(
+    accountId: string,
+    tokenId: string,
+    userPrivateKey?: string,
+  ): Promise<{ transactionId?: string; status: string; alreadyAssociated: boolean }> {
+    try {
+      // First check if already associated
+      const associationCheck = await this.checkTokenAssociation(accountId, tokenId);
+      
+      if (associationCheck.isAssociated) {
+        return {
+          status: 'SUCCESS',
+          alreadyAssociated: true,
+        };
+      }
+
+      // If not associated, attempt association
+      let associationResult;
+      if (userPrivateKey) {
+        // Use user's private key if provided
+        associationResult = await this.associateTokenWithUserKey(accountId, userPrivateKey, tokenId);
+      } else {
+        // Use operator credentials
+        associationResult = await this.associateToken(accountId, tokenId);
+      }
+
+      return {
+        transactionId: associationResult.transactionId,
+        status: associationResult.status,
+        alreadyAssociated: false,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to ensure token association for account ${accountId} and token ${tokenId}:`, error);
+      throw new Error(`Token association ensure failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Associate a token with a contract address
+   * This is needed when contracts need to interact with tokens
+   * @param contractAddress The contract address to associate the token with
+   * @param tokenId The token ID to associate
+   * @returns Association result
+   */
+  async associateTokenWithContract(
+    contractAddress: string,
+    tokenId: string,
+  ): Promise<{ transactionId?: string; status: string; alreadyAssociated: boolean }> {
+    try {
+      this.logger.log(`Associating token ${tokenId} with contract ${contractAddress}`);
+      
+      // First check if already associated
+      const associationCheck = await this.checkTokenAssociation(contractAddress, tokenId);
+      
+      if (associationCheck.isAssociated) {
+        this.logger.log(`Token ${tokenId} already associated with contract ${contractAddress}`);
+        return {
+          status: 'SUCCESS',
+          alreadyAssociated: true,
+        };
+      }
+
+      // Associate token with contract using operator credentials
+      const associationResult = await this.associateToken(contractAddress, tokenId);
+
+      this.logger.log(`Token association result for contract ${contractAddress}:`, associationResult);
+      return {
+        transactionId: associationResult.transactionId,
+        status: associationResult.status,
+        alreadyAssociated: false,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to associate token ${tokenId} with contract ${contractAddress}:`, error);
+      throw new Error(`Contract token association failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Ensure token association for both user and contract addresses
+   * This helper method handles the common case where both user and contract need token association
+   * @param userAccountId User account ID
+   * @param contractAddress Contract address
+   * @param tokenId Token ID
+   * @param userPrivateKey Optional user private key for user association
+   * @returns Association results for both user and contract
+   */
+  async ensureTokenAssociationForUserAndContract(
+    userAccountId: string,
+    contractAddress: string,
+    tokenId: string,
+    userPrivateKey?: string,
+  ): Promise<{
+    userAssociation: { transactionId?: string; status: string; alreadyAssociated: boolean };
+    contractAssociation: { transactionId?: string; status: string; alreadyAssociated: boolean };
+  }> {
+    try {
+      this.logger.log(`Ensuring token ${tokenId} association for user ${userAccountId} and contract ${contractAddress}`);
+      
+      // Associate token with user account
+      const userAssociationResult = await this.ensureTokenAssociation(
+        userAccountId,
+        tokenId,
+        userPrivateKey,
+      );
+
+      // Associate token with contract address
+      const contractAssociationResult = await this.associateTokenWithContract(
+        contractAddress,
+        tokenId,
+      );
+
+      this.logger.log('Token association results:', {
+        user: userAssociationResult,
+        contract: contractAssociationResult,
+      });
+
+      return {
+        userAssociation: userAssociationResult,
+        contractAssociation: contractAssociationResult,
+      };
+    } catch (error) {
+      this.logger.error(`Failed to ensure token association for user and contract:`, error);
+      throw new Error(`User and contract token association failed: ${error.message}`);
     }
   }
 

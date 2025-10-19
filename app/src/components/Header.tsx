@@ -37,19 +37,15 @@ const Header = () => {
               For Farmers
               <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-agricultural-green to-trust-blue group-hover:w-full transition-all duration-300"></div>
             </a>
-            <a href="#for-agents" className="text-muted-foreground hover:text-foreground transition-all duration-300 hover:scale-105 relative group">
-              For Agents
-              <div className="absolute bottom-0 left-0 w-0 h-0.5 bg-gradient-to-r from-agricultural-green to-trust-blue group-hover:w-full transition-all duration-300"></div>
-            </a>
           </nav>
           
           {/* Desktop CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
             <Button variant="outline" size="sm" asChild>
-              <a href="/agent">Agent Portal</a>
+              <a href="/warehouse">Warehouse Portal</a>
             </Button>
             <Button variant="farmer" size="sm" asChild>
-              <a href="/farmer-solution">Find an Agent</a>
+              <a href="/farmer">Login as Farmer</a>
             </Button>
           </div>
 
@@ -83,18 +79,11 @@ const Header = () => {
               >
                 For Farmers
               </a>
-              <a 
-                href="#for-agents" 
-                className="text-muted-foreground hover:text-foreground transition-colors"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                For Agents
-              </a>
               <Button variant="outline" size="sm" className="w-full" asChild>
-                <a href="/agent" onClick={() => setIsMobileMenuOpen(false)}>Agent Portal</a>
+                <a href="/warehouse" onClick={() => setIsMobileMenuOpen(false)}>Warehouse Portal</a>
               </Button>
               <Button variant="farmer" size="sm" className="w-full" asChild>
-                <a href="/farmer-solution">Find an Agent</a>
+                <a href="/farmer">Login as Farmer</a>
               </Button>
             </nav>
           </div>

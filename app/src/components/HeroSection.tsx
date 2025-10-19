@@ -48,9 +48,9 @@ const HeroSection = () => {
           
           <div className="flex flex-col sm:flex-row gap-4 mb-8 animate-fade-in" style={{animationDelay: '0.7s'}}>
             <Button variant="farmer" size="xl" className="text-lg px-8 py-4 group" asChild>
-              <a href="/farmer-solution">
+              <a href="/farmer">
                 <span className="group-hover:animate-bounce">🚜</span>
-                Farmer Solutions
+                Login as Farmer
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </a>
             </Button>

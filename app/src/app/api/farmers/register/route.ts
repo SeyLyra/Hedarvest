@@ -1,41 +1,42 @@
-import { NextRequest, NextResponse } from "next/server"
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
+import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    
-    // Forward to backend farmers/register endpoint
-    const response = await fetch(`${BACKEND_URL}/farmers/register`, {
+    const body = await request.json();
+    const { email, password, walletAddress, phoneNumber, nationalId } = body;
+
+    if (!email || !password || !walletAddress) {
+      return NextResponse.json(
+        { message: 'Email, password, and wallet address are required' },
+        { status: 400 }
+      );
+    }
+
+    // Forward the request to the backend
+    const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+    const response = await fetch(`${backendUrl}/farmers/register-with-auth`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': request.headers.get('Authorization') || '',
       },
-      body: JSON.stringify(body),
-    })
+      body: JSON.stringify({ email, password, walletAddress, phoneNumber, nationalId }),
+    });
 
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(errorData.message || 'Farmer registration failed')
+    const data = await response.json();
+
+    if (response.ok) {
+      return NextResponse.json(data);
+    } else {
+      return NextResponse.json(
+        { message: data.message || 'Registration failed' },
+        { status: response.status }
+      );
     }
-
-    const data = await response.json()
-    
-    return NextResponse.json({
-      success: true,
-      data: {
-        farmer: data.farmer,
-        qrCode: data.qrCode,
-      },
-    })
   } catch (error) {
-    console.error("Farmer registration error:", error)
-    
+    console.error('Registration error:', error);
     return NextResponse.json(
-      { success: false, error: error instanceof Error ? error.message : "Registration failed" },
+      { message: 'Internal server error' },
       { status: 500 }
-    )
+    );
   }
 }

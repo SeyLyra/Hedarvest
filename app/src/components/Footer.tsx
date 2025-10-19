@@ -9,7 +9,6 @@ const Footer = () => {
       links: [
         { label: "How It Works", href: "#how-it-works" },
         { label: "For Farmers", href: "#for-farmers" },
-        { label: "For Agents", href: "#for-agents" },
         { label: "Pricing", href: "#" }
       ]
     },

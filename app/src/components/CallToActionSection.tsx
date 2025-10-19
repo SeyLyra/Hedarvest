@@ -53,15 +53,15 @@ const CallToActionSection = () => {
         </div>
         
         {/* All CTAs in one grid */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 w-full mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-16">
           <div className="bg-gradient-to-br from-agricultural-green/10 to-golden-accent/10 rounded-3xl p-8 text-center card-hover group">
             <div className="text-6xl mb-6 group-hover:animate-bounce">🚜</div>
-            <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-agricultural-green transition-colors">Start Farming</h3>
-            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Get instant liquidity for your harvest with same-day cash advances</p>
+            <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-agricultural-green transition-colors">Farmer Login</h3>
+            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Access your farming dashboard and manage your crops</p>
             <Button variant="farmer" size="lg" className="w-full group" asChild>
-              <a href="/farmer-solution">
+              <a href="/farmer">
                 <span className="group-hover:animate-bounce">🚜</span>
-                Find an Agent Near You
+                Login as Farmer
                 <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
               </a>
             </Button>
@@ -75,18 +75,6 @@ const CallToActionSection = () => {
               <span className="group-hover:animate-bounce">📈</span>
               View Investment Dashboard
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-            </Button>
-          </div>
-          <div className="bg-gradient-to-br from-golden-accent/10 to-trust-blue/10 rounded-3xl p-8 text-center card-hover group">
-            <div className="text-6xl mb-6 group-hover:animate-bounce">🤝</div>
-            <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-golden-accent transition-colors">Become an Agent</h3>
-            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Earn fees for connecting farmers to liquidity</p>
-            <Button variant="accent" size="lg" className="w-full group" asChild>
-              <a href="/agent">
-                <span className="group-hover:animate-bounce">🤝</span>
-                Join Agent Network
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </a>
             </Button>
           </div>
           

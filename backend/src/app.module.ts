@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
@@ -12,6 +11,7 @@ import { InvestorModule } from './investor/investor.module';
 import { TransactionModule } from './transaction/transaction.module';
 import { HcsModule } from './hcs/hcs.module';
 import { FaucetModule } from './faucet/faucet.module';
+import { TokensModule } from './tokens/tokens.module';
 
 @Module({
   imports: [
@@ -30,6 +30,7 @@ import { FaucetModule } from './faucet/faucet.module';
     InvestorModule,
     TransactionModule,
     FaucetModule,
+    TokensModule,
   ],
   controllers: [AppController],
   providers: [
