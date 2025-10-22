@@ -13,7 +13,6 @@ const { Client, AccountId, PrivateKey, TokenAssociateTransaction } = require("@h
  */
 async function associateToken(accountIdStr, privateKeyStr, tokenIdStr, network = 'testnet') {
   try {
-    console.log(`🔄 Attempting to associate token ${tokenIdStr} with account ${accountIdStr}...`);
     
     // Initialize client
     const client = Client.forName(network);
@@ -39,8 +38,6 @@ async function associateToken(accountIdStr, privateKeyStr, tokenIdStr, network =
     const receipt = await executeResult.getReceipt(client);
 
     if (receipt.status.toString() === "SUCCESS") {
-      console.log(`✅ Association SUCCESS for ${accountIdStr} with token ${tokenIdStr}`);
-      console.log(`📄 Transaction ID: ${executeResult.transactionId.toString()}`);
       return {
         success: true,
         transactionId: executeResult.transactionId.toString(),
@@ -48,7 +45,6 @@ async function associateToken(accountIdStr, privateKeyStr, tokenIdStr, network =
         message: `Token ${tokenIdStr} successfully associated with account ${accountIdStr}`
       };
     } else {
-      console.log(`❌ Association FAILED: ${receipt.status.toString()}`);
       return {
         success: false,
         status: receipt.status.toString(),
@@ -56,7 +52,6 @@ async function associateToken(accountIdStr, privateKeyStr, tokenIdStr, network =
       };
     }
   } catch (error) {
-    console.error(`💥 Error during association:`, error.message);
     return {
       success: false,
       error: error.message,
@@ -77,7 +72,6 @@ async function batchAssociateTokens(accountIdStr, privateKeyStr, tokenIds, netwo
   const results = [];
   
   for (const tokenIdStr of tokenIds) {
-    console.log(`\n🔄 Processing token: ${tokenIdStr}`);
     const result = await associateToken(accountIdStr, privateKeyStr, tokenIdStr, network);
     results.push({ tokenId: tokenIdStr, ...result });
     
@@ -99,22 +93,12 @@ if (require.main === module) {
     NETWORK: process.env.HEDERA_NETWORK || "testnet"
   };
 
-  console.log("🚀 Hedera Token Association Helper");
-  console.log("==================================");
-  console.log(`Account ID: ${CONFIG.ACCOUNT_ID}`);
-  console.log(`Token ID: ${CONFIG.TOKEN_ID}`);
-  console.log(`Network: ${CONFIG.NETWORK}`);
-  console.log("");
-
   // Run the association
   associateToken(CONFIG.ACCOUNT_ID, CONFIG.PRIVATE_KEY, CONFIG.TOKEN_ID, CONFIG.NETWORK)
     .then(result => {
-      console.log("\n📊 Final Result:");
-      console.log(JSON.stringify(result, null, 2));
       process.exit(result.success ? 0 : 1);
     })
     .catch(error => {
-      console.error("💥 Script failed:", error);
       process.exit(1);
     });
 }

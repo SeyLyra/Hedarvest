@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { MOCK_POOLS } from "@/lib/contracts";
 import { 
   BarChart3, 
   TrendingUp, 
@@ -27,21 +28,16 @@ import {
 } from "lucide-react";
 
 interface CropPool {
-  id: string;
-  name: string;
-  cropType: string;
-  totalLiquidity: number;
-  apy: number;
-  utilization: number;
-  available: number;
-  icon: string;
-  color: string;
-  riskLevel: "low" | "medium" | "high";
-  minDeposit: number;
-  maxDeposit: number;
-  lockPeriod: number; // in days
-  totalDepositors: number;
-  lastUpdated: string;
+  id: number;
+  grainType: string;
+  address: string;
+  lendingTokenAddress: string;
+  collateralTokenAddress: string;
+  price: number;
+  availableLiquidity: string;
+  totalBorrows: string;
+  utilizationRate: number;
+  apr: number;
 }
 
 interface CropPoolsProps {
@@ -51,139 +47,68 @@ interface CropPoolsProps {
 }
 
 export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPoolsProps) {
+  const [pools, setPools] = useState<CropPool[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"apy" | "liquidity" | "utilization">("apy");
   const [filterRisk, setFilterRisk] = useState<"all" | "low" | "medium" | "high">("all");
 
+  // Fetch pools data on component mount
+  useEffect(() => {
+    const fetchPools = async () => {
+      try {
+        setLoading(true);
+        const response = await fetch('/api/pools/list');
+        const data = await response.json();
+        
+        if (data.success) {
+          setPools(data.data);
+        } else {
+          // Fallback to mock data
+          setPools(MOCK_POOLS);
+        }
+      } catch (error) {
+        console.error('Failed to fetch pools:', error);
+        // Fallback to mock data
+        setPools(MOCK_POOLS);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPools();
+  }, []);
+
   // Mock data for farmer's collateral deposits (for borrowing)
+  // In a real app, this would come from the user's wallet/account
   const farmerCollateral = {
-    "rice-pool": { hasCollateral: true, amount: 2500, depositedAt: "2024-01-15" },
-    "corn-pool": { hasCollateral: false, amount: 0, depositedAt: null },
-    "wheat-pool": { hasCollateral: true, amount: 1200, depositedAt: "2024-01-10" },
-    "soybean-pool": { hasCollateral: false, amount: 0, depositedAt: null },
-    "cotton-pool": { hasCollateral: false, amount: 0, depositedAt: null },
-    "sugar-pool": { hasCollateral: false, amount: 0, depositedAt: null }
+    "wheat": { hasCollateral: false, amount: 0, depositedAt: null },
+    "rice": { hasCollateral: false, amount: 0, depositedAt: null },
   };
 
-  const cropPools: CropPool[] = [
-    {
-      id: "rice-pool",
-      name: "RICE Pool",
-      cropType: "Rice",
-      totalLiquidity: 150000,
-      apy: 8.5,
-      utilization: 65,
-      available: 52500,
-      icon: "🌾",
-      color: "green",
-      riskLevel: "low",
-      minDeposit: 100,
-      maxDeposit: 10000,
-      lockPeriod: 30,
-      totalDepositors: 45,
-      lastUpdated: "2 hours ago"
-    },
-    {
-      id: "corn-pool",
-      name: "CORN Pool", 
-      cropType: "Corn",
-      totalLiquidity: 200000,
-      apy: 7.2,
-      utilization: 78,
-      available: 44000,
-      icon: "🌽",
-      color: "yellow",
-      riskLevel: "medium",
-      minDeposit: 200,
-      maxDeposit: 15000,
-      lockPeriod: 45,
-      totalDepositors: 67,
-      lastUpdated: "1 hour ago"
-    },
-    {
-      id: "wheat-pool",
-      name: "WHEAT Pool",
-      cropType: "Wheat", 
-      totalLiquidity: 120000,
-      apy: 9.1,
-      utilization: 45,
-      available: 66000,
-      icon: "🌾",
-      color: "amber",
-      riskLevel: "low",
-      minDeposit: 150,
-      maxDeposit: 12000,
-      lockPeriod: 30,
-      totalDepositors: 32,
-      lastUpdated: "3 hours ago"
-    },
-    {
-      id: "soybean-pool",
-      name: "SOYBEAN Pool",
-      cropType: "Soybean",
-      totalLiquidity: 180000,
-      apy: 6.8,
-      utilization: 82,
-      available: 32400,
-      icon: "🫘",
-      color: "brown",
-      riskLevel: "high",
-      minDeposit: 300,
-      maxDeposit: 20000,
-      lockPeriod: 60,
-      totalDepositors: 28,
-      lastUpdated: "30 minutes ago"
-    },
-    {
-      id: "cotton-pool",
-      name: "COTTON Pool",
-      cropType: "Cotton",
-      totalLiquidity: 95000,
-      apy: 10.2,
-      utilization: 38,
-      available: 58900,
-      icon: "🌿",
-      color: "emerald",
-      riskLevel: "medium",
-      minDeposit: 100,
-      maxDeposit: 8000,
-      lockPeriod: 40,
-      totalDepositors: 19,
-      lastUpdated: "1 hour ago"
-    },
-    {
-      id: "sugar-pool",
-      name: "SUGAR Pool",
-      cropType: "Sugar Cane",
-      totalLiquidity: 220000,
-      apy: 5.9,
-      utilization: 91,
-      available: 19800,
-      icon: "🍯",
-      color: "orange",
-      riskLevel: "high",
-      minDeposit: 500,
-      maxDeposit: 25000,
-      lockPeriod: 90,
-      totalDepositors: 41,
-      lastUpdated: "15 minutes ago"
-    }
-  ];
+  // Helper function to get risk level based on utilization
+  const getRiskLevel = (utilization: number): "low" | "medium" | "high" => {
+    if (utilization < 60) return "low";
+    if (utilization < 80) return "medium";
+    return "high";
+  };
 
-  const filteredPools = cropPools
+  const filteredPools = pools
     .filter(pool => 
-      pool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      pool.cropType.toLowerCase().includes(searchTerm.toLowerCase())
+      pool.grainType.toLowerCase().includes(searchTerm.toLowerCase())
     )
-    .filter(pool => filterRisk === "all" || pool.riskLevel === filterRisk)
+    .filter(pool => {
+      const riskLevel = getRiskLevel(pool.utilizationRate);
+      return filterRisk === "all" || riskLevel === filterRisk;
+    })
     .sort((a, b) => {
       switch (sortBy) {
         case "apy":
-          return b.apy - a.apy;
+          return b.apr - a.apr;
         case "liquidity":
-          return b.totalLiquidity - a.totalLiquidity;
+          return parseFloat(b.availableLiquidity) - parseFloat(a.availableLiquidity);
         case "utilization":
-          return b.utilization - a.utilization;
+          return b.utilizationRate - a.utilizationRate;
         default:
           return 0;
       }
@@ -312,71 +237,86 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
         </div>
       </div>
 
+      {/* Loading State */}
+      {loading && (
+        <div className="text-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading pools from Hedera testnet...</p>
+        </div>
+      )}
+
       {/* Pools Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPools.map((pool) => (
-          <Card key={pool.id} className="hover:shadow-lg transition-all duration-200 group">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="text-3xl">{pool.icon}</div>
-                  <div>
-                    <CardTitle className="text-lg">{pool.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{pool.cropType} Pool</p>
+      {!loading && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredPools.map((pool) => {
+          const riskLevel = getRiskLevel(pool.utilizationRate);
+          const hasCollateral = farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.hasCollateral;
+          
+          return (
+            <Card key={pool.id} className="hover:shadow-lg transition-all duration-200 group">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-3">
+                    <div className="text-3xl">🌾</div>
+                    <div>
+                      <CardTitle className="text-lg">{pool.grainType} Pool</CardTitle>
+                      <p className="text-sm text-muted-foreground">{pool.grainType} Lending Pool</p>
+                    </div>
                   </div>
-                </div>
-                <div className="flex flex-col items-end space-y-1">
-                  <div className="flex items-center space-x-2">
-                    {farmerCollateral[pool.id as keyof typeof farmerCollateral]?.hasCollateral && (
-                      <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
-                        <Lock className="h-3 w-3 mr-1" />
-                        Collateral Added
+                  <div className="flex flex-col items-end space-y-1">
+                    <div className="flex items-center space-x-2">
+                      {hasCollateral && (
+                        <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
+                          <Lock className="h-3 w-3 mr-1" />
+                          Collateral Added
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-green-600 border-green-200">
+                        {pool.apr}% APY
                       </Badge>
-                    )}
-                    <Badge variant="outline" className="text-green-600 border-green-200">
-                      {pool.apy}% APY
+                    </div>
+                    <Badge className={`text-xs ${getRiskColor(riskLevel)}`}>
+                      {riskLevel.toUpperCase()} RISK
                     </Badge>
                   </div>
-                  <Badge className={`text-xs ${getRiskColor(pool.riskLevel)}`}>
-                    {pool.riskLevel.toUpperCase()} RISK
-                  </Badge>
                 </div>
-              </div>
-            </CardHeader>
+              </CardHeader>
             
             <CardContent className="space-y-4">
               {/* Pool Stats */}
               <div className="space-y-3">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total Liquidity</span>
-                  <span className="font-medium">${pool.totalLiquidity.toLocaleString()}</span>
+                  <span className="text-muted-foreground">Available Liquidity</span>
+                  <span className="font-medium">${parseFloat(pool.availableLiquidity).toLocaleString()}</span>
                 </div>
                 
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Available</span>
-                  <span className="font-medium text-green-600">${pool.available.toLocaleString()}</span>
+                  <span className="text-muted-foreground">Total Borrowed</span>
+                  <span className="font-medium">${parseFloat(pool.totalBorrows).toLocaleString()}</span>
                 </div>
                 
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Utilization</span>
-                  <span className={`font-medium ${getUtilizationColor(pool.utilization)}`}>
-                    {pool.utilization}%
+                  <span className={`font-medium ${getUtilizationColor(pool.utilizationRate)}`}>
+                    {pool.utilizationRate}%
                   </span>
                 </div>
                 
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Lenders</span>
-                  <span className="font-medium">{pool.totalDepositors}</span>
+                  <span className="text-muted-foreground">Pool Address</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {pool.address.slice(0, 6)}...{pool.address.slice(-4)}
+                  </span>
                 </div>
                 
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Lock Period</span>
-                  <span className="font-medium">{pool.lockPeriod} days</span>
+                  <span className="text-muted-foreground">APR</span>
+                  <span className="font-medium">{pool.apr}%</span>
                 </div>
               </div>
 
               {/* Your Collateral Info */}
-              {farmerCollateral[pool.id as keyof typeof farmerCollateral]?.hasCollateral && (
+              {hasCollateral && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
@@ -384,11 +324,11 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                       <span className="text-sm font-medium text-green-800">Your Collateral</span>
                     </div>
                     <span className="text-sm font-bold text-green-800">
-                      ${farmerCollateral[pool.id as keyof typeof farmerCollateral]?.amount.toLocaleString()}
+                      ${farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.amount.toLocaleString()}
                     </span>
                   </div>
                   <p className="text-xs text-green-600 mt-1">
-                    Added on {farmerCollateral[pool.id as keyof typeof farmerCollateral]?.depositedAt}
+                    Added on {farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.depositedAt}
                   </p>
                 </div>
               )}
@@ -397,44 +337,48 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
               <div className="space-y-2">
                 <div className="flex justify-between text-xs text-muted-foreground">
                   <span>Utilization</span>
-                  <span>{pool.utilization}%</span>
+                  <span>{pool.utilizationRate}%</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-2">
                   <div 
                     className={`h-2 rounded-full transition-all duration-300 ${
-                      pool.utilization < 50 
+                      pool.utilizationRate < 50 
                         ? 'bg-gradient-to-r from-green-500 to-green-400' 
-                        : pool.utilization < 80 
+                        : pool.utilizationRate < 80 
                           ? 'bg-gradient-to-r from-yellow-500 to-yellow-400'
                           : 'bg-gradient-to-r from-red-500 to-red-400'
                     }`}
-                    style={{ width: `${pool.utilization}%` }}
+                    style={{ width: `${pool.utilizationRate}%` }}
                   />
                 </div>
               </div>
               
-              {/* Lending Range */}
+              {/* Pool Info */}
               <div className="p-3 bg-gray-50 rounded-lg">
                 <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                  <span>Lending Range</span>
-                  <span>Min: ${pool.minDeposit} - Max: ${pool.maxDeposit.toLocaleString()}</span>
+                  <span>Pool Type</span>
+                  <span>Hedera Lending Pool</span>
+                </div>
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Network</span>
+                  <span>Hedera Testnet</span>
                 </div>
               </div>
               
               {/* Action Buttons */}
               <div className="flex gap-2">
-                {farmerCollateral[pool.id as keyof typeof farmerCollateral]?.hasCollateral ? (
+                {hasCollateral ? (
                   <>
                     <Button 
                       className="flex-1 bg-green-600 hover:bg-green-700" 
-                      onClick={() => onBorrow?.(pool.id)}
+                      onClick={() => onBorrow?.(pool.id.toString())}
                     >
                       <DollarSign className="h-4 w-4 mr-2" />
                       Borrow Funds
                     </Button>
                     <Button 
                       variant="outline" 
-                      onClick={() => onViewDetails(pool.id)}
+                      onClick={() => onViewDetails(pool.id.toString())}
                     >
                       <Activity className="h-4 w-4" />
                     </Button>
@@ -443,15 +387,15 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                   <>
                     <Button 
                       className="flex-1" 
-                      onClick={() => onDeposit(pool.id)}
-                      disabled={pool.available === 0}
+                      onClick={() => onDeposit(pool.id.toString())}
+                      disabled={parseFloat(pool.availableLiquidity) === 0}
                     >
                       <Lock className="h-4 w-4 mr-2" />
                       Add Collateral
                     </Button>
                     <Button 
                       variant="outline" 
-                      onClick={() => onViewDetails(pool.id)}
+                      onClick={() => onViewDetails(pool.id.toString())}
                     >
                       <Info className="h-4 w-4" />
                     </Button>
@@ -461,15 +405,17 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
               
               {/* Last Updated */}
               <div className="text-xs text-muted-foreground text-center">
-                Updated {pool.lastUpdated}
+                Live on Hedera Testnet
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+          );
+        })}
+        </div>
+      )}
 
       {/* Empty State */}
-      {filteredPools.length === 0 && (
+      {!loading && filteredPools.length === 0 && (
         <Card className="text-center py-12">
           <CardContent>
             <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />

@@ -45,7 +45,6 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
         setUsdtBalance(result.balance || "0");
       }
     } catch (error) {
-      console.error('Failed to fetch USDT balance:', error);
     } finally {
       setIsLoadingBalance(false);
     }
@@ -64,19 +63,11 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
     if (!userAddress) return;
     
     try {
-      console.log('🔍 Checking token association for:', userAddress);
       const response = await fetch(`/api/faucet/balance/${userAddress}`);
-      console.log('   Response status:', response.status);
       
       if (response.ok) {
         const result = await response.json();
         const isAssociated = result.isAssociated === true;
-        console.log('🔍 Token association result:', {
-          address: userAddress,
-          balance: result.balance,
-          isAssociated: isAssociated,
-          rawResult: result
-        });
         setIsTokenAssociated(isAssociated);
         setUsdtBalance(result.balance || "0");
         
@@ -86,23 +77,28 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
           toast.warning('⚠️ Token NOT associated yet. Follow the instructions above.', { duration: 3000 });
         }
       } else {
-        console.error('Balance fetch failed:', response.status);
         setIsTokenAssociated(false);
       }
     } catch (error) {
-      console.error('Failed to check token association:', error);
       setIsTokenAssociated(false);
     }
   };
 
   // Open HashPack extension to tokens page
-  const openHashPackForAssociation = () => {
+  const openHashPackForAssociation = async () => {
     // Show instructions
     toast.info('👉 Click "Copy Token ID" button below, then follow the 6 simple steps!', { duration: 8000 });
     
-    // Auto-copy token ID
-    navigator.clipboard.writeText('0.0.6951126');
-    toast.success('✅ Token ID copied! Now open HashPack and paste it in the Tokens tab!', { duration: 6000 });
+    // Auto-copy token ID with proper error handling
+    try {
+      await navigator.clipboard.writeText('0.0.7101034');
+      toast.success('✅ Token ID copied! Now open HashPack and paste it in the Tokens tab!', { duration: 6000 });
+    } catch (error) {
+      // Fallback: show the token ID in a prompt
+      const tokenId = '0.0.7101034';
+      prompt('Copy this Token ID:', tokenId);
+      toast.info('📋 Token ID shown in prompt. Copy it and paste in HashPack!', { duration: 6000 });
+    }
   };
 
   const handleMint = async () => {
@@ -114,7 +110,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
     }
 
     if (mintAmount > 10000) {
-      toast.error('Maximum mint amount is 10,000 USDT');
+      toast.error('Maximum mint amount is 10,000 USDC');
       return;
     }
 
@@ -130,32 +126,14 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       return;
     }
 
-    // ✅ FIRST: Check association status by refreshing balance
-    console.log('🔍 Checking token association before minting...');
-    toast.info('Checking token association...', { duration: 2000 });
-    await checkTokenAssociation();
-    
-    // Wait for state to update
-    await new Promise(r => setTimeout(r, 500));
-    
-    // Now check if associated
-    const response = await fetch(`/api/faucet/balance/${userAddress}`);
-    if (response.ok) {
-      const result = await response.json();
-      if (!result.isAssociated) {
-        console.log('❌ Token not associated');
-        toast.error('⚠️ Token NOT associated! Please follow the instructions above.', { duration: 5000 });
-        openHashPackForAssociation();
-        return;
-      }
-    }
+    // Skip association check - just try to mint directly
+    toast.info('Attempting to mint USDC...', { duration: 2000 });
 
     // ✅ Token is associated, proceed with mint
     setIsMinting(true);
     
         try {
       
-      console.log('🪙 Calling faucet API...', { address: userAddress, amount: mintAmount });
       
       // Call real faucet API that uses Hedera SDK
       const response = await fetch('/api/faucet/mint', {
@@ -172,10 +150,15 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       const result = await response.json();
 
       if (!response.ok || !result.success) {
-        throw new Error(result.error || 'Mint failed');
+        // Check if it's an association issue
+        if (result.needsAssociation) {
+          toast.error('⚠️ Token not associated! Please associate first.', { duration: 5000 });
+          openHashPackForAssociation();
+          return;
+        }
+        throw new Error(result.message || result.error || 'Mint failed');
       }
 
-      console.log('✅ Faucet mint successful:', result);
       
       // Update last mint time
       setLastMintTime(new Date());
@@ -189,7 +172,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       };
       setMintHistory(prev => [newMint, ...prev.slice(0, 9)]); // Keep last 10
       
-      toast.success(`Successfully minted ${mintAmount} USDT to your wallet!`, {
+      toast.success(`Successfully minted ${mintAmount} USDC to your wallet!`, {
         description: `Transaction: ${result.transactionHash?.substring(0, 20)}...`
       });
       
@@ -200,7 +183,6 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       }, 2000); // Wait 2 seconds for transaction to be confirmed
       
     } catch (error) {
-      console.error('❌ Mint failed:', error);
       toast.error(error instanceof Error ? error.message : 'Failed to mint USDT. Please try again.');
     } finally {
       setIsMinting(false);
@@ -301,7 +283,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                       </p>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText('0.0.6951126');
+                          navigator.clipboard.writeText('0.0.7101034');
                           toast.success('✅ STEP 1 DONE! Token ID copied!', { duration: 2000 });
                           setTimeout(() => {
                             toast.info('STEP 2: Open HashPack extension (look for icon in browser toolbar)', { duration: 3000 });
@@ -322,7 +304,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                         className="w-full text-2xl bg-white hover:bg-gray-100 text-red-600 px-8 py-8 rounded-xl font-black transition-all hover:scale-105 shadow-2xl"
                       >
                         ✅ CLICK HERE TO START!
-                        <div className="text-lg font-bold mt-3 text-orange-600">This copies 0.0.6951126 and shows you step-by-step what to do!</div>
+                        <div className="text-lg font-bold mt-3 text-orange-600">This copies 0.0.7101034 and shows you step-by-step what to do!</div>
                       </button>
                     </div>
 
@@ -448,7 +430,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
               <div className="text-sm text-blue-800 dark:text-blue-200">
                 <p className="font-medium">Test Token Information:</p>
                 <ul className="mt-1 space-y-1 text-xs text-blue-700 dark:text-blue-300">
-                  <li>• Real Hedera testnet USDT tokens (Token ID: 0.0.6951126)</li>
+                  <li>• Real Hedera testnet USDT tokens (Token ID: 0.0.7101034)</li>
                   <li>• Uses Hedera SDK for minting & transfer</li>
                   <li>• 5-minute cooldown between mints</li>
                   <li>• Maximum 10,000 USDT per transaction</li>

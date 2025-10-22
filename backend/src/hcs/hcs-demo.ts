@@ -5,7 +5,6 @@ import { HcsService } from './hcs.service';
  * This script shows how to publish and listen to HCS events
  */
 async function demoHcsIntegration() {
-  console.log('🚀 Starting HCS Demo...');
   
   try {
     // Initialize HCS Service
@@ -14,19 +13,12 @@ async function demoHcsIntegration() {
     // Wait a bit for initialization
     await new Promise(resolve => setTimeout(resolve, 2000));
     
-    console.log(`📡 Connected to HCS Topic: ${hcsService.getTopicId()}`);
     
     // Set up event listener
     hcsService.onEvent((event) => {
-      console.log('📨 Received HCS Event:', {
-        eventType: event.eventType,
-        timestamp: event.timestamp,
-        payload: event.payload
-      });
     });
     
     // Demo: Publish some test events
-    console.log('📤 Publishing test events...');
     
     // Test investor deposit event
     await hcsService.publishInvestorDeposit({
@@ -47,23 +39,18 @@ async function demoHcsIntegration() {
       contractTxHash: '0xloan123'
     });
     
-    console.log('✅ Test events published successfully!');
-    console.log('🔄 Listening for events (press Ctrl+C to stop)...');
     
     // Keep the script running to receive events
     process.on('SIGINT', async () => {
-      console.log('\n🛑 Shutting down HCS demo...');
       await hcsService.close();
       process.exit(0);
     });
     
     // Keep alive
     setInterval(() => {
-      console.log('💓 HCS Demo is still running... (listening for events)');
     }, 30000);
     
   } catch (error) {
-    console.error('❌ Error in HCS demo:', error);
     process.exit(1);
   }
 }

@@ -20,7 +20,7 @@ export class FaucetController {
       
       return {
         success: true,
-        transactionHash: result.transactionHash,
+        transactionHash: 'transactionHash' in result ? result.transactionHash : 'mintTransactionId' in result ? result.mintTransactionId : 'pending',
         amount: mintRequest.amount,
         address: mintRequest.address
       };
@@ -50,7 +50,7 @@ export class FaucetController {
       return {
         success: false,
         balance: '0',
-        tokenId: process.env.USDT_TOKEN_ID || '0.0.6951126',
+        tokenId: '0.0.7101034',
         isAssociated: false,
         address: address
       };

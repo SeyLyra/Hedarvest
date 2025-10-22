@@ -17,6 +17,23 @@ interface HashPackDirectHook {
 }
 
 export function useHashPackDirect(): HashPackDirectHook {
+  // Return safe defaults during SSR
+  if (typeof window === 'undefined') {
+    return {
+      hashconnect: null,
+      connectionStatus: 'Disconnected',
+      isConnected: false,
+      accountId: null,
+      error: null,
+      isLoading: false,
+      connect: async () => {},
+      disconnect: () => {},
+      checkConnection: async () => {},
+      hbarBalance: null,
+      fetchBalance: async () => {},
+    };
+  }
+
   const [hashconnect, setHashconnect] = useState<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [accountId, setAccountId] = useState<string | null>(null);
@@ -31,14 +48,20 @@ export function useHashPackDirect(): HashPackDirectHook {
 
     const init = async () => {
       try {
-        console.log('🚀 Initializing HashConnect with project ID...');
         
         // Clear any stale HashConnect data from localStorage to prevent "No matching key" errors
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-          if (key.startsWith('hashconnect') && key !== 'hashpack_account') {
-            console.log('🧹 Clearing stale HashConnect data:', key);
+          if (key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')) {
             localStorage.removeItem(key);
+          }
+        });
+        
+        // Also clear sessionStorage
+        const sessionKeys = Object.keys(sessionStorage);
+        sessionKeys.forEach(key => {
+          if (key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')) {
+            sessionStorage.removeItem(key);
           }
         });
         
@@ -51,7 +74,7 @@ export function useHashPackDirect(): HashPackDirectHook {
           name: "Hedarvest",
           description: "Agricultural Investment Platform on Hedera",
           icons: ["https://hedarvest.com/logo.png"],
-          url: window.location.origin,
+          url: "http://localhost:3002", // Explicitly set the correct port
         };
         
         // Create the hashconnect instance with your project ID
@@ -64,11 +87,9 @@ export function useHashPackDirect(): HashPackDirectHook {
 
         // Add error handling for external requests
         hc.connectionStatusChangeEvent.on((status) => {
-          console.log('📡 Connection status changed:', status);
           setConnectionStatus(status);
           
           if (status === 'Connected') {
-            console.log('✅ Connected! Pairing data:', (hc as any).pairingData);
             if ((hc as any).pairingData && (hc as any).pairingData.accountIds && (hc as any).pairingData.accountIds.length > 0) {
               setAccountId((hc as any).pairingData.accountIds[0]);
               setIsConnected(true);
@@ -83,7 +104,6 @@ export function useHashPackDirect(): HashPackDirectHook {
 
         // Handle pairing events
         hc.pairingEvent.on((newPairing) => {
-          console.log('🔗 New pairing:', newPairing);
           if (newPairing && newPairing.accountIds && newPairing.accountIds.length > 0) {
             setAccountId(newPairing.accountIds[0]);
             setIsConnected(true);
@@ -94,14 +114,12 @@ export function useHashPackDirect(): HashPackDirectHook {
 
         // Handle disconnection events
         hc.disconnectionEvent.on((data) => {
-          console.log('🔌 Disconnection event received:', data);
           setAccountId(null);
           setIsConnected(false);
           setConnectionStatus('Disconnected');
           setHbarBalance(null);
           setError(null);
           localStorage.removeItem('hashpack_account');
-          console.log('✅ State cleared after disconnection');
         });
 
 
@@ -162,9 +180,7 @@ export function useHashPackDirect(): HashPackDirectHook {
 
         window.addEventListener('unhandledrejection', handleUnhandledRejection);
         
-        console.log('✅ HashConnect initialized successfully with project ID');
       } catch (err: any) {
-        console.error('❌ HashConnect initialization failed:', err);
         setError('Failed to initialize HashConnect');
       }
     };
@@ -182,9 +198,16 @@ export function useHashPackDirect(): HashPackDirectHook {
   // Also check connection state immediately on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      // Clear any stale connection data first
+      const staleKeys = Object.keys(localStorage).filter(key => 
+        key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')
+      );
+      if (staleKeys.length > 0) {
+        staleKeys.forEach(key => localStorage.removeItem(key));
+      }
+      
       const storedAccount = localStorage.getItem('hashpack_account');
       if (storedAccount) {
-        console.log('🔄 Restoring connection state on mount:', storedAccount);
         setAccountId(storedAccount);
         setIsConnected(true);
         setConnectionStatus('Connected');
@@ -199,7 +222,6 @@ export function useHashPackDirect(): HashPackDirectHook {
       // First check if we have a stored account in localStorage
       const storedAccount = localStorage.getItem('hashpack_account');
       if (storedAccount) {
-        console.log('🔄 Found stored account:', storedAccount);
         setAccountId(storedAccount);
         setIsConnected(true);
         setConnectionStatus('Connected');
@@ -211,18 +233,15 @@ export function useHashPackDirect(): HashPackDirectHook {
             try {
               const accounts = await provider.request({ method: 'eth_accounts' });
               if (accounts && accounts.length > 0 && accounts[0] === storedAccount) {
-                console.log('✅ Stored account verified and connected:', storedAccount);
                 return;
               }
             } catch (err) {
-              console.log('⚠️ Could not verify stored account, but keeping connection state');
               return;
             }
           }
         }
         
         // If we can't verify, still keep the connection state
-        console.log('✅ Restored connection state from localStorage:', storedAccount);
         return;
       }
 
@@ -237,7 +256,6 @@ export function useHashPackDirect(): HashPackDirectHook {
             setIsConnected(true);
             setConnectionStatus('Connected');
             localStorage.setItem('hashpack_account', accounts[0]);
-            console.log('✅ HashPack already connected:', accounts[0]);
           } else {
             setIsConnected(false);
             setAccountId(null);
@@ -246,14 +264,12 @@ export function useHashPackDirect(): HashPackDirectHook {
           }
         }
       } else {
-        console.log('❌ HashPack not detected');
         setIsConnected(false);
         setAccountId(null);
         setConnectionStatus('Disconnected');
         localStorage.removeItem('hashpack_account');
       }
     } catch (err: any) {
-      console.log('Connection check failed:', err);
       setIsConnected(false);
       setAccountId(null);
       setConnectionStatus('Disconnected');
@@ -267,40 +283,56 @@ export function useHashPackDirect(): HashPackDirectHook {
       return;
     }
 
-    setIsLoading(true);
+    // Clear any previous errors
     setError(null);
+    setIsLoading(true);
 
     try {
-      console.log('🔗 Opening HashPack pairing modal...');
       
       // Check if already connected
       if (connectionStatus === 'Connected') {
-        console.log('✅ Already connected');
         setIsLoading(false);
         return;
       }
 
+      // Clear any stale connection data before attempting new connection
+      localStorage.removeItem('hashpack_account');
+      sessionStorage.removeItem('hashpack_session');
+      
       // Open pairing modal
       await hashconnect.openPairingModal();
       
-      // Set a timeout to prevent infinite loading
+      // Set a shorter timeout to prevent long waits
       setTimeout(() => {
         if (connectionStatus !== 'Connected' && isLoading) {
-          console.log('⏰ Connection timeout, stopping loading state');
           setIsLoading(false);
+          setError('Connection timed out. Please try again.');
         }
-      }, 30000); // 30 second timeout
+      }, 15000); // 15 second timeout
       
     } catch (err: any) {
-      console.error('❌ Connection failed:', err);
-      setError(err.message || 'Connection failed');
+      
+      // Handle specific HashConnect errors
+      if (err.message && err.message.includes('Proposal expired')) {
+        setError('Connection request expired. Please try again.');
+        // Clear any stale connection data
+        localStorage.removeItem('hashpack_account');
+        sessionStorage.removeItem('hashpack_session');
+        setAccountId(null);
+        setIsConnected(false);
+        setConnectionStatus('Disconnected');
+      } else if (err.message && err.message.includes('User rejected')) {
+        setError('Connection was cancelled. Please try again if you want to connect.');
+      } else {
+        setError(err.message || 'Connection failed');
+      }
+      
       setIsLoading(false);
     }
   }, [hashconnect, connectionStatus, isLoading]);
 
   const disconnect = useCallback(async () => {
     try {
-      console.log('🔌 Disconnecting from HashPack...');
       
       // Clear all state immediately (don't wait for HashConnect)
       setAccountId(null);
@@ -316,15 +348,11 @@ export function useHashPackDirect(): HashPackDirectHook {
       if (hashconnect) {
         try {
           await hashconnect.disconnectAll();
-          console.log('✅ HashConnect disconnected');
         } catch (err) {
-          console.log('⚠️ HashConnect disconnect failed, but state cleared:', err);
         }
       }
       
-      console.log('🔌 Successfully disconnected from HashPack');
     } catch (err: any) {
-      console.error('❌ Disconnect error:', err);
       // Still clear state even if disconnect fails
       setAccountId(null);
       setIsConnected(false);
@@ -342,7 +370,6 @@ export function useHashPackDirect(): HashPackDirectHook {
       // Check if we have pairing data available
       const pairingData = (hashconnect as any).pairingData;
       if (!pairingData || !pairingData.topic || !pairingData.pairingString) {
-        console.log('No pairing data available for balance fetch');
         return;
       }
 
@@ -357,10 +384,8 @@ export function useHashPackDirect(): HashPackDirectHook {
         // Convert from wei to HBAR (1 HBAR = 10^8 tinybars)
         const balanceInHbar = (parseInt(balance, 16) / Math.pow(10, 8)).toFixed(2);
         setHbarBalance(balanceInHbar);
-        console.log('💰 HBAR Balance:', balanceInHbar);
       }
     } catch (error) {
-      console.error('Failed to fetch balance:', error);
       setHbarBalance(null);
     }
   }, [hashconnect, accountId]);

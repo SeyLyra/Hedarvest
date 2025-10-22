@@ -91,6 +91,20 @@ export const useBackersDeposit = () => {
   })
 }
 
+// Token Association Hook
+export const useAssociateTokens = () => {
+  return useMutation({
+    mutationFn: (data: { poolAddress: string; userAddress: string }) =>
+      apiCall<{ txHash: string; message: string }>("/pools/associate-tokens", data),
+    onSuccess: (response) => {
+      console.log("Token association successful:", response)
+    },
+    onError: (error) => {
+      console.error("Token association failed:", error)
+    },
+  })
+}
+
 // Query hooks for fetching data
 export const usePoolStats = () => {
   return useQuery({

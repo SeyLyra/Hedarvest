@@ -6,6 +6,7 @@ import "../interfaces/IHederaTokenService.sol";
 import "../interfaces/HederaResponseCode.sol";
 import "./InterestRateModel.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Strings.sol";
 
 abstract contract ReentrancyGuard {
     uint256 private _entered;
@@ -22,16 +23,17 @@ interface IPriceOracle {
 }
 
 contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
-    address public immutable underlyingToken; // e.g., USDC
-    address public immutable collateralToken; // e.g., RWA token (tokenized property)
-    address public lpToken; // Liquidity provider token
-    address public debtToken; // Debt tracking token
+    address public immutable underlyingToken; // HTS
+    address public immutable collateralToken; // HTS
+    address public lpToken;   // HTS LP token
+    address public debtToken; // HTS Debt token (wipe-enabled)
 
-    mapping(address => uint256) public userCollateral; // user => collateral token amount
+    mapping(address => uint256) public userCollateral;
     IPriceOracle public priceOracle;
-    uint256 public loanToValue; // e.g., 0.75 * 1e18
-    uint256 public liquidationThreshold; // e.g., 0.8 * 1e18
-    uint256 public liquidationBonus; // e.g., 0.05 * 1e18
+    uint256 public loanToValue;            // e.g., 0.75e18
+    uint256 public liquidationThreshold;   // e.g., 0.80e18
+    uint256 public liquidationBonus;       // e.g., 0.05e18
+    uint256 public closeFactor = 5e17;     // 50% cap per liquidation
 
     uint256 public totalCash;
     uint256 public totalBorrowed;
@@ -55,7 +57,6 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
     event CollateralWithdrawn(address indexed user, uint256 amount);
     event InterestAccrued(uint256 borrowIndexNew, uint256 liquidityIndexNew, uint256 timestamp);
     event Liquidated(address indexed borrower, address indexed liquidator, uint256 debtRepaid, uint256 collateralSeized);
-    event TokenCreationFallback(string tokenType, string reason, address generatedAddress);
 
     constructor(
         address _underlyingToken,
@@ -72,8 +73,8 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         require(_collateralToken != address(0), "COLLATERAL_ZERO");
         require(_reserveFactor <= 5e17, "RESERVE_TOO_HIGH");
         require(_loanToValue <= 1e18, "INVALID_LTV");
-        require(_liquidationThreshold > _loanToValue && _liquidationThreshold <= 1e18, "INVALID_LIQUIDATION_THRESHOLD");
-        require(_liquidationBonus <= 2e17, "INVALID_LIQUIDATION_BONUS");
+        require(_liquidationThreshold > _loanToValue && _liquidationThreshold <= 1e18, "INVALID_LIQ_THRESHOLD");
+        require(_liquidationBonus <= 2e17, "INVALID_LIQ_BONUS");
 
         underlyingToken = _underlyingToken;
         collateralToken = _collateralToken;
@@ -84,113 +85,69 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         liquidationThreshold = _liquidationThreshold;
         liquidationBonus = _liquidationBonus;
         lastInterestAccrualTime = block.timestamp;
-        
-        // Transfer ownership to initial owner
+
         _transferOwnership(initialOwner);
     }
 
+    function updateCloseFactor(uint256 newCloseFactor) external onlyOwner {
+        require(newCloseFactor <= 1e18, "INVALID_CLOSE_FACTOR");
+        closeFactor = newCloseFactor;
+    }
+
     function initializeTokens(
-        string memory lpTokenName,
-        string memory lpTokenSymbol,
-        uint32 lpTokenDecimals,
-        string memory debtTokenName,
-        string memory debtTokenSymbol,
-        uint32 debtTokenDecimals
+        address _lpToken,
+        address _debtToken
     ) external onlyOwner {
         require(lpToken == address(0) && debtToken == address(0), "TOKENS_ALREADY_INITIALIZED");
+        require(_lpToken != address(0), "INVALID_LP_TOKEN");
+        require(_debtToken != address(0), "INVALID_DEBT_TOKEN");
 
-        IHederaTokenService.HederaToken memory lpDef;
-        lpDef.name = lpTokenName;
-        lpDef.symbol = lpTokenSymbol;
-        lpDef.treasury = address(this);
-        lpDef.memo = "LP Token for Lending Pool";
-        lpDef.tokenSupplyType = true; // INFINITE
-        lpDef.maxSupply = 0; // INFINITE
-        lpDef.freezeDefault = false;
-        // Set up token keys - admin key and supply key
-        IHederaTokenService.TokenKey[] memory lpKeys = new IHederaTokenService.TokenKey[](2);
-        
-        // Admin key (bit 0)
-        lpKeys[0].keyType = 1; // 0th bit set for adminKey
-        lpKeys[0].key = IHederaTokenService.KeyValue(false, address(this), new bytes(0), new bytes(0), address(0));
-        
-        // Supply key (bit 4) 
-        lpKeys[1].keyType = 16; // 4th bit set for supplyKey
-        lpKeys[1].key = IHederaTokenService.KeyValue(false, address(this), new bytes(0), new bytes(0), address(0));
-        
-        lpDef.tokenKeys = lpKeys;
-        lpDef.expiry = IHederaTokenService.Expiry(0, address(0), 0);
-        (int256 createLpResult, address lpAddress) = HederaTokenService.createFungibleToken(lpDef, 0, int32(lpTokenDecimals));
-        
-        // ✅ FIX: Fallback to mock token if HTS creation fails
-        if (createLpResult != HederaResponseCodes.SUCCESS || lpAddress == address(0)) {
-            lpAddress = address(uint160(uint256(keccak256(abi.encodePacked(block.timestamp, lpTokenName)))));
-            emit TokenCreationFallback("LP_TOKEN", "HTS creation failed, using mock address", lpAddress);
-        }
-        lpToken = lpAddress;
+        lpToken = _lpToken;
+        debtToken = _debtToken;
 
-        IHederaTokenService.HederaToken memory debtDef;
-        debtDef.name = debtTokenName;
-        debtDef.symbol = debtTokenSymbol;
-        debtDef.treasury = address(this);
-        debtDef.memo = "Debt Token for Lending Pool";
-        debtDef.tokenSupplyType = true; // INFINITE
-        debtDef.maxSupply = 0; // INFINITE
-        debtDef.freezeDefault = false;
-        // Set up token keys - admin key and supply key
-        IHederaTokenService.TokenKey[] memory debtKeys = new IHederaTokenService.TokenKey[](2);
-        
-        // Admin key (bit 0)
-        debtKeys[0].keyType = 1; // 0th bit set for adminKey
-        debtKeys[0].key = IHederaTokenService.KeyValue(false, address(this), new bytes(0), new bytes(0), address(0));
-        
-        // Supply key (bit 4) 
-        debtKeys[1].keyType = 16; // 4th bit set for supplyKey
-        debtKeys[1].key = IHederaTokenService.KeyValue(false, address(this), new bytes(0), new bytes(0), address(0));
-        
-        debtDef.tokenKeys = debtKeys;
-        debtDef.expiry = IHederaTokenService.Expiry(0, address(0), 0);
-        (int256 createDebtResult, address debtAddress) = HederaTokenService.createFungibleToken(debtDef, 0, int32(debtTokenDecimals));
-        
-        // ✅ FIX: Fallback to mock token if HTS creation fails
-        if (createDebtResult != HederaResponseCodes.SUCCESS || debtAddress == address(0)) {
-            debtAddress = address(uint160(uint256(keccak256(abi.encodePacked(block.timestamp, debtTokenName)))));
-            emit TokenCreationFallback("DEBT_TOKEN", "HTS creation failed, using mock address", debtAddress);
-        }
-        debtToken = debtAddress;
-
+        // Self-associate pool to all tokens
         address[] memory tokensToAssociate = new address[](4);
         tokensToAssociate[0] = underlyingToken;
         tokensToAssociate[1] = collateralToken;
         tokensToAssociate[2] = lpToken;
         tokensToAssociate[3] = debtToken;
 
-        int256 associateRes = HederaTokenService.associateTokens(address(this), tokensToAssociate);
-        
-        // ✅ FIX: Fallback for pool association - continue even if association fails
-        if (associateRes != HederaResponseCodes.SUCCESS) {
-            emit TokenCreationFallback("POOL_ASSOCIATION", "Pool association failed, continuing with mock tokens", address(this));
-        }
+        int256 assocRes = HederaTokenService.associateTokens(address(this), tokensToAssociate);
+        require(
+            assocRes == HederaResponseCodes.SUCCESS || assocRes == HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT,
+            "POOL_ASSOCIATION_FAILED"
+        );
 
         emit TokensInitialized(lpToken, debtToken);
     }
 
-    function associateTokensForUser(address user, address[] calldata tokens) external {
-        require(msg.sender == user, "ONLY_USER_CAN_ASSOCIATE");
-        int256 userAssociationResult = HederaTokenService.associateTokens(user, tokens);
-        
-        // ✅ FIX: Ignore already-associated tokens
-        if (userAssociationResult == HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT) {
-            return;
+    function associateAllForUser() external {
+        address user = msg.sender;
+        address[] memory tokens = new address[](4);
+        tokens[0] = underlyingToken;
+        tokens[1] = collateralToken;
+        tokens[2] = lpToken;
+        tokens[3] = debtToken;
+        int256 rc = HederaTokenService.associateTokens(user, tokens);
+        require(
+            rc == HederaResponseCodes.SUCCESS || rc == HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT,
+            "USER_ASSOCIATION_FAILED"
+        );
+    }
+
+    function _ensureSelfAssociated(address token) internal {
+        int256 rc = HederaTokenService.associateToken(address(this), token);
+        if (rc != HederaResponseCodes.SUCCESS && rc != HederaResponseCodes.TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT) {
+            revert(string(abi.encodePacked("POOL_SELF_ASSOCIATION_FAIL: code ", Strings.toString(uint256(rc)))));
         }
-        require(userAssociationResult == HederaResponseCodes.SUCCESS, "USER_ASSOCIATION_FAILED");
     }
 
     function depositCollateral(uint256 amount) external nonReentrant {
         require(amount > 0, "DEPOSIT_ZERO");
+        _ensureSelfAssociated(collateralToken);
+        accrueInterest();
         int256 transferStatus = HederaTokenService.transferToken(collateralToken, msg.sender, address(this), toInt64(amount));
         require(transferStatus == HederaResponseCodes.SUCCESS, "COLLATERAL_TRANSFER_FAILED");
-
         userCollateral[msg.sender] += amount;
         emit CollateralDeposited(msg.sender, amount);
     }
@@ -198,13 +155,14 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
     function withdrawCollateral(uint256 amount) external nonReentrant {
         require(amount > 0, "WITHDRAW_ZERO");
         require(userCollateral[msg.sender] >= amount, "INSUFFICIENT_COLLATERAL");
+        accrueInterest();
 
         userCollateral[msg.sender] -= amount;
         require(getHealthFactor(msg.sender) >= 1e18, "UNDER_COLLATERALIZED");
+        _ensureSelfAssociated(collateralToken);
 
         int256 sendResult = HederaTokenService.transferToken(collateralToken, address(this), msg.sender, toInt64(amount));
         require(sendResult == HederaResponseCodes.SUCCESS, "COLLATERAL_SEND_FAILED");
-
         emit CollateralWithdrawn(msg.sender, amount);
     }
 
@@ -219,14 +177,10 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
     }
 
     function getHealthFactor(address user) public view returns (uint256) {
-        uint256 collateralValue = getCollateralValue(user);
         uint256 borrowValue = getBorrowValue(user);
         if (borrowValue == 0) return type(uint256).max;
-        return (collateralValue * 1e18) / borrowValue;
-    }
-
-    function _isHealthy(address user) internal view returns (bool) {
-        return getHealthFactor(user) >= liquidationThreshold;
+        uint256 collateralValue = getCollateralValue(user);
+        return (collateralValue * liquidationThreshold) / borrowValue;
     }
 
     function utilizationRate() public view returns (uint256) {
@@ -265,34 +219,41 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         emit InterestAccrued(borrowIndex, liquidityIndex, nowTimestamp);
     }
 
+    // FIXED: Pool is now treasury, so minted tokens go directly to pool
     function deposit(uint256 amount) external nonReentrant {
         require(amount > 0, "DEPOSIT_ZERO");
+        _ensureSelfAssociated(underlyingToken);
+        _ensureSelfAssociated(lpToken);
         accrueInterest();
-        
+
+        // Transfer underlying from user to pool
         int256 transferStatus = HederaTokenService.transferToken(underlyingToken, msg.sender, address(this), toInt64(amount));
         require(transferStatus == HederaResponseCodes.SUCCESS, "UNDERLYING_TRANSFER_FAILED");
-
+        
         totalCash += amount;
 
         uint256 totalShares = lpVirtualSupply;
         uint256 totalPoolAssets = totalAssets();
         uint256 sharesToMint = (totalShares == 0 || totalPoolAssets == 0) ? amount : (amount * totalShares) / totalPoolAssets;
 
+        // Mint LP tokens - they go to treasury (pool contract)
         (int256 mintStatus,,) = HederaTokenService.mintToken(lpToken, toInt64(sharesToMint), new bytes[](0));
         require(mintStatus == HederaResponseCodes.SUCCESS, "LP_MINT_FAILED");
 
+        // Transfer LP tokens from pool to user - THIS NOW WORKS because pool is treasury
         int256 lpTransferStatus = HederaTokenService.transferToken(lpToken, address(this), msg.sender, toInt64(sharesToMint));
         require(lpTransferStatus == HederaResponseCodes.SUCCESS, "LP_TRANSFER_FAILED");
 
         lpVirtualSupply += sharesToMint;
-
         emit Deposited(msg.sender, amount, sharesToMint);
     }
 
     function withdraw(uint256 shares) external nonReentrant {
         require(shares > 0, "WITHDRAW_ZERO");
+        _ensureSelfAssociated(underlyingToken);
+        _ensureSelfAssociated(lpToken);
         accrueInterest();
-        
+
         uint256 underlyingToSend = (shares * totalAssets()) / lpVirtualSupply;
         require(underlyingToSend <= totalCash, "INSUFFICIENT_POOL_LIQUIDITY");
 
@@ -313,11 +274,11 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
 
     function borrow(uint256 amount) external nonReentrant {
         require(amount > 0, "BORROW_ZERO");
+        _ensureSelfAssociated(underlyingToken);
+        _ensureSelfAssociated(debtToken);
         accrueInterest();
-        
+
         require(userCollateral[msg.sender] > 0, "NO_COLLATERAL_DEPOSITED");
-        
-        // ✅ FIX: Check sufficient cash before decreasing totalCash
         require(totalCash >= amount, "INSUFFICIENT_CASH");
 
         uint256 newBorrowValue = getBorrowValue(msg.sender) + amount;
@@ -340,12 +301,13 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         require(underlyingSendStatus == HederaResponseCodes.SUCCESS, "UNDERLYING_SEND_FAILED");
 
         require(getHealthFactor(msg.sender) >= 1e18, "UNDER_COLLATERALIZED_AFTER_BORROW");
-
         emit Borrowed(msg.sender, amount, debtSharesToMint);
     }
 
     function repay(uint256 amount) external nonReentrant {
         require(amount > 0, "REPAY_ZERO");
+        _ensureSelfAssociated(underlyingToken);
+        _ensureSelfAssociated(debtToken);
         accrueInterest();
 
         uint256 debtShares = userDebtShares[msg.sender];
@@ -360,55 +322,57 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         totalCash += repayAmountActual;
         totalBorrowed -= repayAmountActual;
 
-        uint256 sharesToBurn = (repayAmountActual * 1e27) / borrowIndex;
-        if (sharesToBurn > debtShares) sharesToBurn = debtShares;
+        uint256 sharesToWipe = (repayAmountActual * 1e27) / borrowIndex;
+        if (sharesToWipe > debtShares) sharesToWipe = debtShares;
 
-        int256 debtPullStatus = HederaTokenService.transferToken(debtToken, msg.sender, address(this), toInt64(sharesToBurn));
-        require(debtPullStatus == HederaResponseCodes.SUCCESS, "DEBT_TOKEN_PULL_FAILED");
+        int256 wipeRc = HederaTokenService.wipeTokenAccount(debtToken, msg.sender, toInt64(sharesToWipe));
+        require(wipeRc == HederaResponseCodes.SUCCESS, "DEBT_TOKEN_WIPE_FAILED");
 
-        (int256 debtBurnStatus,) = HederaTokenService.burnToken(debtToken, toInt64(sharesToBurn), new int64[](0));
-        require(debtBurnStatus == HederaResponseCodes.SUCCESS, "DEBT_TOKEN_BURN_FAILED");
-
-        userDebtShares[msg.sender] -= sharesToBurn;
-
-        emit Repaid(msg.sender, repayAmountActual, sharesToBurn);
+        userDebtShares[msg.sender] -= sharesToWipe;
+        emit Repaid(msg.sender, repayAmountActual, sharesToWipe);
     }
 
     function liquidate(address borrower, uint256 repayAmount) external nonReentrant {
         require(borrower != msg.sender, "CANNOT_LIQUIDATE_SELF");
+        _ensureSelfAssociated(underlyingToken);
+        _ensureSelfAssociated(collateralToken);
+        _ensureSelfAssociated(debtToken);
         accrueInterest();
 
         uint256 healthFactor = getHealthFactor(borrower);
         require(healthFactor < 1e18, "BORROWER_HEALTHY");
 
         uint256 debtOwed = getBorrowValue(borrower);
-        uint256 maxRepay = (debtOwed * liquidationThreshold) / 1e18;
+        uint256 maxRepay = (debtOwed * closeFactor) / 1e18;
         uint256 repayActual = repayAmount > debtOwed ? debtOwed : repayAmount;
         repayActual = repayActual > maxRepay ? maxRepay : repayActual;
 
         int256 underlyingTransferStatus = HederaTokenService.transferToken(underlyingToken, msg.sender, address(this), toInt64(repayActual));
         require(underlyingTransferStatus == HederaResponseCodes.SUCCESS, "UNDERLYING_TRANSFER_FAILED");
 
-        uint256 sharesToBurn = (repayActual * 1e27) / borrowIndex;
+        uint256 sharesToWipe = (repayActual * 1e27) / borrowIndex;
         uint256 borrowerDebtShares = userDebtShares[borrower];
-        if (sharesToBurn > borrowerDebtShares) sharesToBurn = borrowerDebtShares;
+        if (sharesToWipe > borrowerDebtShares) sharesToWipe = borrowerDebtShares;
 
-        (int256 debtBurnStatus,) = HederaTokenService.burnToken(debtToken, toInt64(sharesToBurn), new int64[](0));
-        require(debtBurnStatus == HederaResponseCodes.SUCCESS, "DEBT_TOKEN_BURN_FAILED");
+        int256 wipeRc = HederaTokenService.wipeTokenAccount(debtToken, borrower, toInt64(sharesToWipe));
+        require(wipeRc == HederaResponseCodes.SUCCESS, "DEBT_TOKEN_WIPE_FAILED");
 
-        userDebtShares[borrower] -= sharesToBurn;
+        userDebtShares[borrower] -= sharesToWipe;
         totalBorrowed -= repayActual;
         totalCash += repayActual;
 
         (uint256 collateralPrice, uint8 collateralDecimals) = priceOracle.getPrice(collateralToken);
         (uint256 underlyingPrice, uint8 underlyingDecimals) = priceOracle.getPrice(underlyingToken);
-        uint256 collateralValueToSeize = repayActual * (1e18 + liquidationBonus) / 1e18;
-        uint256 collateralToSeize = (collateralValueToSeize * (10 ** collateralDecimals) * underlyingPrice) / (collateralPrice * (10 ** underlyingDecimals));
+
+        uint256 collateralValueToSeize = (repayActual * (1e18 + liquidationBonus)) / 1e18;
+        uint256 collateralToSeize = (collateralValueToSeize * (10 ** collateralDecimals) * underlyingPrice)
+            / (collateralPrice * (10 ** underlyingDecimals));
 
         uint256 borrowerCollateral = userCollateral[borrower];
         if (collateralToSeize > borrowerCollateral) collateralToSeize = borrowerCollateral;
 
         userCollateral[borrower] -= collateralToSeize;
+
         int256 collateralSendStatus = HederaTokenService.transferToken(collateralToken, address(this), msg.sender, toInt64(collateralToSeize));
         require(collateralSendStatus == HederaResponseCodes.SUCCESS, "COLLATERAL_SEND_FAILED");
 
@@ -464,5 +428,18 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
             liquidationThreshold: liquidationThreshold,
             liquidationBonus: liquidationBonus
         });
+    }
+
+    function getBorrowAPR() external view returns (uint256) {
+        uint256 utilization = utilizationRate();
+        uint256 borrowRatePerSecond = interestRateModel.getBorrowRatePerSecond(utilization);
+        return (borrowRatePerSecond * 365 * 24 * 3600) / 1e18;
+    }
+
+    function getSupplyAPR() external view returns (uint256) {
+        uint256 utilization = utilizationRate();
+        uint256 borrowRatePerSecond = interestRateModel.getBorrowRatePerSecond(utilization);
+        uint256 supplyRatePerSecond = (borrowRatePerSecond * utilization * (1e18 - reserveFactor)) / 1e36;
+        return (supplyRatePerSecond * 365 * 24 * 3600) / 1e18;
     }
 }

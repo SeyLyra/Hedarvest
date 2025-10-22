@@ -44,4 +44,24 @@ export class PoolsController {
       };
     }
   }
+
+  @Get('debug/pools-info')
+  async debugPoolsInfo() {
+    try {
+      const contractService = this.blockchainPoolsService['contractService'];
+      const poolsInfo = await contractService.getAllPoolsInfo();
+      return {
+        success: true,
+        poolsInfoCount: poolsInfo.length,
+        poolsInfo: poolsInfo,
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+      };
+    }
+  }
 }

@@ -1,74 +1,60 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ethers } from 'ethers';
+import {
+  Client,
+  AccountId,
+  PrivateKey,
+  TokenId,
+  TokenAssociateTransaction,
+  TokenInfoQuery,
+} from '@hashgraph/sdk';
 
 // Updated contract ABIs for PoolFactory and LendingPool based on new smart contracts
 const POOL_FACTORY_ABI = [
   'function getAllPools() external view returns (address[])',
-  'function getPool(string) external view returns (address)',
-  'function isPoolExists(string) external view returns (bool)',
-  'function getPoolInfo(string) external view returns (tuple(address poolAddress, string assetType, address lendingToken, address collateralToken, address lpToken, uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool exists))',
-  'function getAllPoolsInfo() external view returns (tuple(address poolAddress, string assetType, address lendingToken, address collateralToken, address lpToken, uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool exists)[])',
-  'function getPoolStatsByAsset(string) external view returns (tuple(address poolAddress, string assetType, uint256 totalAssets, uint256 totalBorrows, uint256 totalReserves, uint256 availableLiquidity, uint256 utilizationRate, uint256 borrowRate, uint256 supplyRate, uint256 activePositions))',
-  'function getBorrowerPositions(string, address) external view returns (uint256[])',
-  'function getAllBorrowerPositions(address) external view returns (tuple(string assetType, address poolAddress, uint256[] positionIds, uint256 totalCollateral, uint256 totalDebt, uint256 averageHealthFactor)[])',
-  'function getPositionDetails(string, address, uint256) external view returns (uint256 collateral, uint256 debt, uint256 healthFactor, bool active, uint256 maxBorrowCapacity, uint256 availableToBorrow)',
-  'function isAssetConfigured(string) external view returns (bool)',
-  'function getAssetConfig(string) external view returns (uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, bool configured)',
+  'function getAllPoolsWithDetails() external view returns (tuple(address underlyingToken, address collateralToken, address lpToken, address debtToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 borrowIndex, uint256 liquidityIndex)[])',
 ];
 
 const LENDING_POOL_ABI = [
   // Core pool information
-  'function getAssetType() external view returns (string)',
-  'function getCollateralToken() external view returns (address)',
-  'function lendingToken() external view returns (address)',
+  'function underlyingToken() external view returns (address)',
   'function collateralToken() external view returns (address)',
   'function lpToken() external view returns (address)',
+  'function debtToken() external view returns (address)',
   
   // Pool statistics
-  'function getPoolStats() external view returns (uint256 totalAssets, uint256 totalBorrows, uint256 totalReserves, uint256 utilizationRate, uint256 borrowRate, uint256 supplyRate, uint256 activePositions, uint256 availableLiquidity)',
-  'function availableLiquidity() external view returns (uint256)',
-  'function utilizationRate() external view returns (uint256)',
-  'function currentAPR() external view returns (uint256)',
-  'function getTVL() external view returns (uint256)',
+  'function totalCash() external view returns (uint256)',
+  'function totalBorrowed() external view returns (uint256)',
+  'function totalReserves() external view returns (uint256)',
+  'function totalAssets() external view returns (uint256)',
   
   // Interest rate functions
-  'function getUtilizationRate() external view returns (uint256)',
+  'function borrowIndex() external view returns (uint256)',
+  'function liquidityIndex() external view returns (uint256)',
   'function getBorrowRate() external view returns (uint256)',
-  'function getSupplyRate() external view returns (uint256)',
   'function accrueInterest() external',
   
-  // Liquidity provider functions
+  // Core lending functions
   'function deposit(uint256 amount) external',
-  'function withdraw(uint256 lpAmount) external',
-  'function getLPBalance(address user) external view returns (uint256)',
+  'function withdraw(uint256 shares) external',
+  'function depositCollateral(uint256 amount) external',
+  'function withdrawCollateral(uint256 amount) external',
+  'function borrow(uint256 amount) external',
+  'function repay(uint256 amount) external',
+  'function liquidate(address borrower, uint256 repayAmount) external',
   
-  // Position management functions
-  'function createPosition() external returns (uint256)',
-  'function depositCollateral(uint256 positionId, uint256 amount) external',
-  'function depositCollateralWithToken(uint256 positionId, address tokenAddress, uint256 amount) external',
-  'function borrow(uint256 positionId, uint256 amount) external',
-  'function repay(uint256 positionId, uint256 amount) external',
-  'function withdrawCollateral(uint256 positionId, uint256 amount) external',
-  'function closePosition(uint256 positionId) external',
+  // User functions
+  'function userCollateral(address user) external view returns (uint256)',
+  'function userDebtShares(address user) external view returns (uint256)',
+  'function associateTokensForUser(address user, address[] calldata tokens) external',
   
-  // Position query functions
-  'function getUserPositions(address user) external view returns (uint256[])',
-  'function getPositionDetails(address borrower, uint256 positionId) external view returns (uint256 collateral, uint256 debt, uint256 healthFactor, bool active, uint256 maxBorrowCapacity, uint256 availableToBorrow)',
-  'function getPositionDebt(address borrower, uint256 positionId) external view returns (uint256)',
-  'function getHealthFactor(address borrower, uint256 positionId) external view returns (uint256)',
-  'function getUserTotalCollateral(address user) external view returns (uint256)',
-  'function getUserSummary(address user) external view returns (uint256 totalCollateral, uint256 totalDebt, uint256 totalPositions, uint256 activePositions, uint256 lpBalance, uint256 averageHealthFactor)',
+  // Health factor and risk functions
+  'function getHealthFactor(address user) external view returns (uint256)',
+  'function getBorrowValue(address user) external view returns (uint256)',
+  'function getCollateralValue(address user) external view returns (uint256)',
   
-  // Collateral validation functions
-  'function isValidCollateral(address tokenAddress) external view returns (bool)',
-  'function validateCollateralDeposit(address tokenAddress, uint256 amount) external view returns (bool valid, string memory reason)',
-  'function getCollateralTokenInfo() external view returns (address tokenAddress, string memory assetName, bool isAssociated)',
-  'function canUserDepositToken(address user, address tokenAddress) external view returns (bool canDeposit, string memory reason)',
-  'function getValidCollateralTokens() external view returns (address[] memory tokens, string[] memory names)',
-  
-  // Risk parameters
-  'function getRiskParameters() external view returns (uint256 baseLTV, uint256 liquidationThreshold, uint256 liquidationBonus, uint256 minHealthFactor)',
-  'function getInterestRateModel() external view returns (uint256 baseRate, uint256 slope1, uint256 slope2, uint256 optimalUtilization, uint256 reserveFactor)',
+  // Pool details
+  'function getPoolDetails() external view returns (tuple(address underlyingToken, address collateralToken, address lpToken, address debtToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 borrowIndex, uint256 liquidityIndex))',
 ];
 
 const MOCK_TOKEN_ABI = [
@@ -90,35 +76,59 @@ export class ContractService {
   private readonly logger = new Logger(ContractService.name);
   private provider: ethers.JsonRpcProvider;
   private wallet: ethers.Wallet;
+  private hederaClient: Client;
+  private hederaAccountId: AccountId;
+  private hederaPrivateKey: PrivateKey;
 
   constructor() {
     this.initializeProvider();
+    this.initializeHederaClient();
+  }
+
+  private initializeHederaClient(): void {
+    try {
+      const accountId = process.env.HEDERA_OPERATOR_ID;
+      const privateKey = process.env.HEDERA_OPERATOR_KEY;
+      const network = process.env.HEDERA_NETWORK || 'testnet';
+
+      if (!accountId || !privateKey) {
+        this.logger.warn(
+          'HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY not set - Hedera operations will fail',
+        );
+        return;
+      }
+
+      this.hederaAccountId = AccountId.fromString(accountId);
+      this.hederaPrivateKey = PrivateKey.fromString(privateKey);
+
+      // Create Hedera client
+      this.hederaClient = Client.forName(network);
+      this.hederaClient.setOperator(
+        this.hederaAccountId,
+        this.hederaPrivateKey,
+      );
+      
+      this.logger.log('Hedera client initialized successfully');
+    } catch (error) {
+      this.logger.error('Failed to initialize Hedera client:', error);
+    }
   }
 
   // Get contract addresses from deployment data
   getFactoryAddress(): string {
-    return (
-      process.env.POOL_FACTORY_ADDRESS ||
-      '0x5Cd3acdbfc7DDd2f61Cb07Bb15C8B12Bb62375D5'
-    );
+    return process.env.POOL_FACTORY_ADDRESS || '';
   }
 
   getOracleAddress(): string {
-    return (
-      process.env.PRICE_ORACLE_ADDRESS ||
-      '0x022968dd00b5F11932AF0794a533e049c983bD6F'
-    );
+    return process.env.ORACLE_ADDRESS || '';
   }
 
   getLendingTokenAddress(): string {
-    return (
-      process.env.LENDING_TOKEN_ADDRESS ||
-      '0x00000000000000000000000000000000006a10d6'
-    );
+    return process.env.LENDING_TOKEN_ADDRESS || '';
   }
 
 
-  // Get all pools with complete information dynamically
+  // Get all pools with complete information dynamically from PoolFactory
   async getAllPoolsInfo(): Promise<Array<{
     assetType: string;
     poolAddress: string;
@@ -136,41 +146,73 @@ export class ContractService {
         this.wallet,
       );
       
-      const allPoolsInfo = await factory.getAllPoolsInfo();
+      // Get both pool addresses and details
+      const [allPools, allPoolsDetails] = await Promise.all([
+        factory.getAllPools(),
+        factory.getAllPoolsWithDetails()
+      ]);
       
-      return allPoolsInfo.map((poolInfo: any) => ({
-        assetType: poolInfo.assetType,
-        poolAddress: poolInfo.poolAddress,
-        lendingToken: poolInfo.lendingToken,
-        collateralToken: poolInfo.collateralToken,
-        lpToken: poolInfo.lpToken,
-        baseLTV: Number(poolInfo.baseLTV),
-        liquidationThreshold: Number(poolInfo.liquidationThreshold),
-        liquidationBonus: Number(poolInfo.liquidationBonus),
-      }));
-    } catch (error) {
-      this.logger.error('Failed to get all pools info:', error);
-      throw new Error(
-        `Failed to get all pools info: ${
-          error instanceof Error ? error.message : 'Unknown error'
-        }`,
+      this.logger.log(`Found ${allPools.length} pools with details from factory`);
+      
+      // Process each pool detail and determine asset type
+      const poolsInfo = await Promise.all(
+        allPoolsDetails.map(async (poolDetail: any, index: number) => {
+          try {
+            const poolAddress = allPools[index];
+            
+            // Determine asset type from collateral token
+            let assetType = 'unknown';
+            try {
+              const tokenInfo = await this.getTokenInfoFromHedera(poolDetail.collateralToken);
+              if (tokenInfo && tokenInfo.symbol) {
+                assetType = tokenInfo.symbol.toLowerCase();
+              }
+            } catch (tokenError) {
+              this.logger.warn(`Could not determine asset type for pool ${poolAddress}:`, tokenError);
+              assetType = `token_${poolDetail.collateralToken.slice(-4)}`;
+            }
+            
+            return {
+              assetType: assetType,
+              poolAddress: poolAddress,
+              lendingToken: poolDetail.underlyingToken,
+              collateralToken: poolDetail.collateralToken,
+              lpToken: poolDetail.lpToken,
+              baseLTV: Number(poolDetail.loanToValue) / 1e18, // Convert from wei
+              liquidationThreshold: Number(poolDetail.liquidationThreshold) / 1e18, // Convert from wei
+              liquidationBonus: Number(poolDetail.liquidationBonus) / 1e18, // Convert from wei
+            };
+          } catch (poolError) {
+            this.logger.warn(`Failed to process pool details at index ${index}:`, poolError);
+            return null;
+          }
+        })
       );
+      
+      // Filter out null results
+      return poolsInfo.filter((pool): pool is NonNullable<typeof pool> => pool !== null);
+    } catch (error) {
+      this.logger.error('Failed to get all pools info from factory:', error);
+      
+      // Return empty array if factory lookup fails
+      this.logger.log('No fallback available - returning empty pools list');
+      return [];
     }
   }
 
   private initializeProvider(): void {
     try {
       this.provider = new ethers.JsonRpcProvider(
-        process.env.HEDERA_JSON_RPC_URL,
+        process.env.HEDERA_JSON_RPC_URL || 'https://testnet.hashio.io/api',
       );
       this.wallet = new ethers.Wallet(
         process.env.EVM_PRIVATE_KEY!,
         this.provider,
       );
-      this.logger.log('EVM provider and wallet initialized');
+      this.logger.log('Hedera EVM provider and wallet initialized');
     } catch (error) {
-      this.logger.error('Failed to initialize EVM provider:', error);
-      throw new Error('EVM provider initialization failed');
+      this.logger.error('Failed to initialize Hedera EVM provider:', error);
+      throw new Error('Hedera EVM provider initialization failed');
     }
   }
 
@@ -291,6 +333,17 @@ export class ContractService {
 
   async getPoolByAssetType(assetType: string): Promise<string> {
     try {
+      // Get all pools and find the one with matching asset type
+      const allPoolsInfo = await this.getAllPoolsInfo();
+      const poolInfo = allPoolsInfo.find(pool => 
+        pool.assetType.toLowerCase() === assetType.toLowerCase()
+      );
+      
+      if (poolInfo) {
+        return poolInfo.poolAddress;
+      }
+      
+      // If not found, try factory contract as fallback
       const factory = new ethers.Contract(
         this.getFactoryAddress(),
         POOL_FACTORY_ABI,
@@ -308,6 +361,32 @@ export class ContractService {
   }
 
   // Get pool info directly from blockchain
+  async getTokenInfoFromHedera(tokenAddress: string): Promise<{ symbol: string; name: string } | null> {
+    try {
+      // Use Hedera mirror node API to get token info
+      const response = await fetch(`https://testnet.mirrornode.hedera.com/api/v1/tokens/${tokenAddress}`);
+      
+      if (!response.ok) {
+        this.logger.warn(`Failed to fetch token info for ${tokenAddress}: ${response.status}`);
+        return null;
+      }
+      
+      const tokenData = await response.json();
+      
+      if (tokenData.symbol && tokenData.name) {
+        return {
+          symbol: tokenData.symbol,
+          name: tokenData.name
+        };
+      }
+      
+      return null;
+    } catch (error) {
+      this.logger.warn(`Error fetching token info for ${tokenAddress}:`, error);
+      return null;
+    }
+  }
+
   async getPoolInfoFromAddress(poolAddress: string): Promise<{
     assetType: string;
     lendingToken: string;
@@ -328,27 +407,71 @@ export class ContractService {
         this.wallet,
       );
 
-      const [assetType, lendingToken, collateralToken, lpToken, poolStats] =
+      const [underlyingToken, collateralToken, lpToken, debtToken, totalCash, totalBorrowed, totalReserves] =
         await Promise.all([
-          pool.getAssetType(),
-          pool.lendingToken(),
-          pool.getCollateralToken(),
+          pool.underlyingToken(),
+          pool.collateralToken(),
           pool.lpToken(),
-          pool.getPoolStats(),
+          pool.debtToken(),
+          pool.totalCash(),
+          pool.totalBorrowed(),
+          pool.totalReserves(),
         ]);
 
+      // Calculate derived values
+      const totalAssets = totalCash + totalBorrowed;
+      const availableLiquidity = totalCash.toString();
+      const utilizationRate = totalAssets > 0 ? ((totalBorrowed * 10000n) / totalAssets).toString() : '0';
+      
+      // Calculate dynamic APR based on utilization rate
+      let currentAPR = '5'; // Default fallback
+      try {
+        const borrowRate = await pool.getBorrowRate();
+        currentAPR = ((Number(borrowRate) / 1e18) * 100).toFixed(2);
+      } catch (rateError) {
+        this.logger.warn('Could not fetch borrow rate, calculating dynamic APR:', rateError);
+        
+        // Calculate dynamic APR based on utilization rate
+        // Base APR: 3%, increases with utilization up to 15%
+        const utilizationPercent = parseFloat(utilizationRate) / 100; // Convert to decimal
+        const baseAPR = 3.0;
+        const maxAPR = 15.0;
+        
+        // Linear scaling: 3% + (utilization * 12%)
+        const dynamicAPR = Math.min(baseAPR + (utilizationPercent * 12), maxAPR);
+        currentAPR = dynamicAPR.toFixed(2);
+        
+        this.logger.log(`Dynamic APR calculated: ${currentAPR}% (utilization: ${utilizationRate}%)`);
+      }
+
+      // Determine asset type dynamically by getting token info from Hedera
+      let assetType = 'unknown';
+      try {
+        // Get token info from Hedera to determine the asset type
+        const tokenInfo = await this.getTokenInfoFromHedera(collateralToken);
+        if (tokenInfo && tokenInfo.symbol) {
+          // Convert symbol to lowercase for consistency
+          assetType = tokenInfo.symbol.toLowerCase();
+          this.logger.log(`Determined asset type: ${assetType} from token symbol: ${tokenInfo.symbol}`);
+        }
+      } catch (typeError) {
+        this.logger.warn('Could not determine asset type from Hedera token info:', typeError);
+        // Fallback: try to extract from token address or use a generic name
+        assetType = `token_${collateralToken.slice(-4)}`;
+      }
+
       return {
-        assetType,
-        lendingToken,
-        collateralToken,
-        lpToken,
-        totalAssets: poolStats.totalAssets.toString(),
-        totalBorrows: poolStats.totalBorrows.toString(),
-        totalReserves: poolStats.totalReserves.toString(),
-        availableLiquidity: poolStats.availableLiquidity.toString(),
-        utilizationRate: poolStats.utilizationRate.toString(),
-        currentAPR: poolStats.borrowRate.toString(),
-        activePositions: poolStats.activePositions.toString(),
+        assetType: assetType,
+        lendingToken: underlyingToken,
+        collateralToken: collateralToken,
+        lpToken: lpToken,
+        totalAssets: totalAssets.toString(),
+        totalBorrows: totalBorrowed.toString(),
+        totalReserves: totalReserves.toString(),
+        availableLiquidity: availableLiquidity,
+        utilizationRate: utilizationRate,
+        currentAPR: currentAPR,
+        activePositions: '0', // Not tracked in our current implementation
       };
     } catch (error) {
       this.logger.error(`Failed to get pool info for ${poolAddress}:`, error);
@@ -371,14 +494,14 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const [availableLiquidity, totalBorrows] = await Promise.all([
-        pool.availableLiquidity(),
-        pool.totalBorrows(),
+      const [totalCash, totalBorrowed] = await Promise.all([
+        pool.totalCash(),
+        pool.totalBorrowed(),
       ]);
 
       return {
-        availableLiquidity: availableLiquidity.toString(),
-        totalBorrows: totalBorrows.toString(),
+        availableLiquidity: totalCash.toString(),
+        totalBorrows: totalBorrowed.toString(),
       };
     } catch (error) {
       this.logger.error(
@@ -430,6 +553,40 @@ export class ContractService {
     }
   }
 
+  // Helper method to ensure pool is associated with underlying token
+  async ensurePoolTokenAssociation(poolAddress: string): Promise<void> {
+    try {
+      const underlyingTokenId = '0.0.7101034'; // USDC token ID
+      
+      this.logger.log(`Ensuring pool ${poolAddress} is associated with token ${underlyingTokenId}`);
+      
+      // Create token association transaction
+      const associateTx = new TokenAssociateTransaction()
+        .setAccountId(AccountId.fromEvmAddress(0, 0, poolAddress))
+        .setTokenIds([TokenId.fromString(underlyingTokenId)])
+        .freezeWith(this.hederaClient);
+      
+      // Sign and execute the transaction
+      const associateTxSigned = await associateTx.sign(this.hederaPrivateKey);
+      const associateTxResponse = await associateTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const associateReceipt = await associateTxResponse.getReceipt(this.hederaClient);
+      
+      this.logger.log(`Pool ${poolAddress} successfully associated with token ${underlyingTokenId}`);
+      
+    } catch (error: any) {
+      // If association already exists, that's fine
+      if (error.message && error.message.includes('TOKEN_ALREADY_ASSOCIATED_TO_ACCOUNT')) {
+        this.logger.log(`Pool ${poolAddress} already associated with token`);
+        return;
+      }
+      
+      this.logger.error(`Failed to associate pool with token:`, error);
+      throw new Error(`Failed to associate pool with token: ${error.message}`);
+    }
+  }
+
   // Investor functions
   async depositToPool(poolAddress: string, amount: string): Promise<string> {
     try {
@@ -438,10 +595,18 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.deposit(amount);
+      
+      // Convert amount to token decimals (USDC has 6 decimals)
+      // If amount is "100", convert to "100000000" (100 * 10^6)
+      const tokenDecimals = 6; // USDC has 6 decimals
+      const amountInSmallestUnits = ethers.parseUnits(amount, tokenDecimals);
+      
+      this.logger.log(`Depositing ${amount} USDC (${amountInSmallestUnits.toString()} smallest units) to pool ${poolAddress}`);
+      
+      const tx = await pool.deposit(amountInSmallestUnits);
       await tx.wait();
 
-      this.logger.log(`Deposited ${amount} to pool ${poolAddress}`);
+      this.logger.log(`Successfully deposited ${amount} USDC to pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(`Failed to deposit to pool ${poolAddress}:`, error);
@@ -476,7 +641,7 @@ export class ContractService {
   }
 
 
-  // Legacy method - creates position and deposits collateral
+  // Deposit collateral to pool
   async depositCollateral(
     poolAddress: string,
     amount: string,
@@ -488,19 +653,10 @@ export class ContractService {
         this.wallet,
       );
       
-      // Create position first
-      const createTx = await pool.createPosition();
-      await createTx.wait();
-      
-      // Get the position ID from the transaction receipt
-      const receipt = await createTx.wait();
-      const positionId = receipt.logs[0].args.positionId || 1; // Fallback to 1 if not found
-      
-      // Deposit collateral to the position
-      const tx = await pool.depositCollateral(positionId, amount);
+      const tx = await pool.depositCollateral(amount);
       await tx.wait();
 
-      this.logger.log(`Deposited ${amount} collateral to position ${positionId} in pool ${poolAddress}`);
+      this.logger.log(`Deposited ${amount} collateral to pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
       this.logger.error(
@@ -516,7 +672,7 @@ export class ContractService {
   }
 
 
-  // Legacy method - creates loan (borrows from position 1)
+  // Borrow from pool
   async createLoan(poolAddress: string, amount: string): Promise<string> {
     try {
       const pool = new ethers.Contract(
@@ -524,22 +680,22 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.borrow(1, amount); // Use position 1 as default
+      const tx = await pool.borrow(amount);
       await tx.wait();
 
-      this.logger.log(`Created loan of ${amount} in pool ${poolAddress}`);
+      this.logger.log(`Borrowed ${amount} from pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
-      this.logger.error(`Failed to create loan in pool ${poolAddress}:`, error);
+      this.logger.error(`Failed to borrow from pool ${poolAddress}:`, error);
       throw new Error(
-        `Failed to create loan: ${
+        `Failed to borrow: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
     }
   }
 
-  // Legacy method - repays loan (repays position 1)
+  // Repay loan to pool
   async repayLoan(poolAddress: string, amount: string): Promise<string> {
     try {
       const pool = new ethers.Contract(
@@ -547,15 +703,15 @@ export class ContractService {
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const tx = await pool.repay(1, amount); // Use position 1 as default
+      const tx = await pool.repay(amount);
       await tx.wait();
 
-      this.logger.log(`Repaid loan of ${amount} in pool ${poolAddress}`);
+      this.logger.log(`Repaid ${amount} to pool ${poolAddress}`);
       return tx.hash;
     } catch (error) {
-      this.logger.error(`Failed to repay loan in pool ${poolAddress}:`, error);
+      this.logger.error(`Failed to repay to pool ${poolAddress}:`, error);
       throw new Error(
-        `Failed to repay loan: ${
+        `Failed to repay: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );
