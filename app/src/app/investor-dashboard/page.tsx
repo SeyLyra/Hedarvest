@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets, Moon, Sun } from "lucide-react";
 import Image from "next/image";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
-import { useDeposit } from "@/hooks/useDeposit";
+import { useLendingPool } from "@/hooks/useLendingPool";
 import PoolsPage from "@/components/PoolsPage";
 import PortfolioPage from "@/components/PortfolioPage";
 import FaucetPage from "@/components/FaucetPage";
@@ -45,7 +45,7 @@ export default function InvestorDashboard() {
   
   // Wallet integration
   const { address, isConnected, hbarBalance, fetchBalance, disconnect, connect, isConnecting, hashconnect } = useWalletConnect();
-  const { deposit: handleDeposit, isLoading: isDepositLoading } = useDeposit();
+  const { deposit, withdraw, isLoading: isLendingPoolLoading } = useLendingPool();
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [usdtBalance, setUsdtBalance] = useState<string>("0");
@@ -103,14 +103,15 @@ export default function InvestorDashboard() {
     }
   };
 
-  const handleDepositWrapper = async (grainType: string, amount: string) => {
-    const result = await handleDeposit({
-      grainType,
+  const handleDepositWrapper = async (poolAddress: string, amount: string) => {
+    const result = await deposit({
+      poolAddress,
       amount,
       userAddress,
-      hashconnect
+      hashconnect,
+      usdtTokenId: USDT_TOKEN_ID
     });
-    
+
     if (result?.success) {
       // Refresh balance after successful deposit
       setTimeout(() => {
@@ -119,39 +120,24 @@ export default function InvestorDashboard() {
     }
   };
 
-  const handleWithdraw = async (grainType: string, amount: string) => {
+  const handleWithdrawWrapper = async (poolAddress: string, shares: string) => {
     if (!isAuthenticated) {
       toast.error('Please authenticate your wallet first');
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/investor/withdraw`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          grainType, 
-          shares: parseFloat(amount),
-          depositorAddress: userAddress
-        })
-      });
+    const result = await withdraw({
+      poolAddress,
+      shares,
+      userAddress,
+      hashconnect
+    });
 
-      if (response.ok) {
-        const result = await response.json();
-        toast.success(`Successfully withdrew ${amount} shares from ${grainType} pool`);
-        console.log('Withdraw result:', result);
-      } else {
-        const errorData = await response.json();
-        toast.error(errorData.error || 'Withdrawal failed');
-      }
-    } catch (error) {
-      console.error('Withdraw error:', error);
-      toast.error('Error processing withdrawal');
-    } finally {
-      setIsLoading(false);
+    if (result?.success) {
+      // Refresh balance after successful withdrawal
+      setTimeout(() => {
+        fetchUsdtBalance(userAddress);
+      }, 3000);
     }
   };
 
@@ -350,8 +336,8 @@ export default function InvestorDashboard() {
         {activeTab === 'pools' && (
           <PoolsPage
             onDeposit={handleDepositWrapper}
-            onWithdraw={handleWithdraw}
-            isLoading={isDepositLoading}
+            onWithdraw={handleWithdrawWrapper}
+            isLoading={isLendingPoolLoading}
           />
         )}
         

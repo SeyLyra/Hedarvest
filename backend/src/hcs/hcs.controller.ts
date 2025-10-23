@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { HcsService } from './hcs.service';
 import { PrismaService } from '../lib/prisma';
 
@@ -130,6 +130,67 @@ export class HcsController {
       topicId: this.hcsService.getTopicId(),
       status: 'operational'
     };
+  }
+
+  @Post('log-deposit')
+  async logDeposit(@Body() depositData: {
+    poolAddress: string;
+    amount: number;
+    depositorAddress: string;
+    contractTxHash: string;
+    timestamp: string;
+  }) {
+    try {
+      const txId = await this.hcsService.publishInvestorDeposit({
+        poolAddress: depositData.poolAddress,
+        grainType: 'USDT', // We can enhance this later
+        amount: depositData.amount,
+        depositorAddress: depositData.depositorAddress,
+        contractTxHash: depositData.contractTxHash
+      });
+
+      return {
+        success: true,
+        transactionId: txId,
+        message: 'Deposit logged to HCS'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
+  }
+
+  @Post('log-withdraw')
+  async logWithdraw(@Body() withdrawData: {
+    poolAddress: string;
+    shares: number;
+    depositorAddress: string;
+    contractTxHash: string;
+    timestamp: string;
+  }) {
+    try {
+      const txId = await this.hcsService.publishInvestorWithdraw({
+        poolAddress: withdrawData.poolAddress,
+        grainType: 'USDT',
+        shares: withdrawData.shares,
+        depositorAddress: withdrawData.depositorAddress,
+        contractTxHash: withdrawData.contractTxHash,
+        withdrawalAmount: 0 // Will be calculated by backend if needed
+      });
+
+      return {
+        success: true,
+        transactionId: txId,
+        message: 'Withdrawal logged to HCS'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message
+      };
+    }
   }
 
   private async getMockEvents(address?: string) {

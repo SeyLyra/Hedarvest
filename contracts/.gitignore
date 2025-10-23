@@ -104,6 +104,9 @@ coverage/
 
 # Deployment artifacts
 deployments/
+deployed.json
+tokens.json
+generated-accounts.json
 
 # Test artifacts
 test-results/

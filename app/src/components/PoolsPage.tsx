@@ -28,8 +28,8 @@ interface PoolData {
 }
 
 interface PoolsPageProps {
-  onDeposit: (grainType: string, amount: string) => Promise<void>;
-  onWithdraw: (grainType: string, amount: string) => Promise<void>;
+  onDeposit: (poolAddress: string, amount: string) => Promise<void>;
+  onWithdraw: (poolAddress: string, shares: string) => Promise<void>;
   isLoading: boolean;
 }
 
@@ -72,22 +72,22 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
     fetchPools();
   }, []);
 
-  const handleDeposit = async (grainType: string) => {
-    const amount = amounts[grainType];
+  const handleDeposit = async (poolAddress: string) => {
+    const amount = amounts[poolAddress];
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
-    await onDeposit(grainType, amount);
+    await onDeposit(poolAddress, amount);
   };
 
-  const handleWithdraw = async (grainType: string) => {
-    const amount = amounts[grainType];
+  const handleWithdraw = async (poolAddress: string) => {
+    const amount = amounts[poolAddress];
     if (!amount || parseFloat(amount) <= 0) {
       toast.error('Please enter a valid amount');
       return;
     }
-    await onWithdraw(grainType, amount);
+    await onWithdraw(poolAddress, amount);
   };
 
   const formatNumber = (value: string) => {
@@ -272,15 +272,15 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
                   <Input
                     type="number"
                     placeholder="Amount"
-                    value={amounts[pool.grainType] || ''}
-                    onChange={(e) => setAmounts(prev => ({ ...prev, [pool.grainType]: e.target.value }))}
+                    value={amounts[pool.address] || ''}
+                    onChange={(e) => setAmounts(prev => ({ ...prev, [pool.address]: e.target.value }))}
                     className="flex-1 border-emerald-200 focus:border-emerald-400"
                   />
                 </div>
-                
+
                 <div className="flex gap-2">
                   <Button
-                    onClick={() => handleDeposit(pool.grainType)}
+                    onClick={() => handleDeposit(pool.address)}
                     disabled={isLoading}
                     className="flex-1 bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white shadow-md"
                   >
@@ -291,9 +291,9 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
                     )}
                     Deposit
                   </Button>
-                  
+
                   <Button
-                    onClick={() => handleWithdraw(pool.grainType)}
+                    onClick={() => handleWithdraw(pool.address)}
                     disabled={isLoading}
                     variant="outline"
                     className="flex-1 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-500/10"

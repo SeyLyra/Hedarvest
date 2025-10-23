@@ -1,61 +1,52 @@
 // Deployed contract addresses from Hedera testnet
+// Synced with backend env (2025-10-23)
 export const DEPLOYED_CONTRACTS = {
-  // Latest deployment addresses
-  POOL_FACTORY: '0xfe85D4C2B945ff819065640DCf7f84a56603714e',
-  MOCK_PRICE_ORACLE: '0x2999bD1a71f8757ebA881C818b5ddc15A8143183',
-  INTEREST_RATE_MODEL: '0x2C2e302Add8F8e18B4F58947289FF0C368D1a230',
-  
-  // Tokens
-  USDC_TOKEN: '0x00000000000000000000000000000000006c4546',
-  WHEAT_TOKEN: '0x00000000000000000000000000000000006c4547',
-  RICE_TOKEN: '0x00000000000000000000000000000000006c4548',
-  
-  // Lending Pools
-  WHEAT_LENDING_POOL: '0x25684509B4e9CF133ADe0541d5A028B51e50293D',
-  RICE_LENDING_POOL: '0xFCd37174a272012667FfAd5F66f9b268F7Cc1663',
-  
+  // Core Protocol Contracts
+  POOL_FACTORY: '0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb',
+  MOCK_PRICE_ORACLE: '0x32344dEf5EA9Fa9b83962980C8d447dea81F3685',
+  INTEREST_RATE_MODEL: '0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588',
+
   // Network configuration
   HEDERA_JSON_RPC_URL: 'https://testnet.hashio.io/api',
   CHAIN_ID: 296, // Hedera testnet
 };
 
-// Asset type mappings for frontend
-export const POOL_MAPPINGS = {
-  'wheat': {
-    poolAddress: DEPLOYED_CONTRACTS.WHEAT_LENDING_POOL,
-    collateralToken: DEPLOYED_CONTRACTS.WHEAT_TOKEN,
-    lendingToken: DEPLOYED_CONTRACTS.USDC_TOKEN,
-    grainType: 'Wheat',
-    symbol: 'WHEAT',
-  },
-  'rice': {
-    poolAddress: DEPLOYED_CONTRACTS.RICE_LENDING_POOL,
-    collateralToken: DEPLOYED_CONTRACTS.RICE_TOKEN,
-    lendingToken: DEPLOYED_CONTRACTS.USDC_TOKEN,
-    grainType: 'Rice',
-    symbol: 'RICE',
-  },
-};
+// Contract ABIs for frontend use
+export const POOL_FACTORY_ABI = [
+  'function getAllPools() external view returns (address[])',
+  'function getAllPoolsWithDetails() external view returns (tuple(address underlyingToken, address collateralToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 totalLPShares, uint256 borrowIndex, uint256 liquidityIndex, uint256 utilization, uint256 borrowRate, uint256 loanToValue, uint256 liquidationThreshold, uint256 liquidationBonus)[])',
+];
 
-// Helper function to get pool info by asset type
-export function getPoolInfoByAssetType(assetType: string) {
-  const mapping = POOL_MAPPINGS[assetType.toLowerCase()];
-  if (!mapping) {
-    throw new Error(`No pool found for asset type: ${assetType}`);
-  }
-  return mapping;
-}
+export const LENDING_POOL_ABI = [
+  // Core pool information
+  'function underlyingToken() external view returns (address)',
+  'function collateralToken() external view returns (address)',
+  'function underlyingTokenDecimals() external view returns (uint8)',
+  'function collateralTokenDecimals() external view returns (uint8)',
 
-// Fallback pool data structure (will be populated from backend)
-export const MOCK_POOLS: Array<{
-  id: number;
-  grainType: string;
-  address: string;
-  lendingTokenAddress: string;
-  collateralTokenAddress: string;
-  price: number;
-  availableLiquidity: string;
-  totalBorrows: string;
-  utilizationRate: number;
-  apr: number;
-}> = [];
+  // Pool statistics
+  'function totalCash() external view returns (uint256)',
+  'function totalBorrowed() external view returns (uint256)',
+  'function totalLPShares() external view returns (uint256)',
+
+  // User positions
+  'function userLPShares(address user) external view returns (uint256)',
+  'function userCollateral(address user) external view returns (uint256)',
+  'function userDebtShares(address user) external view returns (uint256)',
+
+  // Core lending functions
+  'function deposit(uint256 amount) external',
+  'function withdraw(uint256 shares) external',
+  'function depositCollateral(uint256 amount) external',
+  'function withdrawCollateral(uint256 amount) external',
+  'function borrow(uint256 amount) external',
+  'function repay(uint256 amount) external',
+
+  // Health and risk
+  'function getHealthFactor(address user) external view returns (uint256)',
+  'function getBorrowValue(address user) external view returns (uint256)',
+  'function getCollateralValue(address user) external view returns (uint256)',
+
+  // Pool details
+  'function getPoolDetails() external view returns (tuple(address underlyingToken, address collateralToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 totalLPShares, uint256 borrowIndex, uint256 liquidityIndex, uint256 utilization, uint256 borrowRate, uint256 loanToValue, uint256 liquidationThreshold, uint256 liquidationBonus))',
+];

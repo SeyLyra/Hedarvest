@@ -9,7 +9,9 @@
 		"test:comprehensive": "hardhat test test/ComprehensiveLendingPool.test.js",
 		"test:run": "node test/run-tests.js",
 		"compile": "hardhat compile",
-		"deploy": "hardhat run scripts/deploy.js --network hederaTestnet"
+		"check-rpc": "hardhat run scripts/check-rpc.js --network testnet",
+		"deploy": "hardhat run scripts/deploy.js --network testnet",
+		"deploy:safe": "npm run check-rpc && npm run deploy"
 	},
 	"devDependencies": {
 		"@openzeppelin/contracts": "4.9.6",

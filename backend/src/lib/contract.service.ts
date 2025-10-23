@@ -9,31 +9,37 @@ import {
   TokenInfoQuery,
 } from '@hashgraph/sdk';
 
-// Updated contract ABIs for PoolFactory and LendingPool based on new smart contracts
+/**
+ * Contract ABIs - Updated 2025-10-23
+ * Contracts now use share accounting (no lpToken/debtToken)
+ * Includes price precision fix
+ */
+
 const POOL_FACTORY_ABI = [
   'function getAllPools() external view returns (address[])',
-  'function getAllPoolsWithDetails() external view returns (tuple(address underlyingToken, address collateralToken, address lpToken, address debtToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 borrowIndex, uint256 liquidityIndex)[])',
+  'function getAllPoolsWithDetails() external view returns (tuple(address underlyingToken, address collateralToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 totalLPShares, uint256 borrowIndex, uint256 liquidityIndex, uint256 utilization, uint256 borrowRate, uint256 loanToValue, uint256 liquidationThreshold, uint256 liquidationBonus)[])',
 ];
 
 const LENDING_POOL_ABI = [
   // Core pool information
   'function underlyingToken() external view returns (address)',
   'function collateralToken() external view returns (address)',
-  'function lpToken() external view returns (address)',
-  'function debtToken() external view returns (address)',
-  
+  'function underlyingTokenDecimals() external view returns (uint8)',
+  'function collateralTokenDecimals() external view returns (uint8)',
+
   // Pool statistics
   'function totalCash() external view returns (uint256)',
   'function totalBorrowed() external view returns (uint256)',
   'function totalReserves() external view returns (uint256)',
   'function totalAssets() external view returns (uint256)',
-  
+  'function totalLPShares() external view returns (uint256)',
+
   // Interest rate functions
   'function borrowIndex() external view returns (uint256)',
   'function liquidityIndex() external view returns (uint256)',
-  'function getBorrowRate() external view returns (uint256)',
   'function accrueInterest() external',
-  
+  'function utilizationRate() external view returns (uint256)',
+
   // Core lending functions
   'function deposit(uint256 amount) external',
   'function withdraw(uint256 shares) external',
@@ -42,19 +48,31 @@ const LENDING_POOL_ABI = [
   'function borrow(uint256 amount) external',
   'function repay(uint256 amount) external',
   'function liquidate(address borrower, uint256 repayAmount) external',
-  
-  // User functions
+
+  // User share balances
+  'function userLPShares(address user) external view returns (uint256)',
   'function userCollateral(address user) external view returns (uint256)',
   'function userDebtShares(address user) external view returns (uint256)',
-  'function associateTokensForUser(address user, address[] calldata tokens) external',
-  
+
+  // Token association (HTS specific)
+  'function associateTokens() external',
+  'function initialize() external',
+
   // Health factor and risk functions
   'function getHealthFactor(address user) external view returns (uint256)',
+  'function getHealthFactorWithAccrual(address user) external view returns (uint256)',
   'function getBorrowValue(address user) external view returns (uint256)',
+  'function getBorrowValueWithAccrual(address user) external view returns (uint256)',
   'function getCollateralValue(address user) external view returns (uint256)',
-  
-  // Pool details
-  'function getPoolDetails() external view returns (tuple(address underlyingToken, address collateralToken, address lpToken, address debtToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 borrowIndex, uint256 liquidityIndex))',
+
+  // Pool configuration
+  'function loanToValue() external view returns (uint256)',
+  'function liquidationThreshold() external view returns (uint256)',
+  'function liquidationBonus() external view returns (uint256)',
+  'function reserveFactor() external view returns (uint256)',
+
+  // Pool details struct
+  'function getPoolDetails() external view returns (tuple(address underlyingToken, address collateralToken, uint256 totalCash, uint256 totalBorrowed, uint256 totalReserves, uint256 totalLPShares, uint256 borrowIndex, uint256 liquidityIndex, uint256 utilization, uint256 borrowRate, uint256 loanToValue, uint256 liquidationThreshold, uint256 liquidationBonus))',
 ];
 
 const MOCK_TOKEN_ABI = [

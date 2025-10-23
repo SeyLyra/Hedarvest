@@ -79,11 +79,9 @@ export default function InvestorLoginPage() {
       console.log('✅ HashPack connected successfully:', accountId);
       // Store account in localStorage for persistence
       localStorage.setItem('hashpack_account', accountId);
-      
-      // Redirect to dashboard after successful connection
-      setTimeout(() => {
-        router.push('/investor-dashboard');
-      }, 1000);
+
+      // Redirect to dashboard IMMEDIATELY after successful connection
+      router.push('/investor-dashboard');
     }
   }, [isConnected, accountId, router]);
 
@@ -178,10 +176,8 @@ export default function InvestorLoginPage() {
     const existingAccount = localStorage.getItem('hashpack_account');
     if (existingAccount) {
       setConfirmedAccountId(existingAccount);
-      // Auto-redirect if already connected
-        setTimeout(() => {
-        router.push('/investor-dashboard');
-        }, 1000);
+      // Auto-redirect IMMEDIATELY if already connected
+      router.push('/investor-dashboard');
     }
   }, [router]);
 

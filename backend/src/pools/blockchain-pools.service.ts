@@ -5,56 +5,84 @@ import { HcsService } from '../hcs/hcs.service';
 @Injectable()
 export class BlockchainPoolsService {
   private readonly logger = new Logger(BlockchainPoolsService.name);
+  private poolsCache: any[] = [];
+  private lastCacheUpdate: number = 0;
+  private readonly CACHE_DURATION = 30000; // 30 seconds
 
   constructor(
     private readonly contractService: ContractService,
     private readonly hcsService: HcsService,
   ) {}
 
-  // Get all pools directly from blockchain
+  // Get all pools directly from blockchain with caching
   async getAllPools() {
     try {
-      this.logger.log('Fetching all pools from blockchain...');
-      const poolAddresses = await this.contractService.getAllPools();
-      
-      this.logger.log(`Retrieved ${poolAddresses.length} pools from blockchain`);
-      
-      if (poolAddresses.length === 0) {
+      // Check cache first
+      const now = Date.now();
+      if (this.poolsCache.length > 0 && now - this.lastCacheUpdate < this.CACHE_DURATION) {
+        this.logger.log('Returning cached pools data');
+        return this.poolsCache;
+      }
+
+      this.logger.log('Fetching all pools from blockchain using getAllPoolsWithDetails()...');
+      const poolsInfo = await this.contractService.getAllPoolsInfo();
+
+      this.logger.log(`Retrieved ${poolsInfo.length} pools from blockchain`);
+
+      if (poolsInfo.length === 0) {
         this.logger.warn('No pools found from blockchain - this might indicate:');
-        this.logger.warn('1. LENDING_FACTORY_ADDRESS not set correctly');
+        this.logger.warn('1. POOL_FACTORY_ADDRESS not set correctly');
         this.logger.warn('2. Smart contracts not deployed');
         this.logger.warn('3. RPC connection issues');
-        this.logger.warn('4. Contract method getAllPools() not implemented');
-      }
-      
-      // Get detailed info for each pool
-      const detailedPools: any[] = [];
-      for (const poolAddress of poolAddresses) {
-        try {
-          const poolDetails = await this.contractService.getPoolInfoFromAddress(poolAddress);
-          detailedPools.push({
-            assetType: poolDetails.assetType,
-            poolAddress: poolAddress,
-            lendingTokenAddress: poolDetails.lendingToken,
-            collateralTokenAddress: poolDetails.collateralToken,
-            lpTokenAddress: poolDetails.lpToken,
-            availableLiquidity: poolDetails.availableLiquidity,
-            totalBorrows: poolDetails.totalBorrows,
-            totalReserves: poolDetails.totalReserves,
-            utilizationRate: poolDetails.utilizationRate,
-            currentAPR: poolDetails.currentAPR,
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          });
-        } catch (error) {
-          this.logger.warn(`Failed to get details for pool ${poolAddress}:`, error);
+        this.logger.warn('4. Contract method getAllPoolsWithDetails() not implemented');
+
+        // Return cached data if available, even if stale
+        if (this.poolsCache.length > 0) {
+          this.logger.log('Returning stale cache as fallback');
+          return this.poolsCache;
         }
+        return [];
       }
-      
+
+      // Transform poolsInfo to detailed pool format
+      const detailedPools = poolsInfo.map((poolInfo, index) => ({
+        id: index + 1,
+        assetType: poolInfo.assetType,
+        address: poolInfo.poolAddress,
+        poolAddress: poolInfo.poolAddress,
+        lendingToken: poolInfo.lendingToken,
+        lendingTokenAddress: poolInfo.lendingToken,
+        collateralToken: poolInfo.collateralToken,
+        collateralTokenAddress: poolInfo.collateralToken,
+        baseLtv: poolInfo.baseLTV,
+        liquidationThreshold: poolInfo.liquidationThreshold,
+        liquidationBonus: poolInfo.liquidationBonus,
+        // These will be 0 until we add live data fetching
+        availableLiquidity: "0",
+        totalBorrows: "0",
+        totalReserves: "0",
+        utilizationRate: "0",
+        currentAPR: "0",
+        apr: "0",
+        isActive: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+
+      // Update cache
+      this.poolsCache = detailedPools;
+      this.lastCacheUpdate = now;
+
       return detailedPools;
     } catch (error) {
       this.logger.error('Failed to fetch pools from blockchain:', error);
+
+      // Return cached data if available, even if stale
+      if (this.poolsCache.length > 0) {
+        this.logger.log('Returning stale cache due to error');
+        return this.poolsCache;
+      }
+
       throw new Error('Failed to fetch pools from blockchain');
     }
   }

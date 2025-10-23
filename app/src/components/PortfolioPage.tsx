@@ -4,15 +4,16 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  PieChart, 
-  TrendingUp, 
-  DollarSign, 
+import {
+  PieChart,
+  TrendingUp,
+  DollarSign,
   Activity,
   RefreshCw,
   Eye,
   EyeOff
 } from "lucide-react";
+import TransactionHistory from "./TransactionHistory";
 
 interface PortfolioPosition {
   id: string;
@@ -309,20 +310,8 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
         )}
       </div>
 
-      {/* Performance Chart Placeholder */}
-      <Card className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 shadow-md">
-        <CardHeader>
-          <CardTitle className="text-emerald-800 dark:text-emerald-200">Performance Overview</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="h-64 bg-gradient-to-br from-emerald-50/70 to-teal-50/70 dark:from-emerald-500/5 dark:to-teal-500/5 rounded-lg flex items-center justify-center">
-            <div className="text-center">
-              <PieChart className="w-12 h-12 text-emerald-400 dark:text-emerald-500 mx-auto mb-2" />
-              <p className="text-emerald-600/80 dark:text-emerald-300/70">Performance chart coming soon</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Transaction History from HCS */}
+      <TransactionHistory userAddress={userAddress} />
     </div>
   );
 }
