@@ -50,7 +50,7 @@ export class FaucetController {
       return {
         success: false,
         balance: '0',
-        tokenId: '0.0.7101034',
+        tokenId: '0.0.7115536',
         isAssociated: false,
         address: address
       };

@@ -11,7 +11,7 @@ import {
 } from '@hashgraph/sdk';
 
 // Hedera Token ID for USDC (from deployed contracts)
-const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID || '0.0.7101034';
+const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID || '0.0.7115536';
 
 
 @Injectable()

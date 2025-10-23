@@ -12,7 +12,6 @@ import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { useLendingPool } from "@/hooks/useLendingPool";
 import PoolsPage from "@/components/PoolsPage";
 import PortfolioPage from "@/components/PortfolioPage";
-import FaucetPage from "@/components/FaucetPage";
 import { useTheme } from "next-themes";
 
 // API base URL
@@ -21,7 +20,7 @@ const API_BASE_URL = typeof window !== 'undefined'
   : 'http://localhost:3000';
 
 // USDT Token ID (from backend environment)
-const USDT_TOKEN_ID = '0.0.7101034';
+const USDT_TOKEN_ID = '0.0.7115536';
 
 // Helper to get topic from HashConnect session
 const getTopicFromSession = (hc: any): string | null => {
@@ -297,8 +296,7 @@ export default function InvestorDashboard() {
           <div className="flex space-x-2 bg-emerald-50/40 dark:bg-emerald-500/5 backdrop-blur-xl rounded-2xl p-2 shadow-inner border border-emerald-100/40 dark:border-emerald-500/10">
             {[
               { id: 'pools', label: 'Pools', icon: Coins, description: 'Investment' },
-              { id: 'portfolio', label: 'Portfolio', icon: PieChart, description: 'Investments' },
-              { id: 'faucet', label: 'Faucet', icon: Droplets, description: 'Test Tokens' }
+              { id: 'portfolio', label: 'Portfolio', icon: PieChart, description: 'Investments' }
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -345,13 +343,6 @@ export default function InvestorDashboard() {
           <PortfolioPage userAddress={userAddress} />
         )}
         
-        {activeTab === 'faucet' && (
-          <FaucetPage 
-            userAddress={userAddress} 
-            onBalanceUpdate={() => fetchUsdtBalance(userAddress)}
-            hashconnect={hashconnect}
-          />
-        )}
       </div>
     </div>
   );

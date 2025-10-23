@@ -42,6 +42,9 @@ const Header = () => {
           {/* Desktop CTA Buttons */}
           <div className="hidden md:flex items-center space-x-4">
             <Button variant="outline" size="sm" asChild>
+              <a href="/faucet">🪙 Faucet</a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
               <a href="/warehouse">Warehouse Portal</a>
             </Button>
             <Button variant="farmer" size="sm" asChild>
@@ -79,6 +82,9 @@ const Header = () => {
               >
                 For Farmers
               </a>
+              <Button variant="outline" size="sm" className="w-full" asChild>
+                <a href="/faucet" onClick={() => setIsMobileMenuOpen(false)}>🪙 Faucet</a>
+              </Button>
               <Button variant="outline" size="sm" className="w-full" asChild>
                 <a href="/warehouse" onClick={() => setIsMobileMenuOpen(false)}>Warehouse Portal</a>
               </Button>

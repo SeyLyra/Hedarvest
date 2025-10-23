@@ -44,29 +44,62 @@ export class BlockchainPoolsService {
         return [];
       }
 
-      // Transform poolsInfo to detailed pool format
-      const detailedPools = poolsInfo.map((poolInfo, index) => ({
-        id: index + 1,
-        assetType: poolInfo.assetType,
-        address: poolInfo.poolAddress,
-        poolAddress: poolInfo.poolAddress,
-        lendingToken: poolInfo.lendingToken,
-        lendingTokenAddress: poolInfo.lendingToken,
-        collateralToken: poolInfo.collateralToken,
-        collateralTokenAddress: poolInfo.collateralToken,
-        baseLtv: poolInfo.baseLTV,
-        liquidationThreshold: poolInfo.liquidationThreshold,
-        liquidationBonus: poolInfo.liquidationBonus,
-        // These will be 0 until we add live data fetching
-        availableLiquidity: "0",
-        totalBorrows: "0",
-        totalReserves: "0",
-        utilizationRate: "0",
-        currentAPR: "0",
-        apr: "0",
-        isActive: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+      // Transform poolsInfo to detailed pool format with live data
+      const detailedPools = await Promise.all(poolsInfo.map(async (poolInfo, index) => {
+        try {
+          // Fetch live pool data for each pool
+          const livePoolData = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
+          
+          return {
+            id: index + 1,
+            assetType: poolInfo.assetType,
+            address: poolInfo.poolAddress,
+            poolAddress: poolInfo.poolAddress,
+            lendingToken: poolInfo.lendingToken,
+            lendingTokenAddress: poolInfo.lendingToken,
+            collateralToken: poolInfo.collateralToken,
+            collateralTokenAddress: poolInfo.collateralToken,
+            baseLtv: poolInfo.baseLTV,
+            liquidationThreshold: poolInfo.liquidationThreshold,
+            liquidationBonus: poolInfo.liquidationBonus,
+            // Live data from contract
+            availableLiquidity: livePoolData.availableLiquidity || "0",
+            totalBorrows: livePoolData.totalBorrows || "0",
+            totalReserves: livePoolData.totalReserves || "0",
+            utilizationRate: livePoolData.utilizationRate || "0",
+            currentAPR: livePoolData.currentAPR || "0",
+            apr: livePoolData.currentAPR || "0",
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        } catch (error) {
+          this.logger.warn(`Failed to fetch live data for pool ${poolInfo.poolAddress}:`, error);
+          // Return with basic info if live data fetch fails
+          return {
+            id: index + 1,
+            assetType: poolInfo.assetType,
+            address: poolInfo.poolAddress,
+            poolAddress: poolInfo.poolAddress,
+            lendingToken: poolInfo.lendingToken,
+            lendingTokenAddress: poolInfo.lendingToken,
+            collateralToken: poolInfo.collateralToken,
+            collateralTokenAddress: poolInfo.collateralToken,
+            baseLtv: poolInfo.baseLTV,
+            liquidationThreshold: poolInfo.liquidationThreshold,
+            liquidationBonus: poolInfo.liquidationBonus,
+            // Fallback to 0 if live data unavailable
+            availableLiquidity: "0",
+            totalBorrows: "0",
+            totalReserves: "0",
+            utilizationRate: "0",
+            currentAPR: "0",
+            apr: "0",
+            isActive: true,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          };
+        }
       }));
 
       // Update cache
@@ -162,7 +195,6 @@ export class BlockchainPoolsService {
         poolAddress,
         lendingTokenAddress: poolInfo.lendingToken,
         collateralTokenAddress: poolInfo.collateralToken,
-        lpTokenAddress: poolInfo.lpToken,
         availableLiquidity: poolInfo.availableLiquidity,
         totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,

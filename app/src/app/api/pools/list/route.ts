@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
       address: pool.address || pool.poolAddress,
       lendingTokenAddress: pool.lendingToken || pool.lendingTokenAddress,
       collateralTokenAddress: pool.collateralToken || pool.collateralTokenAddress,
-      price: 0, // Will be fetched from oracle if needed
+      price: 250.50, // Default price - can be enhanced with oracle data later
       availableLiquidity: pool.availableLiquidity || "0",
       totalBorrows: pool.totalBorrows || "0",
       utilizationRate: parseFloat(pool.utilizationRate || "0"),

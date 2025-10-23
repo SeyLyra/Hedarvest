@@ -14,7 +14,7 @@ import {
   Droplets
 } from 'lucide-react';
 
-export type DashboardSection = 'overview' | 'pools' | 'portfolio' | 'activity' | 'faucet';
+export type DashboardSection = 'overview' | 'pools' | 'portfolio' | 'activity';
 
 interface DashboardNavigationProps {
   activeSection: DashboardSection;
@@ -47,12 +47,6 @@ const sections = [
     icon: Activity,
     description: 'Transaction history'
   },
-  {
-    id: 'faucet' as DashboardSection,
-    label: 'Faucet',
-    icon: Droplets,
-    description: 'Mint mock USDT tokens'
-  }
 ];
 
 export const DashboardNavigation = ({ 

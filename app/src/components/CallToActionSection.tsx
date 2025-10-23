@@ -53,7 +53,7 @@ const CallToActionSection = () => {
         </div>
         
         {/* All CTAs in one grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 w-full mb-16">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 w-full mb-16">
           <div className="bg-gradient-to-br from-agricultural-green/10 to-golden-accent/10 rounded-3xl p-8 text-center card-hover group">
             <div className="text-6xl mb-6 group-hover:animate-bounce">🚜</div>
             <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-agricultural-green transition-colors">Farmer Login</h3>
@@ -86,6 +86,19 @@ const CallToActionSection = () => {
               <span className="group-hover:animate-bounce">🌾</span>
               Browse Marketplace
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+            </Button>
+          </div>
+          
+          <div className="bg-gradient-to-br from-emerald-500/10 to-teal-600/10 rounded-3xl p-8 text-center card-hover group">
+            <div className="text-6xl mb-6 group-hover:animate-bounce">🪙</div>
+            <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-emerald-600 transition-colors">Test Token Faucet</h3>
+            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Get free USDT tokens for testing on Hedera testnet</p>
+            <Button variant="outline" size="lg" className="w-full group" asChild>
+              <a href="/faucet">
+                <span className="group-hover:animate-bounce">🪙</span>
+                Get Test Tokens
+                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              </a>
             </Button>
           </div>
         </div>

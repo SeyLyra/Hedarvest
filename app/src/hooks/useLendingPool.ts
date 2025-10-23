@@ -3,14 +3,18 @@
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { LENDING_POOL_ABI } from '@/lib/contracts';
-import { ContractExecuteTransaction, ContractFunctionParameters, AccountId } from '@hashgraph/sdk';
+import { ContractExecuteTransaction, ContractFunctionParameters, AccountId, Hbar, TokenAssociateTransaction, TokenId } from '@hashgraph/sdk';
+
+// Gas configuration for Hedera contract calls
+const CONTRACT_GAS_LIMIT = 500000; // Increased gas limit to prevent INSUFFICIENT_GAS errors
+const MAX_TRANSACTION_FEE = new Hbar(2); // Maximum transaction fee
 
 interface DepositParams {
   poolAddress: string;
   amount: string;
   userAddress: string;
   hashconnect: any;
-  usdtTokenId: string; // HTS token ID like "0.0.7101034"
+  usdtTokenId: string; // HTS token ID like "0.0.7115536"
 }
 
 interface WithdrawParams {
@@ -71,13 +75,30 @@ export const useLendingPool = () => {
         throw new Error(`Contract not found for address: ${poolAddress}`);
       }
 
+      // Check if token is associated first
+      const tokenId = TokenId.fromString(usdtTokenId);
+      const userAccountId = AccountId.fromString(userAddress);
+
+      try {
+        const balanceQuery = await fetch(
+          `https://testnet.mirrornode.hedera.com/api/v1/accounts/${userAddress}/tokens`
+        );
+        const balanceData = await balanceQuery.json();
+        const isAssociated = balanceData.tokens?.some((token: any) => token.token_id === usdtTokenId);
+        
+        if (!isAssociated) {
+          throw new Error(`Token ${usdtTokenId} is not associated with your account. Please associate the token first using the faucet page or HashPack wallet.`);
+        }
+      } catch (checkError) {
+        console.warn('Could not check token association:', checkError);
+        // Continue anyway - let the transfer attempt tell us if there's an issue
+      }
+
       // Step 1: Transfer USDT tokens to pool via HTS
       toast.info('Step 1/2: Transferring USDT to pool...');
 
-      const { TransferTransaction, TokenId } = await import('@hashgraph/sdk');
-      const tokenId = TokenId.fromString(usdtTokenId);
+      const { TransferTransaction } = await import('@hashgraph/sdk');
       const poolAccountId = AccountId.fromString(contractId);
-      const userAccountId = AccountId.fromString(userAddress);
 
       const transferTx = new TransferTransaction()
         .addTokenTransfer(tokenId, userAccountId, -amountInUnits)
@@ -89,12 +110,13 @@ export const useLendingPool = () => {
         throw new Error(`Token transfer failed: ${transferResult.error || 'Unknown error'}`);
       }
 
-      toast.info('Step 2/2: Confirming deposit on contract...');
+      toast.info('Step 2/3: Confirming deposit on contract...');
 
       // Step 2: Call deposit() function on contract
       const depositTx = new ContractExecuteTransaction()
         .setContractId(contractId)
-        .setGas(300000)
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
         .setFunction('deposit', new ContractFunctionParameters().addUint256(amountInUnits));
 
       const depositResult = await hashconnect.sendTransaction(userAddress, depositTx);
@@ -108,7 +130,7 @@ export const useLendingPool = () => {
 
       toast.success(`✅ Successfully deposited ${depositAmount} USDT!`, {
         duration: 5000,
-        description: '🎉 Your funds are now earning yield!'
+        description: '🎉 Step 3/3 complete - Your funds are now earning yield!'
       });
 
       // Log event to HCS (fire and forget - don't block on this)
@@ -179,7 +201,8 @@ export const useLendingPool = () => {
       // Call withdraw() function
       const withdrawTx = new ContractExecuteTransaction()
         .setContractId(contractId)
-        .setGas(300000)
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
         .setFunction('withdraw', new ContractFunctionParameters().addUint256(Math.floor(withdrawShares)));
 
       const withdrawResult = await hashconnect.sendTransaction(userAddress, withdrawTx);

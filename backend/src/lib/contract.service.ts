@@ -6,7 +6,11 @@ import {
   PrivateKey,
   TokenId,
   TokenAssociateTransaction,
-  TokenInfoQuery,
+  ContractExecuteTransaction,
+  ContractFunctionParameters,
+  ContractId,
+  Hbar,
+  Long,
 } from '@hashgraph/sdk';
 
 /**
@@ -14,6 +18,10 @@ import {
  * Contracts now use share accounting (no lpToken/debtToken)
  * Includes price precision fix
  */
+
+// Gas configuration for Hedera contract calls
+const CONTRACT_GAS_LIMIT = 500000; // Increased gas limit to prevent INSUFFICIENT_GAS errors
+const MAX_TRANSACTION_FEE = new Hbar(2); // Maximum transaction fee
 
 const POOL_FACTORY_ABI = [
   'function getAllPools() external view returns (address[])',
@@ -152,7 +160,6 @@ export class ContractService {
     poolAddress: string;
     lendingToken: string;
     collateralToken: string;
-    lpToken: string;
     baseLTV: number;
     liquidationThreshold: number;
     liquidationBonus: number;
@@ -195,7 +202,6 @@ export class ContractService {
               poolAddress: poolAddress,
               lendingToken: poolDetail.underlyingToken,
               collateralToken: poolDetail.collateralToken,
-              lpToken: poolDetail.lpToken,
               baseLTV: Number(poolDetail.loanToValue) / 1e18, // Convert from wei
               liquidationThreshold: Number(poolDetail.liquidationThreshold) / 1e18, // Convert from wei
               liquidationBonus: Number(poolDetail.liquidationBonus) / 1e18, // Convert from wei
@@ -290,7 +296,6 @@ export class ContractService {
     assetType: string;
     lendingToken: string;
     collateralToken: string;
-    lpToken: string;
     baseLTV: number;
     liquidationThreshold: number;
     liquidationBonus: number;
@@ -308,7 +313,6 @@ export class ContractService {
           assetType,
           lendingToken: '',
           collateralToken: '',
-          lpToken: '',
           baseLTV: 0,
           liquidationThreshold: 0,
           liquidationBonus: 0,
@@ -321,7 +325,6 @@ export class ContractService {
         assetType: poolInfo.assetType,
         lendingToken: poolInfo.lendingToken,
         collateralToken: poolInfo.collateralToken,
-        lpToken: poolInfo.lpToken,
         baseLTV: poolInfo.baseLTV,
         liquidationThreshold: poolInfo.liquidationThreshold,
         liquidationBonus: poolInfo.liquidationBonus,
@@ -409,7 +412,6 @@ export class ContractService {
     assetType: string;
     lendingToken: string;
     collateralToken: string;
-    lpToken: string;
     totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
@@ -425,12 +427,10 @@ export class ContractService {
         this.wallet,
       );
 
-      const [underlyingToken, collateralToken, lpToken, debtToken, totalCash, totalBorrowed, totalReserves] =
+      const [underlyingToken, collateralToken, totalCash, totalBorrowed, totalReserves] =
         await Promise.all([
           pool.underlyingToken(),
           pool.collateralToken(),
-          pool.lpToken(),
-          pool.debtToken(),
           pool.totalCash(),
           pool.totalBorrowed(),
           pool.totalReserves(),
@@ -482,7 +482,6 @@ export class ContractService {
         assetType: assetType,
         lendingToken: underlyingToken,
         collateralToken: collateralToken,
-        lpToken: lpToken,
         totalAssets: totalAssets.toString(),
         totalBorrows: totalBorrowed.toString(),
         totalReserves: totalReserves.toString(),
@@ -574,7 +573,7 @@ export class ContractService {
   // Helper method to ensure pool is associated with underlying token
   async ensurePoolTokenAssociation(poolAddress: string): Promise<void> {
     try {
-      const underlyingTokenId = '0.0.7101034'; // USDC token ID
+      const underlyingTokenId = '0.0.7115536'; // USDC token ID
       
       this.logger.log(`Ensuring pool ${poolAddress} is associated with token ${underlyingTokenId}`);
       
@@ -608,12 +607,6 @@ export class ContractService {
   // Investor functions
   async depositToPool(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      
       // Convert amount to token decimals (USDC has 6 decimals)
       // If amount is "100", convert to "100000000" (100 * 10^6)
       const tokenDecimals = 6; // USDC has 6 decimals
@@ -621,11 +614,29 @@ export class ContractService {
       
       this.logger.log(`Depositing ${amount} USDC (${amountInSmallestUnits.toString()} smallest units) to pool ${poolAddress}`);
       
-      const tx = await pool.deposit(amountInSmallestUnits);
-      await tx.wait();
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'deposit',
+          new ContractFunctionParameters().addUint256(Long.fromString(amountInSmallestUnits.toString()))
+        );
+
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
 
       this.logger.log(`Successfully deposited ${amount} USDC to pool ${poolAddress}`);
-      return tx.hash;
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(`Failed to deposit to pool ${poolAddress}:`, error);
       throw new Error(
@@ -638,16 +649,31 @@ export class ContractService {
 
   async withdrawFromPool(poolAddress: string, shares: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      const tx = await pool.withdraw(shares);
-      await tx.wait();
+      this.logger.log(`Withdrawing ${shares} shares from pool ${poolAddress}`);
+      
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'withdraw',
+          new ContractFunctionParameters().addUint256(Long.fromString(shares))
+        );
 
-      this.logger.log(`Withdrew ${shares} shares from pool ${poolAddress}`);
-      return tx.hash;
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
+
+      this.logger.log(`Successfully withdrew ${shares} shares from pool ${poolAddress}`);
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(`Failed to withdraw from pool ${poolAddress}:`, error);
       throw new Error(
@@ -665,17 +691,31 @@ export class ContractService {
     amount: string,
   ): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
+      this.logger.log(`Depositing ${amount} collateral to pool ${poolAddress}`);
       
-      const tx = await pool.depositCollateral(amount);
-      await tx.wait();
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'depositCollateral',
+          new ContractFunctionParameters().addUint256(Long.fromString(amount))
+        );
 
-      this.logger.log(`Deposited ${amount} collateral to pool ${poolAddress}`);
-      return tx.hash;
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
+
+      this.logger.log(`Successfully deposited ${amount} collateral to pool ${poolAddress}`);
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(
         `Failed to deposit collateral to pool ${poolAddress}:`,
@@ -693,16 +733,31 @@ export class ContractService {
   // Borrow from pool
   async createLoan(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      const tx = await pool.borrow(amount);
-      await tx.wait();
+      this.logger.log(`Borrowing ${amount} from pool ${poolAddress}`);
+      
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'borrow',
+          new ContractFunctionParameters().addUint256(Long.fromString(amount))
+        );
 
-      this.logger.log(`Borrowed ${amount} from pool ${poolAddress}`);
-      return tx.hash;
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
+
+      this.logger.log(`Successfully borrowed ${amount} from pool ${poolAddress}`);
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(`Failed to borrow from pool ${poolAddress}:`, error);
       throw new Error(
@@ -716,16 +771,31 @@ export class ContractService {
   // Repay loan to pool
   async repayLoan(poolAddress: string, amount: string): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
-      );
-      const tx = await pool.repay(amount);
-      await tx.wait();
+      this.logger.log(`Repaying ${amount} to pool ${poolAddress}`);
+      
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'repay',
+          new ContractFunctionParameters().addUint256(Long.fromString(amount))
+        );
 
-      this.logger.log(`Repaid ${amount} to pool ${poolAddress}`);
-      return tx.hash;
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
+
+      this.logger.log(`Successfully repaid ${amount} to pool ${poolAddress}`);
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(`Failed to repay to pool ${poolAddress}:`, error);
       throw new Error(
@@ -743,18 +813,35 @@ export class ContractService {
     borrowerAddress: string,
   ): Promise<string> {
     try {
-      const pool = new ethers.Contract(
-        poolAddress,
-        LENDING_POOL_ABI,
-        this.wallet,
+      this.logger.log(
+        `Liquidating borrower ${borrowerAddress} in pool ${poolAddress}`,
       );
-      const tx = await pool.liquidate(borrowerAddress);
-      await tx.wait();
+      
+      // Create Hedera contract execution transaction
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(CONTRACT_GAS_LIMIT)
+        .setMaxTransactionFee(MAX_TRANSACTION_FEE)
+        .setFunction(
+          'liquidate',
+          new ContractFunctionParameters().addAddress(borrowerAddress)
+        );
+
+      // Sign and execute the transaction
+      const contractExecuteTxSigned = await contractExecuteTx.sign(this.hederaPrivateKey);
+      const contractExecuteTxResponse = await contractExecuteTxSigned.execute(this.hederaClient);
+      
+      // Wait for the transaction to be processed
+      const contractExecuteReceipt = await contractExecuteTxResponse.getReceipt(this.hederaClient);
+
+      if (contractExecuteReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed with status: ${contractExecuteReceipt.status.toString()}`);
+      }
 
       this.logger.log(
-        `Liquidated borrower ${borrowerAddress} in pool ${poolAddress}`,
+        `Successfully liquidated borrower ${borrowerAddress} in pool ${poolAddress}`,
       );
-      return tx.hash;
+      return contractExecuteTxResponse.transactionId.toString();
     } catch (error) {
       this.logger.error(
         `Failed to liquidate borrower ${borrowerAddress}:`,

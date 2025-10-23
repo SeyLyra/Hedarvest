@@ -91,11 +91,11 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
     
     // Auto-copy token ID with proper error handling
     try {
-      await navigator.clipboard.writeText('0.0.7101034');
+      await navigator.clipboard.writeText('0.0.7115536');
       toast.success('✅ Token ID copied! Now open HashPack and paste it in the Tokens tab!', { duration: 6000 });
     } catch (error) {
       // Fallback: show the token ID in a prompt
-      const tokenId = '0.0.7101034';
+      const tokenId = '0.0.7115536';
       prompt('Copy this Token ID:', tokenId);
       toast.info('📋 Token ID shown in prompt. Copy it and paste in HashPack!', { duration: 6000 });
     }
@@ -283,7 +283,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                       </p>
                       <button
                         onClick={() => {
-                          navigator.clipboard.writeText('0.0.7101034');
+                          navigator.clipboard.writeText('0.0.7115536');
                           toast.success('✅ STEP 1 DONE! Token ID copied!', { duration: 2000 });
                           setTimeout(() => {
                             toast.info('STEP 2: Open HashPack extension (look for icon in browser toolbar)', { duration: 3000 });
@@ -304,7 +304,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                         className="w-full text-2xl bg-white hover:bg-gray-100 text-red-600 px-8 py-8 rounded-xl font-black transition-all hover:scale-105 shadow-2xl"
                       >
                         ✅ CLICK HERE TO START!
-                        <div className="text-lg font-bold mt-3 text-orange-600">This copies 0.0.7101034 and shows you step-by-step what to do!</div>
+                        <div className="text-lg font-bold mt-3 text-orange-600">This copies 0.0.7115536 and shows you step-by-step what to do!</div>
                       </button>
                     </div>
 
@@ -430,7 +430,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
               <div className="text-sm text-blue-800 dark:text-blue-200">
                 <p className="font-medium">Test Token Information:</p>
                 <ul className="mt-1 space-y-1 text-xs text-blue-700 dark:text-blue-300">
-                  <li>• Real Hedera testnet USDT tokens (Token ID: 0.0.7101034)</li>
+                  <li>• Real Hedera testnet USDT tokens (Token ID: 0.0.7115536)</li>
                   <li>• Uses Hedera SDK for minting & transfer</li>
                   <li>• 5-minute cooldown between mints</li>
                   <li>• Maximum 10,000 USDT per transaction</li>

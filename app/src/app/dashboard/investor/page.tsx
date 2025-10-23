@@ -413,8 +413,6 @@ export default function InvestorDashboard() {
             hasMore={false} // Implement pagination
           />
         );
-      case 'faucet':
-        return <div className="p-6">Faucet section temporarily unavailable</div>;
       default:
         return null;
     }

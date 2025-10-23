@@ -556,7 +556,6 @@ export class HederaService {
     assetType: string;
     lendingToken: string;
     collateralToken: string;
-    lpToken: string;
     totalAssets: string;
     totalBorrows: string;
     totalReserves: string;
@@ -573,7 +572,6 @@ export class HederaService {
         assetType: poolInfo.assetType,
         lendingToken: poolInfo.lendingToken,
         collateralToken: poolInfo.collateralToken,
-        lpToken: poolInfo.lpToken,
         totalAssets: totalAssets,
         totalBorrows: poolInfo.totalBorrows,
         totalReserves: poolInfo.totalReserves,
