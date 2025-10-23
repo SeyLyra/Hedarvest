@@ -65,9 +65,10 @@ export const useDeposit = () => {
       }
 
       // Create transaction
+      // High gas limit needed because contract may perform token associations as child transactions
       const depositTx = new ContractExecuteTransaction()
         .setContractId(contractId)
-        .setGas(300000)
+        .setGas(1500000) // Increased from 300000 to handle token association child transactions
         .setFunction('deposit', new ContractFunctionParameters().addUint256(amountInWei));
 
       // Execute transaction

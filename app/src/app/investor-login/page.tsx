@@ -8,35 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import Image from "next/image";
 import {
   CheckCircle,
-  Shield,
-  TrendingUp,
-  Eye,
-  BarChart3,
   AlertCircle,
   RefreshCw,
   ArrowRight,
-  Sparkles,
-  Zap,
-  Star,
-  Globe,
-  Lock,
-  Target,
-  Rocket,
   Wheat,
-  Sun,
-  Leaf,
-  TreePine,
-  Gem,
-  Coins,
-  Banknote,
-  PiggyBank,
-  Award,
-  Crown,
-  Diamond,
-  Heart,
-  Flame
+  Wallet,
+  Loader2,
+  Moon,
+  Sun
 } from "lucide-react";
 import { useHashPackDirect } from "@/hooks/useHashPackDirect";
+import { useTheme } from "next-themes";
 
 // TypeScript declaration for HashPack
 declare global {
@@ -52,6 +34,7 @@ export default function InvestorLoginPage() {
   const [showRedirectFallback, setShowRedirectFallback] = useState(false);
   const [confirmedAccountId, setConfirmedAccountId] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const { theme, setTheme } = useTheme();
   
   // Use the direct HashPack connection hook
   const {
@@ -184,449 +167,374 @@ export default function InvestorLoginPage() {
   // Show loading state during hydration
   if (!isClient) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-amber-500 mx-auto mb-4"></div>
-          <p className="text-emerald-700">Loading...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
+          <p className="text-emerald-700/80 dark:text-emerald-300/80">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Ultra Fancy White-Dominant Background with Modern Green */}
-      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50 to-teal-50">
-        <div className="absolute inset-0 opacity-30" style={{
-          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23F0FDF4' fill-opacity='0.3'%3E%3Ccircle cx='30' cy='30' r='2'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`
-        }}></div>
-        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-cyan-500/5 animate-pulse-slow"></div>
+    <div className="min-h-screen relative overflow-hidden bg-white dark:bg-[#0d1410]">
+      {/* Elegant Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
+        <div className="absolute inset-0 bg-gradient-to-r from-emerald-400/5 via-teal-400/5 to-green-400/5 dark:from-emerald-500/5 dark:via-teal-500/5 dark:to-green-500/5 animate-pulse-slow"></div>
       </div>
 
-      {/* Floating Modern Green Shapes */}
+      {/* Subtle Floating Shapes */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-20 h-20 bg-gradient-to-r from-emerald-200/30 to-teal-300/30 rounded-full blur-xl animate-float"></div>
-        <div className="absolute top-40 right-20 w-32 h-32 bg-gradient-to-r from-teal-200/30 to-cyan-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '2s'}}></div>
-        <div className="absolute bottom-40 left-1/4 w-24 h-24 bg-gradient-to-r from-green-200/30 to-emerald-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '4s'}}></div>
-        <div className="absolute top-60 right-1/3 w-16 h-16 bg-gradient-to-r from-mint-200/30 to-teal-300/30 rounded-full blur-xl animate-float" style={{animationDelay: '1s'}}></div>
+        <div className="absolute top-20 left-10 w-32 h-32 bg-gradient-to-r from-emerald-200/20 to-teal-200/20 dark:from-emerald-400/5 dark:to-teal-400/5 rounded-full blur-3xl animate-float"></div>
+        <div className="absolute top-40 right-20 w-40 h-40 bg-gradient-to-r from-teal-200/20 to-green-200/20 dark:from-teal-400/5 dark:to-green-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '2s'}}></div>
+        <div className="absolute bottom-40 left-1/4 w-36 h-36 bg-gradient-to-r from-green-200/20 to-emerald-200/20 dark:from-green-400/5 dark:to-emerald-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '4s'}}></div>
+        <div className="absolute top-60 right-1/3 w-28 h-28 bg-gradient-to-r from-mint-200/20 to-teal-200/20 dark:from-emerald-400/5 dark:to-teal-400/5 rounded-full blur-3xl animate-float" style={{animationDelay: '1s'}}></div>
       </div>
 
-      {/* Ultra Fancy Agricultural Header */}
-      <header className="relative z-50 w-full px-8 py-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex justify-between items-center">
+      {/* Clean Header */}
+      <div className="relative z-50 bg-white/90 dark:bg-[#121a16]/95 backdrop-blur-xl border-b border-emerald-100/50 dark:border-emerald-500/10 shadow-lg">
+        <div className="px-8 py-4">
+          <div className="flex items-center justify-between">
             <div className="flex items-center gap-4 group cursor-pointer">
-              {/* Ultra Fancy Elegant Logo with Multiple Layers */}
               <div className="relative">
-                {/* Outer Glow Ring - Animated Pulse */}
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-300 via-emerald-400 to-teal-400 rounded-3xl blur-2xl opacity-60 group-hover:opacity-90 transition-all duration-700 animate-pulse"></div>
-                
-                {/* Middle Glow Ring - Rotating */}
-                <div className="absolute inset-0 bg-gradient-to-r from-emerald-400 via-cyan-400 to-amber-400 rounded-3xl blur-xl opacity-40 group-hover:opacity-70 transition-all duration-500 group-hover:animate-spin" style={{animationDuration: '8s'}}></div>
-                
-                {/* Inner Shadow Ring */}
-                <div className="absolute inset-1 bg-gradient-to-br from-white/20 to-transparent rounded-3xl blur-sm opacity-50 group-hover:opacity-80 transition-opacity duration-500"></div>
-                
-                {/* Gradient Border Container with Shine Effect */}
-                <div className="relative bg-gradient-to-br from-amber-400 via-emerald-500 to-teal-600 p-1.5 rounded-3xl shadow-2xl group-hover:shadow-emerald-500/50 transition-all duration-500 group-hover:scale-110 overflow-hidden">
-                  {/* Animated Shine Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                  
-                  {/* Inner White Background with Gradient */}
-                  <div className="relative bg-gradient-to-br from-white via-emerald-50/30 to-teal-50/30 rounded-[20px] p-3 backdrop-blur-xl">
-                    {/* Logo Image with Enhanced Effects */}
-                    <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity duration-500"></div>
+                <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
                       <Image
                         src="/logo.png"
                         alt="Hedarvest Logo"
-                        width={48}
-                        height={48}
-                        className="w-12 h-12 group-hover:scale-125 group-hover:rotate-6 transition-all duration-500 drop-shadow-xl relative z-10"
-                      />
-                      {/* Logo Inner Glow */}
-                      <div className="absolute inset-0 bg-gradient-to-br from-emerald-400/30 to-teal-400/30 rounded-xl blur-md group-hover:blur-lg transition-all duration-500"></div>
-                    </div>
-                  </div>
+                    width={40}
+                    height={40}
+                    className="w-10 h-10 group-hover:scale-110 transition-transform duration-300"
+                  />
                 </div>
-                
-                {/* Floating Particles Effect */}
-                <div className="absolute -top-1 -right-1 w-2 h-2 bg-amber-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping"></div>
-                <div className="absolute -bottom-1 -left-1 w-2 h-2 bg-emerald-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping" style={{animationDelay: '0.3s'}}></div>
-                <div className="absolute top-0 left-1/2 w-1.5 h-1.5 bg-teal-400 rounded-full opacity-0 group-hover:opacity-100 group-hover:animate-ping" style={{animationDelay: '0.6s'}}></div>
               </div>
-              
               <div>
-                <span className="text-3xl font-bold text-foreground group-hover:scale-105 transition-transform duration-300 inline-block">
+                <span className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-500 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
                   Hedarvest
                 </span>
-                <div className="text-sm text-muted-foreground flex items-center gap-2">
-                  <span>Agricultural DeFi Platform</span>
-                  <Sparkles className="w-3 h-3 text-amber-500 animate-pulse" />
-                </div>
+                <div className="text-xs text-emerald-600/70 dark:text-emerald-400/60 font-medium">Agricultural DeFi Platform</div>
               </div>
           </div>
 
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3">
               {!isConnected ? (
-                <div className="flex flex-col items-end gap-4">
+                <div className="flex items-center gap-3">
                   <Button
                     onClick={connect}
                     disabled={isLoading}
-                    className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-bold py-4 px-8 rounded-2xl shadow-2xl hover:shadow-emerald-500/25 transition-all duration-300 hover:scale-105"
+                    className="bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white shadow-lg"
                   >
-                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                     {isLoading ? (
                       <>
-                        <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mr-3"></div>
-                        <span className="relative z-10">Connecting...</span>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Connecting...
                       </>
                     ) : (
                       <>
-                        <span className="relative z-10 mr-3 group-hover:animate-bounce">🌾</span>
-                        <span className="relative z-10">Connect HashPack</span>
-                        <ArrowRight className="relative z-10 w-5 h-5 ml-3 group-hover:translate-x-1 transition-transform" />
+                        <Wallet className="w-4 h-4 mr-2" />
+                        Connect HashPack
                       </>
                     )}
                   </Button>
                   
-                  <div className="flex items-center gap-3">
-                    <div className="text-xs text-emerald-700 bg-emerald-100 px-3 py-1 rounded-full border border-emerald-200">
-                      HashConnect: {hashconnect ? '✅' : '❌'} | Status: {connectionStatus}
-                    </div>
-                    <button 
-                      onClick={testClick}
-                      className="text-xs text-blue-600 underline hover:text-blue-700 transition-colors"
-                    >
-                      Test Click
-                    </button>
-                    <button 
-                      onClick={checkHashPackManually}
-                      className="text-xs text-orange-600 underline hover:text-orange-700 transition-colors"
-                    >
-                      Check HashPack
-                    </button>
-                    <button 
-                      onClick={testDirectConnection}
-                      className="text-xs text-purple-600 underline hover:text-purple-700 transition-colors"
-                    >
-                      Direct Test
-                    </button>
-                    <button 
-                      onClick={debugLog}
-                      className="text-xs text-emerald-600 underline hover:text-teal-600 transition-colors"
-                    >
-                      Debug Log
-                    </button>
-                    <button 
-                      onClick={connect}
-                      className="text-xs text-emerald-600 underline hover:text-teal-700 transition-colors"
-                    >
-                      Retry Connect
-                    </button>
-                  </div>
+                  <Button
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    variant="outline"
+                    size="sm"
+                    className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-500/10 transition-all duration-300 hover:scale-105 shadow-md"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="w-4 h-4" />
+                    ) : (
+                      <Moon className="w-4 h-4" />
+                    )}
+                  </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 backdrop-blur-sm rounded-2xl px-6 py-3 border border-emerald-500/30">
-                  <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse shadow-lg shadow-emerald-400/50"></div>
-                  <div className="flex flex-col">
-                    <span className="text-emerald-700 text-sm font-medium">
+                <div className="flex items-center gap-3">
+                  <Card className="bg-gradient-to-r from-emerald-50/80 to-teal-50/80 dark:from-emerald-500/10 dark:to-teal-500/10 border-emerald-100/60 dark:border-emerald-500/15 shadow-lg backdrop-blur-sm">
+                    <CardContent className="p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 bg-gradient-to-br from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 rounded-xl flex items-center justify-center shadow-md shadow-emerald-400/20 dark:shadow-emerald-500/10">
+                          <Wallet className="w-5 h-5 text-white" />
+                        </div>
+                        <div className="text-sm">
+                          <div className="font-bold text-emerald-800 dark:text-emerald-200">
                       {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Connected'}
-                    </span>
-                    <div className="flex items-center gap-2">
+                          </div>
                       {hbarBalance && (
-                        <span className="text-emerald-600 text-xs">
-                          {hbarBalance} HBAR
-                        </span>
-                      )}
-                      <button
-                        onClick={fetchBalance}
-                        className="text-xs text-emerald-600 hover:text-emerald-700 underline"
-                        title="Refresh Balance"
-                      >
-                        Refresh
-                      </button>
+                            <div className="text-xs text-emerald-600/80 dark:text-emerald-300/80 font-mono">
+                              ℏ {hbarBalance} HBAR
+                            </div>
+                          )}
                     </div>
                   </div>
-                  <button 
+                    </CardContent>
+                  </Card>
+                  
+                  <Button
+                    onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+                    variant="outline"
+                    size="sm"
+                    className="text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20 hover:bg-emerald-50/80 dark:hover:bg-emerald-500/10 transition-all duration-300 hover:scale-105 shadow-md"
+                  >
+                    {theme === "dark" ? (
+                      <Sun className="w-4 h-4" />
+                    ) : (
+                      <Moon className="w-4 h-4" />
+                    )}
+                  </Button>
+                  
+                  <Button
                     onClick={disconnect}
-                    className="text-xs text-red-600 underline hover:text-red-700 transition-colors ml-2"
+                    variant="outline"
+                    size="sm"
+                    className="text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-500/20 hover:bg-gradient-to-r hover:from-rose-50 hover:to-red-50 dark:hover:from-rose-500/10 dark:hover:to-red-500/10 hover:border-rose-300 transition-all duration-300 hover:scale-105 shadow-md"
                   >
                     Disconnect
-                  </button>
+                  </Button>
                 </div>
               )}
             </div>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Ultra Fancy Agricultural Hero Section */}
-      <section className="relative py-32 overflow-hidden">
-        <div className="w-full px-8 relative z-10">
-          <div className="max-w-7xl mx-auto">
-            <div className="text-center mb-20">
-              {/* Animated Agricultural Badge */}
-              <div className="mb-8 animate-fade-in">
-                <div className="inline-flex items-center gap-2 px-6 py-3 rounded-full bg-gradient-to-r from-emerald-500/20 via-teal-500/20 to-cyan-500/20 backdrop-blur-sm border border-emerald-500/30">
-                  <Wheat className="w-4 h-4 text-emerald-600 animate-pulse" />
-                  <span className="text-emerald-700 font-medium">Powered by Hedera Network</span>
-                  <div className="w-2 h-2 bg-emerald-400 rounded-full animate-ping"></div>
-                </div>
+      {/* Main Content */}
+      <div className="relative z-10 p-8">
+        <div className="max-w-4xl mx-auto">
+          <div className="text-center mb-16">
+            {/* Clean Badge */}
+            <div className="mb-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50/80 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
+                <Wheat className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                <span className="text-emerald-700 dark:text-emerald-300 font-medium">Powered by Hedera Network</span>
+              </div>
               </div>
               
-              {/* Main Heading with Agricultural Effects */}
-              <h1 className="text-6xl md:text-8xl font-black mb-8 leading-tight">
-                <span className="block text-emerald-800 mb-4 animate-fade-in" style={{animationDelay: '0.1s'}}>
+            {/* Main Heading */}
+            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
+              <span className="block text-emerald-800 dark:text-emerald-200 mb-4">
                   Institutional-Grade
                 </span>
-                <span className="block bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent animate-fade-in" style={{animationDelay: '0.3s'}}>
+              <span className="block bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent">
                   Agricultural Investing
                 </span>
               </h1>
               
-              {/* Subtitle with Agricultural Glow Effect */}
-              <p className="text-2xl md:text-3xl text-emerald-700 mb-12 max-w-5xl mx-auto leading-relaxed animate-fade-in" style={{animationDelay: '0.5s'}}>
+            {/* Subtitle */}
+            <p className="text-xl text-emerald-700 dark:text-emerald-300 mb-12 max-w-3xl mx-auto leading-relaxed">
                 Access a new asset class with predictable returns backed by real-world agricultural operations. 
                 Earn sustainable yields while supporting global food security.
               </p>
 
-              {/* Ultra Fancy Agricultural CTA Button */}
-              <div className="animate-fade-in" style={{animationDelay: '0.7s'}}>
+            {/* CTA Button */}
+            <div className="mb-16">
                 <Button
                   onClick={connect}
                   disabled={isLoading}
-                  className="relative group overflow-hidden bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-black py-6 px-12 rounded-3xl shadow-2xl hover:shadow-emerald-500/50 transition-all duration-500 hover:scale-110 text-xl"
+                className="bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-emerald-400/25 transition-all duration-300 hover:scale-105 text-lg"
                 >
-                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
                   {isLoading ? (
                     <>
-                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-4"></div>
-                      <span className="relative z-10">Connecting to HashPack...</span>
+                    <Loader2 className="w-5 h-5 mr-3 animate-spin" />
+                    Connecting to HashPack...
                     </>
                   ) : (
                     <>
-                      <Wheat className="relative z-10 w-6 h-6 mr-4 group-hover:animate-bounce" />
-                      <span className="relative z-10">Start Investing Now</span>
-                      <ArrowRight className="relative z-10 w-6 h-6 ml-4 group-hover:translate-x-2 transition-transform" />
+                    <Wheat className="w-5 h-5 mr-3" />
+                    Start Investing Now
+                    <ArrowRight className="w-5 h-5 ml-3" />
                     </>
                   )}
                 </Button>
               </div>
                           </div>
               
-            {/* Ultra Fancy Agricultural Investment Advantages Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8 mb-20">
-              {[
-                { icon: Gem, title: "Real Asset Backing", desc: "100% collateralized by physical crops", color: "from-emerald-400 to-teal-500", emoji: "💎" },
-                { icon: Coins, title: "Predictable Yields", desc: "8-12% APY from agricultural operations", color: "from-teal-400 to-cyan-500", emoji: "💰" },
-                { icon: Crown, title: "Full Transparency", desc: "Blockchain-verified supply chain tracking", color: "from-green-400 to-emerald-500", emoji: "👑" },
-                { icon: Diamond, title: "Diversified Portfolio", desc: "Multiple crops and geographic regions", color: "from-cyan-400 to-teal-500", emoji: "💠" }
+          {/* Features Grid */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
+            {[
+              { title: "Real Asset Backing", desc: "100% collateralized by physical crops", emoji: "💎" },
+              { title: "Predictable Yields", desc: "8-12% APY from agricultural operations", emoji: "💰" },
+              { title: "Full Transparency", desc: "Blockchain-verified supply chain tracking", emoji: "👑" },
+              { title: "Diversified Portfolio", desc: "Multiple crops and geographic regions", emoji: "💠" }
               ].map((item, index) => (
-                <div key={index} className="group relative">
-                  <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl rounded-3xl" style={{background: `linear-gradient(135deg, ${item.color.split(' ')[1]}, ${item.color.split(' ')[3]})`}}></div>
-                  <div className="relative bg-gradient-to-br from-emerald-50/90 to-teal-50/90 backdrop-blur-xl rounded-3xl p-8 border border-emerald-200/50 hover:border-emerald-400/70 transition-all duration-500 hover:scale-105 hover:-translate-y-2 shadow-lg hover:shadow-emerald-200/50">
-                    <div className={`w-16 h-16 bg-gradient-to-r ${item.color} rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300`}>
-                      <item.icon className="w-8 h-8 text-white" />
-                          </div>
-                    <h3 className="text-xl font-bold text-emerald-800 mb-4 group-hover:text-emerald-600 transition-colors">{item.title}</h3>
-                    <p className="text-emerald-700 group-hover:text-emerald-800 transition-colors">{item.desc}</p>
-                    <div className="mt-6 w-full h-1 bg-gradient-to-r from-transparent via-emerald-300/50 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-                          </div>
-                </div>
+              <Card key={index} className="group bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:border-emerald-300/60 dark:hover:border-emerald-400/30 transition-all duration-300 hover:scale-105 hover:shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
+                <CardContent className="p-6 text-center">
+                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{item.emoji}</div>
+                  <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-3 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{item.title}</h3>
+                  <p className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors text-sm">{item.desc}</p>
+                </CardContent>
+              </Card>
               ))}
                         </div>
 
-            {/* Ultra Fancy Agricultural Why Invest Section */}
-            <div className="relative mb-20">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-cyan-500/10 rounded-4xl blur-3xl"></div>
-              <div className="relative bg-gradient-to-br from-emerald-50/95 to-teal-50/95 backdrop-blur-xl rounded-4xl p-16 border border-emerald-200/50 shadow-xl">
-                <div className="text-center mb-16">
-                  <h2 className="text-5xl md:text-6xl font-bold text-foreground mb-8">
-                  Why Invest in{" "}
-                    <span className="gradient-text">
-                    Agricultural Assets?
-                  </span>
+          {/* Why Invest Section */}
+          <Card className="mb-16 bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
+            <CardContent className="p-8">
+              <div className="text-center mb-12">
+                <h2 className="text-4xl font-bold text-emerald-800 dark:text-emerald-200 mb-6">
+                  Why Invest in Agricultural Assets?
                 </h2>
-                  <p className="text-2xl text-emerald-700 max-w-4xl mx-auto">
+                <p className="text-xl text-emerald-700 dark:text-emerald-300 max-w-3xl mx-auto">
                   Traditional markets are volatile, but agriculture provides stable, inflation-resistant returns 
                   backed by the world's most essential industry.
                   </p>
                 </div>
                 
-                <div className="grid md:grid-cols-3 gap-12">
-                  {[
-                    { emoji: "💎", title: "Stable Returns", desc: "Agricultural assets provide consistent returns regardless of market volatility, as food demand remains constant.", color: "from-emerald-400 to-teal-500", icon: PiggyBank },
-                    { emoji: "🌍", title: "Global Impact", desc: "Support sustainable farming practices while earning returns that contribute to global food security.", color: "from-teal-400 to-cyan-500", icon: Heart },
-                    { emoji: "⚡", title: "Innovation", desc: "Be part of the blockchain revolution in agriculture, combining traditional farming with cutting-edge technology.", color: "from-green-400 to-emerald-500", icon: Zap }
+              <div className="grid md:grid-cols-3 gap-8">
+                {[
+                  { emoji: "💎", title: "Stable Returns", desc: "Agricultural assets provide consistent returns regardless of market volatility, as food demand remains constant." },
+                  { emoji: "🌍", title: "Global Impact", desc: "Support sustainable farming practices while earning returns that contribute to global food security." },
+                  { emoji: "⚡", title: "Innovation", desc: "Be part of the blockchain revolution in agriculture, combining traditional farming with cutting-edge technology." }
                   ].map((item, index) => (
-                    <div key={index} className="text-center group cursor-pointer">
-                      <div className="w-16 h-16 bg-gradient-to-r from-emerald-400 to-teal-500 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:scale-110 transition-transform duration-300">
-                        <item.icon className="w-8 h-8 text-white" />
-                      </div>
-                      <h3 className="text-3xl font-bold text-emerald-800 mb-6 group-hover:scale-105 transition-transform">{item.title}</h3>
-                      <p className="text-emerald-700 group-hover:text-emerald-800 transition-colors text-lg leading-relaxed">
+                  <div key={index} className="text-center group">
+                    <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{item.emoji}</div>
+                    <h3 className="text-2xl font-bold text-emerald-800 dark:text-emerald-200 mb-4 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{item.title}</h3>
+                    <p className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors leading-relaxed">
                         {item.desc}
                   </p>
                 </div>
                   ))}
                 </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+            </CardContent>
+          </Card>
 
-      {/* Ultra Fancy Agricultural Investment Stats Section */}
-      <section className="relative py-20">
-        <div className="w-full px-8">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-16">
-              <h2 className="text-5xl font-bold text-foreground mb-6">
-                Ready to Start{" "}
-                <span className="gradient-text">
-                  Investing?
-                </span>
+          {/* Status Messages */}
+          <div className="text-center mb-16">
+            <h2 className="text-4xl font-bold text-emerald-800 dark:text-emerald-200 mb-6">
+              Ready to Start Investing?
               </h2>
-              <p className="text-2xl text-emerald-700">
+            <p className="text-xl text-emerald-700 dark:text-emerald-300 mb-8">
                 Use the Connect HashPack button to connect your wallet and access the investor dashboard
               </p>
               
-              {/* Ultra Fancy Agricultural Status Messages */}
+            {/* Status Messages */}
               {error && (
-                <div className="mt-8 max-w-2xl mx-auto">
-                  <div className="relative bg-red-50 backdrop-blur-xl rounded-3xl p-8 border border-red-200">
-                    <div className="flex items-center gap-3 text-red-600 mb-4">
-                      <AlertCircle className="h-6 w-6 animate-pulse" />
+              <Card className="max-w-2xl mx-auto mb-8 bg-red-50/80 dark:bg-red-500/10 border-red-200/60 dark:border-red-500/20">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 text-red-600 dark:text-red-400 mb-4">
+                    <AlertCircle className="h-6 w-6" />
                       <span className="font-bold text-xl">Connection Error</span>
                   </div>
-                    <p className="text-red-700 mb-6">{error}</p>
+                  <p className="text-red-700 dark:text-red-300 mb-6">{error}</p>
                     <div className="flex justify-center gap-4">
                       <Button
                         onClick={handleRetryConnection}
                         variant="outline"
-                        size="lg"
-                        className="bg-red-500/20 border-red-500/50 text-red-300 hover:bg-red-500/30 group"
+                      className="bg-red-500/20 border-red-500/50 text-red-600 dark:text-red-400 hover:bg-red-500/30"
                       >
-                        <RefreshCw className="h-5 w-5 mr-2 group-hover:rotate-180 transition-transform" />
+                      <RefreshCw className="h-4 w-4 mr-2" />
                         Try Again
                       </Button>
                         <Button
                       onClick={() => window.location.reload()}
                       variant="ghost"
-                        size="lg"
-                        className="text-red-600 hover:bg-red-100 group"
+                      className="text-red-600 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-500/10"
                     >
-                        <span className="group-hover:animate-bounce">🔄</span>
                       Refresh Page
                         </Button>
                     </div>
-                      </div>
-                    </div>
+                </CardContent>
+              </Card>
               )}
 
               {isConnected && accountId && (
-                <div className="mt-8 max-w-2xl mx-auto">
-                  <div className="relative bg-green-50 backdrop-blur-xl rounded-3xl p-8 border border-green-200">
-                    <div className="flex items-center gap-3 text-green-600 mb-4">
-                      <CheckCircle className="h-6 w-6 animate-bounce" />
+              <Card className="max-w-2xl mx-auto mb-8 bg-green-50/80 dark:bg-green-500/10 border-green-200/60 dark:border-green-500/20">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 text-green-600 dark:text-green-400 mb-4">
+                    <CheckCircle className="h-6 w-6" />
                       <span className="font-bold text-xl">Wallet Connected Successfully!</span>
                     </div>
-                    <p className="text-green-700 mb-2 bg-white/80 p-3 rounded-xl font-mono">
+                  <p className="text-green-700 dark:text-green-300 mb-2 bg-white/80 dark:bg-[#121a16]/80 p-3 rounded-xl font-mono">
                       Account: {accountId ? `${accountId.slice(0, 6)}...${accountId.slice(-4)}` : 'Unknown'}
                     </p>
                     {hbarBalance && (
-                      <p className="text-green-600 mb-2 bg-white/80 p-3 rounded-xl font-mono">
+                    <p className="text-green-600 dark:text-green-400 mb-2 bg-white/80 dark:bg-[#121a16]/80 p-3 rounded-xl font-mono">
                         Balance: {hbarBalance} HBAR
                       </p>
                     )}
-                    <p className="text-green-600 animate-pulse">
+                  <p className="text-green-600 dark:text-green-400">
                       Redirecting to dashboard...
                     </p>
-                  </div>
-                </div>
+                </CardContent>
+              </Card>
               )}
               
               {isLoading && (
-                <div className="mt-8 max-w-2xl mx-auto">
-                  <div className="relative bg-amber-50 backdrop-blur-xl rounded-3xl p-8 border border-amber-200">
-                    <div className="flex items-center gap-3 text-amber-600 mb-4">
-                      <div className="h-6 w-6 animate-spin rounded-full border-2 border-current border-t-transparent" />
+              <Card className="max-w-2xl mx-auto mb-8 bg-amber-50/80 dark:bg-amber-500/10 border-amber-200/60 dark:border-amber-500/20">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400 mb-4">
+                    <Loader2 className="h-6 w-6 animate-spin" />
                       <span className="font-bold text-xl">Connecting to HashPack...</span>
                     </div>
-                    <p className="text-amber-700 mb-4">
+                  <p className="text-amber-700 dark:text-amber-300 mb-4">
                       Please approve the connection in your HashPack wallet. You should be automatically redirected back to this page.
                     </p>
                     <div className="flex justify-center">
                     <Button
                         onClick={() => window.location.reload()}
                       variant="ghost"
-                        size="lg"
-                        className="text-amber-600 hover:bg-amber-100 group"
+                      className="text-amber-600 dark:text-amber-400 hover:bg-amber-100 dark:hover:bg-amber-500/10"
                     >
-                        <RefreshCw className="h-5 w-5 mr-2 group-hover:rotate-180 transition-transform" />
+                      <RefreshCw className="h-4 w-4 mr-2" />
                         Refresh Page
                     </Button>
-                    </div>
                   </div>
-                </div>
+                </CardContent>
+              </Card>
               )}
             </div>
 
-            {/* Ultra Fancy Agricultural Investment Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {[
-                { value: "8-12%", label: "Expected APY", desc: "Sustainable returns from agricultural operations", color: "from-emerald-400 to-teal-500", emoji: "💰" },
-                { value: "100%", label: "Asset Backed", desc: "Fully collateralized by physical crops", color: "from-teal-400 to-cyan-500", emoji: "💎" },
-                { value: "24/7", label: "Transparency", desc: "Blockchain-verified supply chain tracking", color: "from-green-400 to-emerald-500", emoji: "👑" }
-              ].map((stat, index) => (
-                <div key={index} className="group relative">
-                  <div className="absolute inset-0 bg-gradient-to-r opacity-0 group-hover:opacity-100 transition-opacity duration-500 blur-xl rounded-3xl" style={{background: `linear-gradient(135deg, ${stat.color.split(' ')[1]}, ${stat.color.split(' ')[3]})`}}></div>
-                  <div className="relative bg-gradient-to-br from-emerald-50/90 to-teal-50/90 backdrop-blur-xl rounded-3xl p-8 border border-emerald-200/50 hover:border-emerald-400/70 transition-all duration-500 hover:scale-105 text-center shadow-lg hover:shadow-emerald-200/50">
-                    <div className="text-6xl mb-4 group-hover:animate-bounce">{stat.emoji}</div>
-                    <div className={`text-6xl font-black bg-gradient-to-r ${stat.color} bg-clip-text text-transparent mb-4 group-hover:scale-110 transition-transform`}>
+          {/* Investment Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {[
+              { value: "8-12%", label: "Expected APY", desc: "Sustainable returns from agricultural operations", emoji: "💰" },
+              { value: "100%", label: "Asset Backed", desc: "Fully collateralized by physical crops", emoji: "💎" },
+              { value: "24/7", label: "Transparency", desc: "Blockchain-verified supply chain tracking", emoji: "👑" }
+            ].map((stat, index) => (
+              <Card key={index} className="group bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:border-emerald-300/60 dark:hover:border-emerald-400/30 transition-all duration-300 hover:scale-105 hover:shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
+                <CardContent className="p-6 text-center">
+                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{stat.emoji}</div>
+                  <div className="text-4xl font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent mb-2 group-hover:scale-110 transition-transform">
                       {stat.value}
               </div>
-                    <div className="text-2xl font-bold text-emerald-800 mb-2 group-hover:text-emerald-600 transition-colors">{stat.label}</div>
-                    <div className="text-emerald-700 group-hover:text-emerald-800 transition-colors">{stat.desc}</div>
-                    <div className="mt-6 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
-              </div>
-              </div>
+                  <div className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{stat.label}</div>
+                  <div className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors text-sm">{stat.desc}</div>
+                </CardContent>
+              </Card>
               ))}
             </div>
-          </div>
         </div>
-      </section>
+      </div>
 
-      {/* Ultra Fancy Agricultural HashPack Redirect Fallback */}
+      {/* HashPack Redirect Fallback */}
       {showRedirectFallback && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="relative max-w-md mx-4">
-            <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 rounded-3xl blur-xl"></div>
-            <Card className="relative bg-white/95 backdrop-blur-xl border border-emerald-200/50 rounded-3xl shadow-2xl">
-              <CardHeader className="text-center">
-                <CardTitle className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 bg-clip-text text-transparent">
-                  Wallet Connected
-                </CardTitle>
+          <Card className="max-w-md mx-4 bg-white/95 dark:bg-[#121a16]/95 backdrop-blur-xl border border-emerald-200/50 dark:border-emerald-500/20 shadow-2xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-2xl font-bold text-emerald-800 dark:text-emerald-200">
+                Wallet Connected
+              </CardTitle>
             </CardHeader>
-              <CardContent className="space-y-8 text-center">
-                <div className="flex items-center justify-center gap-3 text-emerald-600">
-                  <CheckCircle className="h-8 w-8 animate-bounce" />
-                  <span className="font-bold text-xl">HashPack wallet connected successfully!</span>
+            <CardContent className="space-y-6 text-center">
+              <div className="flex items-center justify-center gap-3 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle className="h-6 w-6" />
+                <span className="font-bold text-lg">HashPack wallet connected successfully!</span>
               </div>
-                <div className="text-emerald-700 bg-emerald-100 p-4 rounded-xl font-mono">
+              <div className="text-emerald-700 dark:text-emerald-300 bg-emerald-100/80 dark:bg-emerald-500/10 p-4 rounded-xl font-mono">
                 Account: {confirmedAccountId}
               </div>
               <Button
-                onClick={() => router.push('/dashboard/investor')}
-                  className="w-full bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:via-teal-400 hover:to-cyan-400 text-white font-bold py-4 px-8 rounded-2xl shadow-2xl hover:shadow-emerald-500/25 transition-all duration-300 hover:scale-105 group"
+                onClick={() => router.push('/investor-dashboard')}
+                className="w-full bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white font-bold py-3 px-6 rounded-xl shadow-lg hover:shadow-emerald-400/25 transition-all duration-300 hover:scale-105"
               >
-                  <Wheat className="w-5 h-5 mr-2 group-hover:animate-bounce" />
+                <Wheat className="w-4 h-4 mr-2" />
                 Continue to Dashboard
-                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </CardContent>
           </Card>
-          </div>
         </div>
       )}
     </div>

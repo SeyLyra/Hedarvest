@@ -71,16 +71,16 @@ export function useHashPackDirect(): HashPackDirectHook {
         
         // Create app metadata inside the hook to avoid SSR issues
         const appMetadata = {
-          name: "Hedarvest",
-          description: "Agricultural Investment Platform on Hedera",
+          name: process.env.NEXT_PUBLIC_APP_NAME || "Hedarvest",
+          description: process.env.NEXT_PUBLIC_APP_DESCRIPTION || "Agricultural Investment Platform on Hedera",
           icons: ["https://hedarvest.com/logo.png"],
-          url: "http://localhost:3002", // Explicitly set the correct port
+          url: process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3002",
         };
-        
+
         // Create the hashconnect instance with your project ID
         const hc = new HashConnect(
           LedgerId.TESTNET,
-          'ef7d91a96244dc686b4efe026d364d7c', // Your project ID
+          process.env.NEXT_PUBLIC_HASHCONNECT_PROJECT_ID || 'ef7d91a96244dc686b4efe026d364d7c',
           appMetadata,
           false // Disable debug mode
         );

@@ -266,20 +266,62 @@ export class InvestorService {
       let totalYield = 0;
       let totalDeposits = 0;
       
+      // First, get all deposit/withdraw transactions for this address to track deposit amounts
+      const allTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
+        'Investor',
+        address,
+        1000 // Get all transactions to calculate total deposits
+      );
+
+      // Calculate total deposit amount per pool from transaction history
+      const depositsByPool = new Map<string, number>();
+      for (const tx of allTransactions) {
+        const meta = tx.meta as any || {};
+        const poolAddress = meta.poolAddress;
+        if (!poolAddress) continue;
+
+        if (tx.kind === 'investor_deposit') {
+          const currentDeposits = depositsByPool.get(poolAddress) || 0;
+          depositsByPool.set(poolAddress, currentDeposits + (meta.amount || 0));
+        } else if (tx.kind === 'investor_withdraw') {
+          // Withdrawals reduce the deposited amount proportionally
+          const currentDeposits = depositsByPool.get(poolAddress) || 0;
+          const withdrawnAmount = meta.amount || 0;
+          depositsByPool.set(poolAddress, Math.max(0, currentDeposits - withdrawnAmount));
+        }
+      }
+
       // Get investor's position in each pool
       for (const poolInfo of allPoolsInfo) {
         try {
           // Get investor's LP shares
           const lpShares = await this.contractService.getLPShares(poolInfo.poolAddress, address);
-          
+
           if (Number(lpShares) > 0) {
-            // Get current pool stats
+            // Get current pool stats and liquidity index
             const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
-            
-            // Calculate position value (simplified - using LP shares as approximate value)
-            const positionValue = Number(lpShares) / 1e18;
-            const yieldEarned = positionValue * 0.05; // Simplified yield calculation (5% estimate)
-            
+            const liquidityIndex = await this.contractService.getLiquidityIndex(poolInfo.poolAddress);
+
+            // Calculate REAL position value using liquidity index
+            // Formula: (LP shares × liquidityIndex) / 1e27 / 1e18 = value in USDT (6 decimals already converted)
+            const lpSharesBigInt = BigInt(lpShares);
+            const liquidityIndexBigInt = BigInt(liquidityIndex);
+            const positionValueInTokenUnits = (lpSharesBigInt * liquidityIndexBigInt) / BigInt(1e27);
+            const positionValue = Number(positionValueInTokenUnits) / 1e18; // Convert from 18 decimals to human-readable
+
+            // Get total deposits from transaction history
+            const totalDeposited = depositsByPool.get(poolInfo.poolAddress) || 0;
+
+            // Calculate REAL yield earned
+            const yieldEarned = Math.max(0, positionValue - totalDeposited);
+
+            this.logger.log(`Portfolio calculation for ${poolInfo.assetType}:`);
+            this.logger.log(`  LP Shares: ${lpShares}`);
+            this.logger.log(`  Liquidity Index: ${liquidityIndex}`);
+            this.logger.log(`  Position Value: ${positionValue}`);
+            this.logger.log(`  Total Deposited: ${totalDeposited}`);
+            this.logger.log(`  Yield Earned: ${yieldEarned}`);
+
             positions.push({
               assetType: poolInfo.assetType,
               poolAddress: poolInfo.poolAddress,
@@ -288,12 +330,13 @@ export class InvestorService {
               yieldEarned: yieldEarned,
               apr: Number(poolStats.currentAPR) / 100, // Convert basis points to percentage
               utilizationRate: poolStats.utilizationRate,
+              totalDeposited: totalDeposited,
               createdAt: new Date()
             });
-            
+
             totalValue += positionValue;
             totalYield += yieldEarned;
-            totalDeposits += positionValue;
+            totalDeposits += totalDeposited;
           }
         } catch (poolError) {
           this.logger.warn(`Failed to get position for ${poolInfo.assetType}:`, poolError);
@@ -310,13 +353,30 @@ export class InvestorService {
         ? Math.round(positions.reduce((sum, pos) => sum + Number(pos.utilizationRate), 0) / positions.length)
         : 0;
       
-      // Get recent transactions from database
+      // Get recent transactions from database (HCS-logged transactions)
       const recentTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
         'Investor',
         address,
-        10
+        20 // Increased limit for transaction history
       );
-      
+
+      // Transform transactions to include transaction history details
+      const transactionHistory = recentTransactions.map(tx => {
+        const meta = tx.meta as any || {};
+        return {
+          id: tx.id,
+          type: this.mapTransactionKindToType(tx.kind),
+          grainType: meta.assetType || meta.grainType || 'Unknown',
+          amount: meta.amount || 0,
+          shares: meta.shares || 0,
+          timestamp: tx.createdAt.toISOString(),
+          status: tx.kind.includes('_failed') ? 'failed' : 'completed',
+          transactionHash: meta.contractTxHash || tx.ref,
+          poolAddress: meta.poolAddress || '',
+          depositorAddress: meta.depositorAddress || address
+        };
+      });
+
       return {
         investorAddress: address,
         totalDeposits: totalDeposits,
@@ -332,7 +392,8 @@ export class InvestorService {
           ref: tx.ref,
           createdAt: tx.createdAt,
           meta: tx.meta
-        }))
+        })),
+        transactionHistory: transactionHistory // Add formatted transaction history for portfolio display
       };
       
     } catch (error) {
@@ -352,5 +413,18 @@ export class InvestorService {
         message: 'Failed to fetch portfolio data from smart contracts. Please try again later.'
       };
     }
+  }
+
+  /**
+   * Maps transaction kind to user-friendly type for display
+   */
+  private mapTransactionKindToType(kind: string): string {
+    const mapping: Record<string, string> = {
+      'investor_deposit': 'deposit',
+      'investor_withdraw': 'withdraw',
+      'investor_deposit_failed': 'deposit_failed',
+      'investor_withdraw_failed': 'withdraw_failed'
+    };
+    return mapping[kind] || kind;
   }
 }

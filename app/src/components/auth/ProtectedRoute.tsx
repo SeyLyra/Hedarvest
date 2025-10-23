@@ -13,28 +13,30 @@ interface ProtectedRouteProps {
   fallback?: React.ReactNode;
 }
 
-export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ 
-  children, 
-  fallback 
+export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
+  children,
+  fallback
 }) => {
   const router = useRouter();
   const { isConnected, isConnecting } = useWalletConnect();
   const [isChecking, setIsChecking] = useState(true);
+  const [hasChecked, setHasChecked] = useState(false);
 
   useEffect(() => {
-    // Check wallet state immediately if already connected
-    if (isConnected) {
-      setIsChecking(false);
-      return;
-    }
-    
-    // Give a moment for wallet state to initialize
-    const timer = setTimeout(() => {
-      setIsChecking(false);
-    }, 200);
+    // Minimum check time to show loading state (prevents flash)
+    const minCheckTime = setTimeout(() => {
+      setHasChecked(true);
+    }, 1500); // Show loading for at least 1.5 seconds
 
-    return () => clearTimeout(timer);
-  }, [isConnected]);
+    return () => clearTimeout(minCheckTime);
+  }, []);
+
+  useEffect(() => {
+    // Only stop checking after minimum time has passed AND wallet state is determined
+    if (hasChecked && !isConnecting) {
+      setIsChecking(false);
+    }
+  }, [hasChecked, isConnecting, isConnected]);
 
   // Show loading while checking wallet state
   if (isChecking || isConnecting) {
@@ -70,24 +72,24 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
               Wallet Required
             </CardTitle>
             <p className="text-muted-foreground">
-              Please login as investor first.
+              Please connect your HashPack wallet to access the investor dashboard.
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button 
+            <Button
+              onClick={() => router.push('/investor-login')}
+              className="w-full"
+            >
+              <Wallet className="w-4 h-4 mr-2" />
+              Connect Wallet
+            </Button>
+            <Button
               onClick={() => router.push('/')}
               variant="outline"
               className="w-full"
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Back to Home
-            </Button>
-            <Button 
-              onClick={() => router.push('/')}
-              className="w-full"
-            >
-              <Wallet className="w-4 h-4 mr-2" />
-              Connect Wallet
             </Button>
           </CardContent>
         </Card>

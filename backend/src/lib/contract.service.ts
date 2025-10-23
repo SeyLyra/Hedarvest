@@ -438,8 +438,11 @@ export class ContractService {
 
       // Calculate derived values
       const totalAssets = totalCash + totalBorrowed;
-      const availableLiquidity = totalCash.toString();
-      const utilizationRate = totalAssets > 0 ? ((totalBorrowed * 10000n) / totalAssets).toString() : '0';
+      // Convert from token units to human-readable (USDT has 6 decimals)
+      const availableLiquidity = (Number(totalCash) / 1e6).toString();
+      const totalBorrowsHuman = (Number(totalBorrowed) / 1e6).toString();
+      // Calculate utilization rate as percentage (0-100)
+      const utilizationRate = totalAssets > 0 ? ((Number(totalBorrowed) * 100) / Number(totalAssets)).toFixed(2) : '0';
       
       // Calculate dynamic APR based on utilization rate
       let currentAPR = '5'; // Default fallback
@@ -482,9 +485,9 @@ export class ContractService {
         assetType: assetType,
         lendingToken: underlyingToken,
         collateralToken: collateralToken,
-        totalAssets: totalAssets.toString(),
-        totalBorrows: totalBorrowed.toString(),
-        totalReserves: totalReserves.toString(),
+        totalAssets: ((Number(totalAssets) / 1e6)).toString(),
+        totalBorrows: totalBorrowsHuman,
+        totalReserves: (Number(totalReserves) / 1e6).toString(),
         availableLiquidity: availableLiquidity,
         utilizationRate: utilizationRate,
         currentAPR: currentAPR,
@@ -517,8 +520,8 @@ export class ContractService {
       ]);
 
       return {
-        availableLiquidity: totalCash.toString(),
-        totalBorrows: totalBorrowed.toString(),
+        availableLiquidity: (Number(totalCash) / 1e6).toString(),
+        totalBorrows: (Number(totalBorrowed) / 1e6).toString(),
       };
     } catch (error) {
       this.logger.error(
@@ -860,18 +863,48 @@ export class ContractService {
 
 
 
+  /**
+   * Convert Hedera account ID to EVM address
+   * Hedera account ID format: 0.0.123456
+   * EVM address format: 0x...
+   */
+  private convertHederaAccountIdToEvmAddress(accountId: string): string {
+    // If it's already an EVM address, return as-is
+    if (accountId.startsWith('0x')) {
+      return accountId;
+    }
+
+    // If it's a Hedera account ID format (0.0.123456), convert to EVM address
+    if (accountId.match(/^\d+\.\d+\.\d+$/)) {
+      try {
+        const hederaAccountId = AccountId.fromString(accountId);
+        const evmAddress = hederaAccountId.toSolidityAddress();
+        this.logger.log(`Converted Hedera account ID ${accountId} to EVM address: 0x${evmAddress}`);
+        return `0x${evmAddress}`;
+      } catch (error) {
+        this.logger.error(`Failed to convert Hedera account ID ${accountId}:`, error);
+        throw new Error(`Invalid Hedera account ID format: ${accountId}`);
+      }
+    }
+
+    throw new Error(`Invalid address format: ${accountId}`);
+  }
+
   // Legacy method - get LP shares
   async getLPShares(
     poolAddress: string,
     investorAddress: string,
   ): Promise<string> {
     try {
+      // Convert Hedera account ID to EVM address if needed
+      const evmAddress = this.convertHederaAccountIdToEvmAddress(investorAddress);
+
       const pool = new ethers.Contract(
         poolAddress,
         LENDING_POOL_ABI,
         this.wallet,
       );
-      const balance = await pool.getLPBalance(investorAddress);
+      const balance = await pool.userLPShares(evmAddress);
       return balance.toString();
     } catch (error) {
       this.logger.error(
@@ -880,6 +913,31 @@ export class ContractService {
       );
       throw new Error(
         `Failed to get LP shares: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Get the liquidity index for a pool (tracks LP share appreciation)
+   */
+  async getLiquidityIndex(poolAddress: string): Promise<string> {
+    try {
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const liquidityIndex = await pool.liquidityIndex();
+      return liquidityIndex.toString();
+    } catch (error) {
+      this.logger.error(
+        `Failed to get liquidity index for pool ${poolAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get liquidity index: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );

@@ -2,10 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { 
-  TrendingUp, 
-  DollarSign, 
-  Activity, 
+import {
+  TrendingUp,
+  DollarSign,
+  Activity,
   BarChart3,
   PieChart,
   ArrowUpRight,
@@ -13,7 +13,11 @@ import {
   Coins,
   Shield,
   AlertTriangle,
-  Briefcase
+  Briefcase,
+  History,
+  CheckCircle2,
+  XCircle,
+  Clock
 } from 'lucide-react';
 import { 
   PieChart as RechartsPieChart, 
@@ -41,6 +45,19 @@ interface PortfolioPosition {
   riskScore: number;
 }
 
+interface TransactionHistory {
+  id: string;
+  type: string;
+  grainType: string;
+  amount: number;
+  shares: number;
+  timestamp: string;
+  status: string;
+  transactionHash: string;
+  poolAddress: string;
+  depositorAddress: string;
+}
+
 interface PortfolioData {
   totalDeposits: number;
   totalValue: number;
@@ -57,6 +74,7 @@ interface PortfolioData {
     date: string;
     yield: number;
   }>;
+  transactionHistory?: TransactionHistory[];
 }
 
 interface PortfolioSectionProps {
@@ -389,6 +407,95 @@ export const PortfolioSection = ({ data, isLoading }: PortfolioSectionProps) => 
           </div>
         </CardContent>
       </Card>
+
+      {/* Transaction History from HCS */}
+      {data.transactionHistory && data.transactionHistory.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <History className="w-5 h-5" />
+              Transaction History (HCS)
+            </CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Blockchain-verified transaction history from Hedera Consensus Service
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {data.transactionHistory.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`h-10 w-10 rounded-full flex items-center justify-center ${
+                      tx.status === 'completed'
+                        ? 'bg-green-100'
+                        : tx.status === 'failed'
+                        ? 'bg-red-100'
+                        : 'bg-yellow-100'
+                    }`}>
+                      {tx.status === 'completed' ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-600" />
+                      ) : tx.status === 'failed' ? (
+                        <XCircle className="h-5 w-5 text-red-600" />
+                      ) : (
+                        <Clock className="h-5 w-5 text-yellow-600" />
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold capitalize">
+                          {tx.type.replace('_', ' ')}
+                        </p>
+                        <Badge variant="outline" className="text-xs">
+                          {tx.grainType}
+                        </Badge>
+                        <Badge
+                          className={
+                            tx.status === 'completed'
+                              ? 'bg-green-100 text-green-800 border-green-200'
+                              : tx.status === 'failed'
+                              ? 'bg-red-100 text-red-800 border-red-200'
+                              : 'bg-yellow-100 text-yellow-800 border-yellow-200'
+                          }
+                        >
+                          {tx.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-sm text-muted-foreground">
+                        <span>
+                          {tx.type.includes('deposit') ? '+' : '-'}{formatCurrency(tx.amount)}
+                        </span>
+                        {tx.shares > 0 && (
+                          <span>
+                            • {tx.shares.toFixed(4)} shares
+                          </span>
+                        )}
+                        <span>
+                          • {new Date(tx.timestamp).toLocaleString()}
+                        </span>
+                      </div>
+                      {tx.transactionHash && (
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">
+                          Tx: {tx.transactionHash.slice(0, 20)}...
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    {tx.type === 'deposit' ? (
+                      <ArrowUpRight className="w-5 h-5 text-green-600" />
+                    ) : (
+                      <ArrowDownRight className="w-5 h-5 text-red-600" />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 };

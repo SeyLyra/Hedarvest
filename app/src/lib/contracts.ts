@@ -2,13 +2,13 @@
 // Synced with backend env (2025-10-23)
 export const DEPLOYED_CONTRACTS = {
   // Core Protocol Contracts
-  POOL_FACTORY: '0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb',
-  MOCK_PRICE_ORACLE: '0x32344dEf5EA9Fa9b83962980C8d447dea81F3685',
-  INTEREST_RATE_MODEL: '0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588',
+  POOL_FACTORY: process.env.NEXT_PUBLIC_POOL_FACTORY_ADDRESS || '0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb',
+  MOCK_PRICE_ORACLE: process.env.NEXT_PUBLIC_ORACLE_ADDRESS || '0x32344dEf5EA9Fa9b83962980C8d447dea81F3685',
+  INTEREST_RATE_MODEL: process.env.NEXT_PUBLIC_INTEREST_RATE_MODEL_ADDRESS || '0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588',
 
   // Network configuration
-  HEDERA_JSON_RPC_URL: 'https://testnet.hashio.io/api',
-  CHAIN_ID: 296, // Hedera testnet
+  HEDERA_JSON_RPC_URL: process.env.NEXT_PUBLIC_HEDERA_JSON_RPC_URL || 'https://testnet.hashio.io/api',
+  CHAIN_ID: Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 296, // Hedera testnet
 };
 
 // Contract ABIs for frontend use

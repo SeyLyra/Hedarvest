@@ -198,12 +198,44 @@ export default function InvestorDashboard() {
       const response = await fetch(`${API_BASE_URL}/investor/portfolio/${walletAddress}`);
       if (response.ok) {
         const data = await response.json();
+
+        // Generate allocation data from positions
+        const allocation = data.positions?.map((pos: any, index: number) => ({
+          name: pos.assetType || pos.grainType || 'Unknown',
+          value: pos.positionValue || 0,
+          color: ['#10b981', '#3b82f6', '#f59e0b', '#ef4444'][index % 4]
+        })) || [];
+
+        // Generate yield history (mock for now - could be enhanced with real data)
+        const yieldHistory = Array.from({ length: 7 }, (_, i) => ({
+          date: new Date(Date.now() - (6 - i) * 24 * 60 * 60 * 1000).toLocaleDateString(),
+          yield: data.totalYield ? (data.totalYield / 7) * (i + 1) : 0
+        }));
+
+        // Transform positions to match PortfolioPosition interface
+        const transformedPositions = data.positions?.map((pos: any) => ({
+          grainType: pos.assetType || pos.grainType || 'Unknown',
+          depositedAmount: pos.totalDeposited || 0, // Use actual deposited amount from transaction history
+          currentValue: pos.positionValue || 0,
+          accruedYield: pos.yieldEarned || 0,
+          shares: parseFloat(pos.shares || '0') / 1e18, // Convert from wei
+          apr: pos.apr || 0,
+          riskScore: Math.min(Math.round(parseFloat(pos.utilizationRate || '0') / 10), 10)
+        })) || [];
+
         // Add missing fields with default values
         const portfolioDataWithDefaults = {
-          ...data,
-          allocation: data.allocation || [],
-          yieldHistory: data.yieldHistory || []
+          totalDeposits: data.totalDeposits || 0,
+          totalValue: data.totalValue || 0,
+          totalYield: data.totalYield || 0,
+          averageAPR: data.averageAPR || 0,
+          riskScore: data.riskScore || 0,
+          positions: transformedPositions,
+          allocation: allocation,
+          yieldHistory: yieldHistory,
+          transactionHistory: data.transactionHistory || [] // Include HCS transaction history
         };
+
         setPortfolioData(portfolioDataWithDefaults);
       } else {
         // No mock data - show empty portfolio if API fails
@@ -215,10 +247,12 @@ export default function InvestorDashboard() {
           riskScore: 0,
           positions: [],
           allocation: [],
-          yieldHistory: []
+          yieldHistory: [],
+          transactionHistory: []
         });
       }
     } catch (error) {
+      console.error('Failed to fetch portfolio data:', error);
     } finally {
       setPortfolioLoading(false);
     }

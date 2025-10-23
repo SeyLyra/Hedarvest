@@ -6,8 +6,9 @@ import { LENDING_POOL_ABI } from '@/lib/contracts';
 import { ContractExecuteTransaction, ContractFunctionParameters, AccountId, Hbar, TokenAssociateTransaction, TokenId } from '@hashgraph/sdk';
 
 // Gas configuration for Hedera contract calls
-const CONTRACT_GAS_LIMIT = 500000; // Increased gas limit to prevent INSUFFICIENT_GAS errors
-const MAX_TRANSACTION_FEE = new Hbar(2); // Maximum transaction fee
+// High gas limit needed because contract may perform token associations as child transactions
+const CONTRACT_GAS_LIMIT = 1500000; // Sufficient gas for token associations and contract execution
+const MAX_TRANSACTION_FEE = new Hbar(5); // Maximum transaction fee
 
 interface DepositParams {
   poolAddress: string;
