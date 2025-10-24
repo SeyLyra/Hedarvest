@@ -239,30 +239,55 @@ cd app && pnpm dev
 graph TB
     A[PoolFactory] --> B[WHEAT LendingPool]
     A --> C[RICE LendingPool]
-    
-    B --> D[USDC Token]
-    B --> E[WHEAT Token]
-    B --> F[LP Token]
-    B --> G[Debt Token]
-    
+
+    B --> D[USDC Token - Underlying]
+    B --> E[WHEAT Token - Collateral]
+
     C --> D
-    C --> H[RICE Token]
-    C --> I[LP Token]
-    C --> J[Debt Token]
-    
+    C --> H[RICE Token - Collateral]
+
     K[PriceOracle] --> B
     K --> C
-    
+
     L[InterestRateModel] --> B
     L --> C
+
+    B -.Share Accounting.-> M[LP Shares]
+    B -.Share Accounting.-> N[Debt Shares]
+
+    C -.Share Accounting.-> O[LP Shares]
+    C -.Share Accounting.-> P[Debt Shares]
 ```
 
 ### **Key Contracts**
 
-- **`PoolFactory`**: Deploys and manages lending pools
-- **`LendingPool`**: Core lending/borrowing functionality
-- **`InterestRateModel`**: Dynamic interest rate calculations
-- **`MockPriceOracle`**: Price feed for agricultural commodities
+- **`PoolFactory`**: Deploys and manages lending pools for different grain types
+- **`LendingPool`**: Core lending/borrowing with **share-based accounting**
+  - Uses internal share tracking instead of separate ERC20 tokens
+  - `userLPShares(address)`: Track liquidity provider positions
+  - `userDebtShares(address)`: Track borrower debt positions
+  - `liquidityIndex`: Tracks LP share appreciation from interest
+  - `borrowIndex`: Tracks debt share growth from interest
+- **`InterestRateModel`**: Dynamic interest rate calculations based on utilization
+- **`MockPriceOracle`**: Price feed for agricultural commodities (WHEAT, RICE)
+
+### **Share-Based Accounting System**
+
+Instead of minting separate LP and Debt tokens, our lending pools use an efficient share-based system:
+
+- **LP Shares**: Represent proportional ownership of pool liquidity
+  - Value increases over time through interest accrual
+  - Redeemable for underlying assets + earned interest
+
+- **Debt Shares**: Represent proportional debt obligation
+  - Value increases over time through interest accrual
+  - Must be repaid with interest to reclaim collateral
+
+**Benefits**:
+- Lower gas costs (no ERC20 transfers)
+- Simpler contract architecture
+- No token association requirements
+- Direct share tracking on Hedera
 
 ---
 
@@ -286,10 +311,17 @@ graph TB
 - **Premium Features**: Advanced analytics and tools
 
 ### **Token Economics**
-- **USDC**: Stable currency for transactions
-- **WHEAT/RICE**: Tokenized agricultural commodities
-- **LP Tokens**: Liquidity provider rewards
-- **Debt Tokens**: Collateralized debt positions
+- **USDC** (Underlying Asset): Stable currency for lending/borrowing
+  - 6 decimal precision
+  - Used for all liquidity deposits and borrowing
+- **WHEAT/RICE** (Collateral Assets): Tokenized agricultural commodities
+  - 18 decimal precision
+  - Deposited as collateral for borrowing
+  - Price tracked by oracle
+- **Share Accounting** (Internal):
+  - LP Shares: Track liquidity provider positions (not ERC20 tokens)
+  - Debt Shares: Track borrower obligations (not ERC20 tokens)
+  - Values tracked on-chain via `liquidityIndex` and `borrowIndex`
 
 ---
 

@@ -20,6 +20,7 @@
     "test:e2e": "jest --config ./test/jest-e2e.json",
     "seed": "ts-node prisma/seeders/index.ts",
     "seed:farmer": "ts-node prisma/seeders/farmer.seeder.ts",
+    "create:tokens": "ts-node scripts/create-crop-tokens.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "prisma:deploy": "prisma migrate deploy"

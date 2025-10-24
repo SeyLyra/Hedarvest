@@ -2,14 +2,14 @@
 
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import FarmerLogin from "@/components/farmer/FarmerLogin";
 import FarmerDashboardNew from "@/components/farmer/FarmerDashboardNew";
-import { 
-  Wheat, 
-  DollarSign, 
-  Clock, 
-  Users, 
+import {
+  Wheat,
+  DollarSign,
+  Clock,
+  Users,
   ArrowRight,
   Shield,
   Zap,
@@ -29,11 +29,51 @@ export default function FarmerPage() {
   const [farmerName, setFarmerName] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
+  // Check for existing token on mount
+  useEffect(() => {
+    const checkAuth = async () => {
+      if (typeof window === 'undefined') return;
+
+      const token = localStorage.getItem('farmerToken');
+      const storedEmail = localStorage.getItem('farmerEmail');
+
+      if (token && storedEmail) {
+        // Verify token is still valid by making a test request
+        try {
+          const response = await fetch('/api/farmers/profile', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setFarmerName(data.farmer?.email?.split('@')[0] || storedEmail.split('@')[0]);
+            setIsLoggedIn(true);
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('farmerToken');
+            localStorage.removeItem('farmerEmail');
+          }
+        } catch (error) {
+          // If profile endpoint doesn't exist yet, just trust the token
+          setFarmerName(storedEmail.split('@')[0]);
+          setIsLoggedIn(true);
+        }
+      }
+
+      setIsCheckingAuth(false);
+    };
+
+    checkAuth();
+  }, []);
 
   const handleLogin = async (email: string, password: string) => {
     setIsLoading(true);
     setError("");
-    
+
     try {
       const response = await fetch('/api/farmers/login', {
         method: 'POST',
@@ -46,10 +86,12 @@ export default function FarmerPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setFarmerName(data.farmer.email.split('@')[0]); // Use email prefix as name
+        const name = data.farmer.email.split('@')[0];
+        setFarmerName(name);
         setIsLoggedIn(true);
-        // Store token for future API calls
+        // Store token and email for future sessions
         localStorage.setItem('farmerToken', data.token);
+        localStorage.setItem('farmerEmail', data.farmer.email);
       } else {
         setError(data.message || "Invalid email or password");
       }
@@ -64,7 +106,22 @@ export default function FarmerPage() {
     setIsLoggedIn(false);
     setFarmerName("");
     setError("");
+    // Clear stored credentials
+    localStorage.removeItem('farmerToken');
+    localStorage.removeItem('farmerEmail');
   };
+
+  // Show loading state while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-agricultural-green/5 via-trust-blue/5 to-golden-accent/5">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Show login form if not logged in
   if (!isLoggedIn) {
@@ -72,10 +129,5 @@ export default function FarmerPage() {
   }
 
   // Show dashboard if logged in
-  if (isLoggedIn) {
-    return <FarmerDashboardNew farmerName={farmerName} onLogout={handleLogout} />;
-  }
-
-  // This return statement should never be reached due to the conditional returns above
-  return null;
+  return <FarmerDashboardNew farmerName={farmerName} onLogout={handleLogout} />;
 }

@@ -12,6 +12,7 @@ import { TransactionModule } from './transaction/transaction.module';
 import { HcsModule } from './hcs/hcs.module';
 import { FaucetModule } from './faucet/faucet.module';
 import { TokensModule } from './tokens/tokens.module';
+import { WarehouseModule } from './warehouse/warehouse.module';
 
 @Module({
   imports: [
@@ -31,6 +32,7 @@ import { TokensModule } from './tokens/tokens.module';
     TransactionModule,
     FaucetModule,
     TokensModule,
+    WarehouseModule,
   ],
   controllers: [AppController],
   providers: [

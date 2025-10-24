@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets, Moon, Sun } from "lucide-react";
+import { Wallet, LogOut, Loader2, Coins, PieChart, Droplets, Moon, Sun, Wheat } from "lucide-react";
 import Image from "next/image";
 import { useWalletConnect } from "@/hooks/useWalletConnect";
 import { useLendingPool } from "@/hooks/useLendingPool";
@@ -216,23 +216,12 @@ export default function InvestorDashboard() {
           {/* Header with Logo and Wallet */}
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-4 group cursor-pointer">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-amber-400 to-orange-500 rounded-2xl blur-lg opacity-60 group-hover:opacity-80 transition-opacity duration-500"></div>
-                <div className="relative bg-gradient-to-r from-amber-400 to-orange-500 p-1 rounded-2xl">
-                  <Image
-                    src="/logo.png"
-                    alt="Hedarvest Logo"
-                    width={40}
-                    height={40}
-                    className="w-10 h-10 group-hover:scale-110 transition-transform duration-300"
-                  />
-                </div>
+              <div className="w-8 h-8 bg-gradient-to-r from-agricultural-green to-trust-blue rounded-lg flex items-center justify-center">
+                <Wheat className="h-5 w-5 text-white" />
               </div>
               <div>
-                <span className="text-3xl font-black bg-gradient-to-r from-emerald-600 via-teal-500 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent group-hover:scale-105 transition-transform duration-300">
-                  Hedarvest
-                </span>
-                <div className="text-xs text-emerald-600/70 dark:text-emerald-400/60 font-medium">Agricultural DeFi Platform</div>
+                <span className="text-xl font-bold text-foreground">Hedarvest</span>
+                <div className="text-xs text-muted-foreground">Investor Dashboard</div>
               </div>
             </div>
             

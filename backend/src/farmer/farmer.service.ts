@@ -1,19 +1,64 @@
 import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto } from './dto';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto } from './dto';
 import { TransactionService } from '../transaction/transaction.service';
 import { HederaService } from '../lib/hedera.service';
+import { ContractService } from '../lib/contract.service';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
+import * as crypto from 'crypto';
+import { TokenId, TokenAssociateTransaction, TransferTransaction, ContractExecuteTransaction, ContractFunctionParameters, ContractId, Hbar, AccountId, PrivateKey } from '@hashgraph/sdk';
 
 @Injectable()
 export class FarmerService {
+  private readonly ENCRYPTION_KEY: Buffer;
+  private readonly ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+
   constructor(
     private prisma: PrismaService,
     private transactionService: TransactionService,
     private hederaService: HederaService,
     private jwtService: JwtService,
-  ) {}
+    private contractService: ContractService,
+  ) {
+    // Use a secure encryption key from environment or generate one
+    const key = process.env.ENCRYPTION_KEY || 'default-insecure-key-please-change-in-production';
+    this.ENCRYPTION_KEY = crypto.scryptSync(key, 'salt', 32);
+  }
+
+  /**
+   * Encrypt private key for secure storage
+   */
+  private encryptPrivateKey(privateKey: string): string {
+    const iv = crypto.randomBytes(16);
+    const cipher = crypto.createCipheriv(this.ENCRYPTION_ALGORITHM, this.ENCRYPTION_KEY, iv);
+
+    let encrypted = cipher.update(privateKey, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+
+    const authTag = cipher.getAuthTag();
+
+    // Return iv:authTag:encryptedData
+    return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+  }
+
+  /**
+   * Decrypt private key for transaction signing
+   */
+  private decryptPrivateKey(encryptedData: string): string {
+    const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+
+    const iv = Buffer.from(ivHex, 'hex');
+    const authTag = Buffer.from(authTagHex, 'hex');
+
+    const decipher = crypto.createDecipheriv(this.ENCRYPTION_ALGORITHM, this.ENCRYPTION_KEY, iv);
+    decipher.setAuthTag(authTag);
+
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+
+    return decrypted;
+  }
 
   async registerFarmer(registerFarmerDto: RegisterFarmerDto) {
     const { walletAddress, phoneNumber, nationalId } = registerFarmerDto;
@@ -75,17 +120,7 @@ export class FarmerService {
     // Calculate tokens to mint (1 token per kg for now)
     const tokensMinted = weightKg;
 
-    // Process grain deposit on Hedera blockchain
-    if (!agent.walletAddress) {
-      throw new BadRequestException('Agent wallet address is required');
-    }
-    
-    const hederaResult = await this.hederaService.processGrainDeposit(
-      agent.walletAddress,
-      tokensMinted,
-    );
-
-    // Create grain deposit
+    // Create grain deposit record (tokens will be minted after warehouse verification)
     const deposit = await this.prisma.grainDeposit.create({
       data: {
         farmerId,
@@ -95,7 +130,7 @@ export class FarmerService {
         qualityGrade,
         moisturePercent,
         tokensMinted,
-        hederaTxId: hederaResult.transactionId,
+        hederaTxId: null, // Will be set after warehouse verification
       },
     });
 
@@ -112,10 +147,96 @@ export class FarmerService {
         qualityGrade,
         moisturePercent,
         tokensMinted,
+        status: 'pending_verification',
       },
     });
 
     return deposit;
+  }
+
+  /**
+   * Warehouse verifies grain deposit and mints crop tokens to farmer
+   * This should be called by warehouse after physically verifying the grain
+   */
+  async verifyAndMintTokens(depositId: number, warehouseSignature: string) {
+    // Get the grain deposit
+    const deposit = await this.prisma.grainDeposit.findUnique({
+      where: { id: depositId },
+      include: { farmer: true },
+    });
+
+    if (!deposit) {
+      throw new NotFoundException('Grain deposit not found');
+    }
+
+    if (deposit.hederaTxId) {
+      throw new BadRequestException('Tokens already minted for this deposit');
+    }
+
+    // Verify farmer has a custodial wallet
+    if (!deposit.farmer.isCustodial || !deposit.farmer.hederaAccountId) {
+      throw new BadRequestException(
+        'Farmer must have a custodial wallet to receive tokens'
+      );
+    }
+
+    // TODO: Verify warehouse signature
+    // For now, we'll skip signature verification
+
+    // Determine which token to mint based on grain type
+    const tokenIdMap: Record<string, string> = {
+      'wheat': process.env.WHEAT_TOKEN_ID || '0.0.7121333',
+      'rice': process.env.RICE_TOKEN_ID || '0.0.7121334',
+      'corn': process.env.CORN_TOKEN_ID || '0.0.7121335',
+    };
+
+    const tokenId = tokenIdMap[deposit.grainType.toLowerCase()];
+    if (!tokenId) {
+      throw new BadRequestException(`Unsupported grain type: ${deposit.grainType}`);
+    }
+
+    // Mint tokens to farmer's custodial wallet
+    const mintResult = await this.hederaService.mintToken(
+      tokenId,
+      deposit.tokensMinted.toNumber()
+    );
+
+    // Transfer minted tokens to farmer's account
+    const transferResult = await this.hederaService.transferTokenToAccount(
+      tokenId,
+      deposit.farmer.hederaAccountId,
+      deposit.tokensMinted.toNumber()
+    );
+
+    // Update deposit record with transaction ID
+    await this.prisma.grainDeposit.update({
+      where: { id: depositId },
+      data: {
+        hederaTxId: transferResult.transactionId,
+      },
+    });
+
+    // Log transaction
+    await this.transactionService.logTransaction({
+      kind: 'token_mint',
+      ref: `deposit_${depositId}`,
+      entity: 'GrainDeposit',
+      meta: {
+        farmerId: deposit.farmerId,
+        grainType: deposit.grainType,
+        tokensMinted: deposit.tokensMinted.toString(),
+        tokenId,
+        hederaTxId: transferResult.transactionId,
+        farmerAccountId: deposit.farmer.hederaAccountId,
+      },
+    });
+
+    return {
+      success: true,
+      transactionId: transferResult.transactionId,
+      tokenId,
+      amount: deposit.tokensMinted.toString(),
+    };
   }
 
 
@@ -199,29 +320,50 @@ export class FarmerService {
   async registerFarmerWithAuth(farmerRegisterDto: FarmerRegisterDto) {
     const { email, password, walletAddress, phoneNumber, nationalId } = farmerRegisterDto;
 
-    // Check if farmer already exists by email or wallet
-    const existingFarmer = await this.prisma.farmer.findFirst({
-      where: {
-        OR: [
-          { email },
-          { walletAddress }
-        ]
-      }
+    // Check if farmer already exists by email
+    const existingFarmer = await this.prisma.farmer.findUnique({
+      where: { email }
     });
 
     if (existingFarmer) {
-      throw new BadRequestException('Farmer already registered with this email or wallet');
+      throw new BadRequestException('Farmer already registered with this email');
     }
 
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Determine if we should create a custodial wallet
+    const shouldCreateCustodialWallet = !walletAddress;
+
+    let finalWalletAddress = walletAddress;
+    let hederaAccountId: string | undefined;
+    let encryptedPrivateKey: string | undefined;
+
+    if (shouldCreateCustodialWallet) {
+      // Create a custodial Hedera account automatically
+      try {
+        const custodialAccount = await this.hederaService.createCustodialAccount(email);
+
+        finalWalletAddress = custodialAccount.evmAddress;
+        hederaAccountId = custodialAccount.accountId;
+        encryptedPrivateKey = this.encryptPrivateKey(custodialAccount.privateKey);
+
+        console.log(`✅ Created custodial wallet for farmer ${email}: ${hederaAccountId}`);
+      } catch (error) {
+        console.error('Failed to create custodial wallet:', error);
+        throw new BadRequestException('Failed to create wallet for farmer. Please try again.');
+      }
+    }
 
     // Create farmer with authentication
     const farmer = await this.prisma.farmer.create({
       data: {
         email,
         password: hashedPassword,
-        walletAddress,
+        walletAddress: finalWalletAddress,
+        hederaAccountId,
+        encryptedPrivateKey,
+        isCustodial: shouldCreateCustodialWallet,
         phoneNumber: phoneNumber || 'N/A',
         memberNumber: `MBR-${Date.now()}`,
       },
@@ -241,7 +383,9 @@ export class FarmerService {
       entity: 'Farmer',
       meta: {
         email,
-        walletAddress,
+        walletAddress: finalWalletAddress,
+        hederaAccountId,
+        isCustodial: shouldCreateCustodialWallet,
         phoneNumber,
         nationalId,
       },
@@ -252,10 +396,15 @@ export class FarmerService {
         id: farmer.id,
         email: farmer.email,
         walletAddress: farmer.walletAddress,
+        hederaAccountId: farmer.hederaAccountId,
+        isCustodial: farmer.isCustodial,
         memberNumber: farmer.memberNumber,
         phoneNumber: farmer.phoneNumber,
       },
-      token
+      token,
+      message: shouldCreateCustodialWallet
+        ? 'Account created successfully! Your wallet has been set up automatically.'
+        : 'Account created successfully!'
     };
   }
 
@@ -317,5 +466,144 @@ export class FarmerService {
       throw new NotFoundException('Farmer not found');
     }
     return farmer;
+  }
+
+  /**
+   * Deposit crop tokens as collateral to lending pool using custodial wallet
+   * This allows farmers to borrow USDC against their crop tokens
+   */
+  async depositCollateral(depositCollateralDto: DepositCollateralDto) {
+    const { farmerId, cropType, amount } = depositCollateralDto;
+
+    // Get farmer with custodial wallet details
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { id: farmerId },
+    });
+
+    if (!farmer) {
+      throw new NotFoundException('Farmer not found');
+    }
+
+    if (!farmer.isCustodial || !farmer.hederaAccountId || !farmer.encryptedPrivateKey) {
+      throw new BadRequestException(
+        'Farmer must have a custodial wallet to deposit collateral via backend'
+      );
+    }
+
+    // Decrypt farmer's private key
+    const farmerPrivateKey = this.decryptPrivateKey(farmer.encryptedPrivateKey);
+
+    // Get pool address for the crop type
+    const poolAddress = await this.contractService.getPoolAddress(cropType);
+    if (!poolAddress) {
+      throw new BadRequestException(`No lending pool found for crop type: ${cropType}`);
+    }
+
+    // Determine collateral token ID based on crop type
+    const tokenIdMap: Record<string, string> = {
+      'wheat': process.env.WHEAT_TOKEN_ID || '0.0.7121333',
+      'rice': process.env.RICE_TOKEN_ID || '0.0.7121334',
+      'corn': process.env.CORN_TOKEN_ID || '0.0.7121335',
+    };
+
+    const collateralTokenId = tokenIdMap[cropType.toLowerCase()];
+    if (!collateralTokenId) {
+      throw new BadRequestException(`Unsupported crop type: ${cropType}`);
+    }
+
+    // Convert amount to smallest units (assuming 8 decimals for crop tokens)
+    const amountInSmallestUnits = Math.floor(amount * 1e8);
+
+    try {
+      // Initialize Hedera client with farmer's credentials
+      const operatorAccountId = AccountId.fromString(process.env.HEDERA_OPERATOR_ID!);
+      const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
+      const network = process.env.HEDERA_NETWORK || 'testnet';
+
+      const Client = await import('@hashgraph/sdk').then(m => m.Client);
+      const client = Client.forName(network);
+      client.setOperator(operatorAccountId, operatorKey);
+
+      const farmerAccountId = AccountId.fromString(farmer.hederaAccountId);
+      const farmerKey = PrivateKey.fromString(farmerPrivateKey);
+      const tokenId = TokenId.fromString(collateralTokenId);
+      const poolAccountId = AccountId.fromString(poolAddress);
+
+      // Step 1: Ensure farmer is associated with the collateral token
+      try {
+        await this.hederaService.ensureTokenAssociation(
+          farmer.hederaAccountId,
+          collateralTokenId,
+          farmerPrivateKey
+        );
+      } catch (assocError) {
+        console.log('Token association check/setup:', assocError);
+      }
+
+      // Step 2: Transfer collateral tokens from farmer to pool contract
+      const transferTx = new TransferTransaction()
+        .addTokenTransfer(tokenId, farmerAccountId, -amountInSmallestUnits)
+        .addTokenTransfer(tokenId, poolAccountId, amountInSmallestUnits)
+        .freezeWith(client);
+
+      const transferTxSigned = await transferTx.sign(farmerKey);
+      const transferTxResponse = await transferTxSigned.execute(client);
+      const transferReceipt = await transferTxResponse.getReceipt(client);
+
+      if (transferReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Token transfer failed: ${transferReceipt.status.toString()}`);
+      }
+
+      // Step 3: Call depositCollateral() on the lending pool contract
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(ContractId.fromString(poolAddress))
+        .setGas(1500000)
+        .setMaxTransactionFee(new Hbar(5))
+        .setFunction(
+          'depositCollateral',
+          new ContractFunctionParameters().addUint256(amountInSmallestUnits)
+        )
+        .freezeWith(client);
+
+      const contractTxSigned = await contractExecuteTx.sign(farmerKey);
+      const contractTxResponse = await contractTxSigned.execute(client);
+      const contractReceipt = await contractTxResponse.getReceipt(client);
+
+      if (contractReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(`Contract execution failed: ${contractReceipt.status.toString()}`);
+      }
+
+      // Log transaction
+      await this.transactionService.logTransaction({
+        kind: 'collateral_deposit',
+        ref: `farmer_${farmerId}_collateral`,
+        entity: 'Farmer',
+        meta: {
+          farmerId,
+          cropType,
+          amount,
+          amountInSmallestUnits,
+          collateralTokenId,
+          poolAddress,
+          transferTxId: transferTxResponse.transactionId.toString(),
+          contractTxId: contractTxResponse.transactionId.toString(),
+        },
+      });
+
+      return {
+        success: true,
+        message: 'Collateral deposited successfully',
+        transferTxId: transferTxResponse.transactionId.toString(),
+        contractTxId: contractTxResponse.transactionId.toString(),
+        amount: amount,
+        cropType: cropType,
+        poolAddress: poolAddress,
+      };
+    } catch (error) {
+      console.error('Error depositing collateral:', error);
+      throw new BadRequestException(
+        `Failed to deposit collateral: ${error instanceof Error ? error.message : 'Unknown error'}`
+      );
+    }
   }
 }

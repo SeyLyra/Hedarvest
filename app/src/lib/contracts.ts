@@ -11,6 +11,56 @@ export const DEPLOYED_CONTRACTS = {
   CHAIN_ID: Number(process.env.NEXT_PUBLIC_CHAIN_ID) || 296, // Hedera testnet
 };
 
+// Token IDs for collateral tokens (HTS tokens)
+export const CROP_TOKEN_IDS = {
+  WHEAT: process.env.NEXT_PUBLIC_WHEAT_TOKEN_ID || '0.0.7121333',
+  RICE: process.env.NEXT_PUBLIC_RICE_TOKEN_ID || '0.0.7121334',
+  CORN: process.env.NEXT_PUBLIC_CORN_TOKEN_ID || '0.0.7121335',
+};
+
+// USDT Token ID (used for borrowing)
+export const USDT_TOKEN_ID = process.env.NEXT_PUBLIC_USDT_TOKEN_ID || '0.0.7115536';
+
+// Mock pool data (fallback when backend is unavailable)
+export const MOCK_POOLS = [
+  {
+    id: 1,
+    grainType: 'WHEAT',
+    address: '0x0000000000000000000000000000000000000000', // Will be replaced with actual pool addresses
+    lendingTokenAddress: USDT_TOKEN_ID,
+    collateralTokenAddress: CROP_TOKEN_IDS.WHEAT,
+    price: 250.50,
+    availableLiquidity: '50000',
+    totalBorrows: '15000',
+    utilizationRate: 23.0,
+    apr: 8.5,
+  },
+  {
+    id: 2,
+    grainType: 'RICE',
+    address: '0x0000000000000000000000000000000000000001',
+    lendingTokenAddress: USDT_TOKEN_ID,
+    collateralTokenAddress: CROP_TOKEN_IDS.RICE,
+    price: 280.00,
+    availableLiquidity: '75000',
+    totalBorrows: '30000',
+    utilizationRate: 28.5,
+    apr: 9.2,
+  },
+  {
+    id: 3,
+    grainType: 'CORN',
+    address: '0x0000000000000000000000000000000000000002',
+    lendingTokenAddress: USDT_TOKEN_ID,
+    collateralTokenAddress: CROP_TOKEN_IDS.CORN,
+    price: 220.75,
+    availableLiquidity: '40000',
+    totalBorrows: '12000',
+    utilizationRate: 23.0,
+    apr: 7.8,
+  },
+];
+
 // Contract ABIs for frontend use
 export const POOL_FACTORY_ABI = [
   'function getAllPools() external view returns (address[])',

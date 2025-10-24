@@ -137,11 +137,61 @@ export default function RegisterCrop({ onBack, onNext }: RegisterCropProps) {
     }
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     console.log("Submitting crop registration:", cropData);
-    // Here you would typically send the data to your API
-    alert("Crop registration submitted successfully! You can now find a warehouse to store your crops.");
-    onNext();
+
+    try {
+      // Get farmer ID from localStorage or context
+      const farmerData = localStorage.getItem('farmer');
+      if (!farmerData) {
+        alert("Please login first");
+        return;
+      }
+
+      const farmer = JSON.parse(farmerData);
+      const token = localStorage.getItem('token');
+
+      // Upload photos (in a real app, you'd upload to cloud storage)
+      // For now, we'll just send empty array or convert to base64 if needed
+      const photoUrls: string[] = [];
+
+      // Create delivery request
+      const response = await fetch('http://localhost:4000/warehouse/delivery-requests', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          farmerId: farmer.id,
+          warehouseId: 'WH001', // This should come from FindWarehouse component
+          cropType: cropData.type,
+          variety: cropData.variety,
+          estimatedWeight: parseFloat(cropData.quantity),
+          unit: cropData.unit,
+          estimatedGrade: cropData.grade,
+          moistureContent: cropData.moisture ? parseFloat(cropData.moisture) : undefined,
+          temperature: cropData.temperature ? parseFloat(cropData.temperature) : undefined,
+          scheduledDate: cropData.harvestDate,
+          location: cropData.location,
+          notes: cropData.notes,
+          photos: photoUrls
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to submit delivery request');
+      }
+
+      const result = await response.json();
+      console.log('Delivery request created:', result);
+
+      alert(`Crop registration submitted successfully! Delivery request ID: ${result.id}\n\nYou can now find a warehouse to deliver your crops.`);
+      onNext();
+    } catch (error) {
+      console.error('Error submitting crop registration:', error);
+      alert('Failed to submit crop registration. Please try again.');
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
 import { FarmerService } from './farmer.service';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto } from './dto';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OtpService } from '../lib/otp.service';
 import { IsString } from 'class-validator';
@@ -75,5 +75,19 @@ export class FarmerController {
   @Post('login')
   async login(@Body() farmerLoginDto: FarmerLoginDto) {
     return this.farmerService.loginFarmer(farmerLoginDto);
+  }
+
+  @Post('deposits/:id/verify-and-mint')
+  async verifyAndMintTokens(
+    @Param('id', ParseIntPipe) depositId: number,
+    @Body() body: { warehouseSignature: string }
+  ) {
+    return this.farmerService.verifyAndMintTokens(depositId, body.warehouseSignature);
+  }
+
+  @Post('collateral/deposit')
+  @UseGuards(JwtAuthGuard)
+  async depositCollateral(@Body() depositCollateralDto: DepositCollateralDto) {
+    return this.farmerService.depositCollateral(depositCollateralDto);
   }
 }

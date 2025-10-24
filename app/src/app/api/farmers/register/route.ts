@@ -5,12 +5,14 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const { email, password, walletAddress, phoneNumber, nationalId } = body;
 
-    if (!email || !password || !walletAddress) {
+    if (!email || !password) {
       return NextResponse.json(
-        { message: 'Email, password, and wallet address are required' },
+        { message: 'Email and password are required' },
         { status: 400 }
       );
     }
+
+    // walletAddress is now optional - if not provided, a custodial wallet will be created
 
     // Forward the request to the backend
     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';

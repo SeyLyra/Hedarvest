@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { useCollateralDeposit } from "@/hooks/useCollateralDeposit";
 import { 
   DollarSign, 
   ArrowLeft, 
@@ -136,6 +137,9 @@ import {
 interface BorrowFundsProps {
   onBack: () => void;
   onComplete: (data: LoanData) => void;
+  userAddress: string;
+  hashconnect: any;
+  collateralData?: any; // Collateral data from previous step
 }
 
 interface LoanData {
@@ -169,10 +173,10 @@ const loanTerms = [
   { value: 365, label: "1 year", interestRate: 11.0 }
 ];
 
-export default function BorrowFunds({ onBack, onComplete }: BorrowFundsProps) {
+export default function BorrowFunds({ onBack, onComplete, userAddress, hashconnect, collateralData }: BorrowFundsProps) {
   const [borrowAmount, setBorrowAmount] = useState("");
   const [selectedTerm, setSelectedTerm] = useState(30);
-  const [isBorrowing, setIsBorrowing] = useState(false);
+  const { borrow, isLoading: isBorrowing } = useCollateralDeposit();
 
   const selectedTermData = loanTerms.find(term => term.value === selectedTerm);
   const borrowAmountNum = parseFloat(borrowAmount) || 0;
@@ -181,29 +185,41 @@ export default function BorrowFunds({ onBack, onComplete }: BorrowFundsProps) {
   const newCollateralRatio = borrowAmountNum / mockCollateralData.totalValue;
 
   const handleBorrow = async () => {
-    if (borrowAmountNum <= 0 || borrowAmountNum > mockCollateralData.maxBorrowAmount) return;
+    if (borrowAmountNum <= 0 || borrowAmountNum > mockCollateralData.maxBorrowAmount) {
+      return;
+    }
 
-    setIsBorrowing(true);
-    
-    // Simulate borrowing process
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    const loanData: LoanData = {
-      id: `loan_${Date.now()}`,
-      amount: borrowAmountNum,
-      interestRate: selectedTermData?.interestRate || 0,
-      collateralValue: mockCollateralData.totalValue,
-      collateralRatio: newCollateralRatio,
-      loanTerm: selectedTerm,
-      borrowDate: new Date().toISOString().split('T')[0],
-      dueDate: new Date(Date.now() + selectedTerm * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-      status: "active",
-      poolId: mockCollateralData.poolId,
-      poolName: mockCollateralData.poolName
-    };
+    if (!userAddress || !hashconnect) {
+      console.error('Missing wallet connection');
+      return;
+    }
 
-    setIsBorrowing(false);
-    onComplete(loanData);
+    // Call the smart contract to borrow
+    const result = await borrow({
+      poolAddress: mockCollateralData.poolAddress || '0x0000000000000000000000000000000000000000', // Use actual pool address
+      amount: borrowAmount,
+      userAddress,
+      hashconnect,
+    });
+
+    if (result?.success) {
+      // Create loan data for completion callback
+      const loanData: LoanData = {
+        id: `loan_${Date.now()}`,
+        amount: borrowAmountNum,
+        interestRate: selectedTermData?.interestRate || 0,
+        collateralValue: mockCollateralData.totalValue,
+        collateralRatio: newCollateralRatio,
+        loanTerm: selectedTerm,
+        borrowDate: new Date().toISOString().split('T')[0],
+        dueDate: new Date(Date.now() + selectedTerm * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        status: "active",
+        poolId: mockCollateralData.poolId,
+        poolName: mockCollateralData.poolName
+      };
+
+      onComplete(loanData);
+    }
   };
 
   const getRiskColor = (ratio: number) => {

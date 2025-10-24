@@ -1,36 +1,37 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { 
-  Package, 
-  Truck, 
-  FlaskConical, 
-  Coins, 
-  FileText, 
-  Users, 
-  Activity, 
-  BarChart3, 
-  TrendingUp, 
-  AlertCircle, 
-  CheckCircle, 
-  Clock, 
-  Search, 
-  Filter, 
-  Download, 
-  Upload, 
-  Eye, 
-  Edit, 
-  Trash2, 
-  Plus, 
-  Settings, 
-  LogOut, 
-  Menu, 
-  X, 
-  Home, 
-  Warehouse, 
+import {
+  Package,
+  Truck,
+  FlaskConical,
+  Coins,
+  FileText,
+  Users,
+  Activity,
+  BarChart3,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
+  Clock,
+  Search,
+  Filter,
+  Download,
+  Upload,
+  Eye,
+  Edit,
+  Trash2,
+  Plus,
+  Settings,
+  LogOut,
+  Menu,
+  X,
+  Home,
+  Warehouse,
+  Wheat,
   Sprout, 
   FileText as Certificate, 
   Scale, 
@@ -196,19 +197,56 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const [selectedInspection, setSelectedInspection] = useState<QualityInspection | null>(null);
   const [showQualityInspection, setShowQualityInspection] = useState(false);
   const [showTokenizeReceipts, setShowTokenizeReceipts] = useState(false);
+  const [recentDeliveries, setRecentDeliveries] = useState<Delivery[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Mock data
-  const warehouseStats = {
-    totalTokensIssued: 1247,
-    pendingDeliveries: 23,
-    verifiedToday: 15,
-    totalValue: 1250000,
-    averageProcessingTime: "2.3 hours",
-    staffCount: 8,
-    lastInspection: "2 hours ago"
-  };
+  // Fetch incoming deliveries from API
+  useEffect(() => {
+    const fetchDeliveries = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`http://localhost:4000/warehouse/incoming-deliveries?warehouseId=${warehouseId}`);
 
-  const recentDeliveries: Delivery[] = [
+        if (response.ok) {
+          const data = await response.json();
+
+          // Transform API data to match component interface
+          const transformedDeliveries: Delivery[] = data.map((item: any) => ({
+            id: `del${item.id}`,
+            farmerName: item.farmerName,
+            farmerId: `farmer_${item.farmerId}`,
+            cropType: item.cropType,
+            weight: parseFloat(item.weight),
+            unit: item.unit,
+            grade: item.grade || "Unknown",
+            arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
+            status: item.status as "pending" | "inspecting" | "verified" | "rejected",
+            priority: item.priority as "low" | "medium" | "high",
+            estimatedValue: parseFloat(item.estimatedValue || "0"),
+            location: item.storageLocation || "Unknown",
+            notes: item.notes
+          }));
+
+          setRecentDeliveries(transformedDeliveries);
+        } else {
+          console.error('Failed to fetch deliveries');
+          // Fall back to mock data if API fails
+          setRecentDeliveries(mockDeliveries);
+        }
+      } catch (error) {
+        console.error('Error fetching deliveries:', error);
+        // Fall back to mock data on error
+        setRecentDeliveries(mockDeliveries);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchDeliveries();
+  }, [warehouseId]);
+
+  // Mock data as fallback
+  const mockDeliveries: Delivery[] = [
     {
       id: "del001",
       farmerName: "John Smith",
@@ -254,6 +292,20 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     }
   ];
 
+  // Mock data
+  const warehouseStats = {
+    totalTokensIssued: 1247,
+    pendingDeliveries: 23,
+    verifiedToday: 15,
+    totalValue: 1250000,
+    averageProcessingTime: "2.3 hours",
+    staffCount: 8,
+    lastInspection: "2 hours ago",
+    pendingDeliveries: recentDeliveries.filter(d => d.status === "pending").length,
+    verifiedToday: recentDeliveries.filter(d => d.status === "verified").length,
+    totalValue: recentDeliveries.reduce((sum, d) => sum + d.estimatedValue, 0)
+  };
+
   const recentTokens: TokenizedReceipt[] = [
     {
       id: "rec001",
@@ -292,6 +344,36 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const handleSectionChange = (section: DashboardSection) => {
     setCurrentSection(section);
     setIsMobileMenuOpen(false);
+  };
+
+  const updateDeliveryStatus = async (deliveryId: string, newStatus: string) => {
+    try {
+      const numericId = parseInt(deliveryId.replace('del', ''));
+      const response = await fetch(`http://localhost:4000/warehouse/incoming-deliveries/${numericId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: newStatus,
+          notes: `Status updated to ${newStatus}`
+        })
+      });
+
+      if (response.ok) {
+        // Refresh deliveries
+        const updatedDeliveries = recentDeliveries.map(d =>
+          d.id === deliveryId ? { ...d, status: newStatus as any } : d
+        );
+        setRecentDeliveries(updatedDeliveries);
+        alert(`Delivery status updated to ${newStatus}`);
+      } else {
+        alert('Failed to update delivery status');
+      }
+    } catch (error) {
+      console.error('Error updating delivery status:', error);
+      alert('Error updating delivery status');
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -579,6 +661,20 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       {/* Deliveries Table */}
       <Card>
         <CardContent className="p-0">
+          {isLoading ? (
+            <div className="text-center py-12">
+              <RefreshCw className="h-8 w-8 text-muted-foreground mx-auto mb-4 animate-spin" />
+              <p className="text-muted-foreground">Loading deliveries...</p>
+            </div>
+          ) : recentDeliveries.length === 0 ? (
+            <div className="text-center py-12">
+              <PackageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No deliveries yet</h3>
+              <p className="text-muted-foreground">
+                Incoming deliveries will appear here
+              </p>
+            </div>
+          ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-50">
@@ -625,18 +721,24 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                         <Button size="sm" variant="outline">
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          size="sm" 
+                        <Button
+                          size="sm"
                           variant="outline"
                           onClick={() => {
                             setSelectedDelivery(delivery);
                             setShowQualityInspection(true);
                             setCurrentSection("quality-inspection");
                           }}
+                          title="Start Quality Inspection"
                         >
                           <FlaskConical className="h-4 w-4" />
                         </Button>
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateDeliveryStatus(delivery.id, delivery.status === 'pending' ? 'inspecting' : 'verified')}
+                          title={delivery.status === 'pending' ? 'Start Inspection' : 'Verify Delivery'}
+                        >
                           <CheckCircle className="h-4 w-4" />
                         </Button>
                       </div>
@@ -646,6 +748,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               </tbody>
             </table>
           </div>
+          )}
         </CardContent>
       </Card>
     </div>
@@ -657,8 +760,8 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-amber-600 rounded-lg flex items-center justify-center">
-                <Warehouse className="h-5 w-5 text-white" />
+              <div className="w-8 h-8 bg-gradient-to-r from-agricultural-green to-trust-blue rounded-lg flex items-center justify-center">
+                <Wheat className="h-5 w-5 text-white" />
               </div>
               <span className="text-xl font-bold">Warehouse Ops</span>
             </div>
@@ -720,12 +823,12 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center space-x-3">
-                <div className="w-8 h-8 bg-gradient-to-r from-green-600 to-amber-600 rounded-lg flex items-center justify-center">
-                  <Warehouse className="h-5 w-5 text-white" />
+                <div className="w-8 h-8 bg-gradient-to-r from-agricultural-green to-trust-blue rounded-lg flex items-center justify-center">
+                  <Wheat className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h1 className="text-xl font-bold text-foreground">Warehouse Operations</h1>
-                  <p className="text-xs text-muted-foreground">ID: {warehouseId}</p>
+                  <h1 className="text-xl font-bold text-foreground">Hedarvest</h1>
+                  <p className="text-xs text-muted-foreground">Warehouse Dashboard</p>
                 </div>
               </div>
             </div>

@@ -151,48 +151,48 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Pools</p>
-                <p className="text-2xl font-bold text-foreground">{cropPools.length}</p>
+                <p className="text-2xl font-bold text-foreground">{pools.length}</p>
               </div>
               <PieChart className="h-8 w-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Total Liquidity</p>
                 <p className="text-2xl font-bold text-foreground">
-                  ${cropPools.reduce((sum, pool) => sum + pool.totalLiquidity, 0).toLocaleString()}
+                  ${pools.reduce((sum, pool) => sum + parseFloat(pool.availableLiquidity), 0).toLocaleString()}
                 </p>
               </div>
               <DollarSign className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Avg APY</p>
+                <p className="text-sm text-muted-foreground">Avg APR</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {(cropPools.reduce((sum, pool) => sum + pool.apy, 0) / cropPools.length).toFixed(1)}%
+                  {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.apr, 0) / pools.length).toFixed(1) : '0'}%
                 </p>
               </div>
               <TrendingUp className="h-8 w-8 text-purple-500" />
             </div>
           </CardContent>
         </Card>
-        
+
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Depositors</p>
+                <p className="text-sm text-muted-foreground">Avg Utilization</p>
                 <p className="text-2xl font-bold text-foreground">
-                  {cropPools.reduce((sum, pool) => sum + pool.totalDepositors, 0)}
+                  {pools.length > 0 ? (pools.reduce((sum, pool) => sum + pool.utilizationRate, 0) / pools.length).toFixed(1) : '0'}%
                 </p>
               </div>
               <Users className="h-8 w-8 text-orange-500" />

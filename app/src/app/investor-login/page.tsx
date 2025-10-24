@@ -56,6 +56,19 @@ export default function InvestorLoginPage() {
     setIsClient(true);
   }, []);
 
+  // Check for existing connection on mount FIRST (before anything else)
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const existingAccount = localStorage.getItem('hashpack_account');
+      if (existingAccount) {
+        console.log('✅ Existing account found, redirecting:', existingAccount);
+        setConfirmedAccountId(existingAccount);
+        // Use replace instead of push to prevent back button issues
+        router.replace('/investor-dashboard');
+      }
+    }
+  }, [router]);
+
   // Handle successful connection
   useEffect(() => {
     if (isConnected && accountId) {
@@ -64,7 +77,8 @@ export default function InvestorLoginPage() {
       localStorage.setItem('hashpack_account', accountId);
 
       // Redirect to dashboard IMMEDIATELY after successful connection
-      router.push('/investor-dashboard');
+      // Use replace instead of push to prevent back button issues
+      router.replace('/investor-dashboard');
     }
   }, [isConnected, accountId, router]);
 
@@ -154,23 +168,39 @@ export default function InvestorLoginPage() {
     alert(`Debug Info:\n${Object.entries(debugInfo).map(([key, value]: [string, any]) => `${key}: ${value}`).join('\n')}`);
   };
 
-  // Check for existing connection on page load
-  useEffect(() => {
-    const existingAccount = localStorage.getItem('hashpack_account');
-    if (existingAccount) {
-      setConfirmedAccountId(existingAccount);
-      // Auto-redirect IMMEDIATELY if already connected
-      router.push('/investor-dashboard');
-    }
-  }, [router]);
-
-  // Show loading state during hydration
+  // Show loading state during hydration or when redirecting
   if (!isClient) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
           <p className="text-emerald-700/80 dark:text-emerald-300/80">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If already connected, show redirecting message instead of login page
+  if (isConnected && accountId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
+          <p className="text-emerald-700/80 dark:text-emerald-300/80 mb-2">Already connected!</p>
+          <p className="text-emerald-600/70 dark:text-emerald-400/70 text-sm">Redirecting to dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If we have confirmed account in localStorage, show redirecting
+  if (confirmedAccountId) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30 dark:from-[#0d1410] dark:via-[#0f1912] dark:to-[#0e1711]">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-400 mx-auto mb-4"></div>
+          <p className="text-emerald-700/80 dark:text-emerald-300/80 mb-2">Already logged in!</p>
+          <p className="text-emerald-600/70 dark:text-emerald-400/70 text-sm">Redirecting to dashboard...</p>
         </div>
       </div>
     );

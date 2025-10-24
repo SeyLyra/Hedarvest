@@ -16,15 +16,28 @@ import {
 import TransactionHistory from "./TransactionHistory";
 
 interface PortfolioPosition {
-  id: string;
-  grainType: string;
-  amountDeposited: number;
-  lpTokens: number;
-  earnedInterest: number;
-  currentValue: number;
-  utilizationRate: number;
+  assetType: string;
+  poolAddress: string;
+  shares: string;
+  positionValue: number;
+  yieldEarned: number;
   apr: number;
-  healthScore: number;
+  utilizationRate: string;
+  totalDeposited: number;
+  createdAt: string;
+}
+
+interface PortfolioData {
+  investorAddress: string;
+  totalDeposits: number;
+  totalValue: number;
+  totalYield: number;
+  averageAPR: number;
+  riskScore: number;
+  positions: PortfolioPosition[];
+  totalTransactions: number;
+  recentTransactions: any[];
+  transactionHistory: any[];
 }
 
 interface PortfolioPageProps {
@@ -32,63 +45,47 @@ interface PortfolioPageProps {
 }
 
 export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
-  const [positions, setPositions] = useState<PortfolioPosition[]>([]);
+  const [portfolioData, setPortfolioData] = useState<PortfolioData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [showValues, setShowValues] = useState(true);
-
-  // Mock data - in a real app, this would come from API
-  const mockPositions: PortfolioPosition[] = [
-    {
-      id: "1",
-      grainType: "Wheat",
-      amountDeposited: 5000,
-      lpTokens: 20.5,
-      earnedInterest: 125.50,
-      currentValue: 5125.50,
-      utilizationRate: 75,
-      apr: 8.5,
-      healthScore: 85
-    },
-    {
-      id: "2", 
-      grainType: "Corn",
-      amountDeposited: 3000,
-      lpTokens: 16.7,
-      earnedInterest: 67.20,
-      currentValue: 3067.20,
-      utilizationRate: 60,
-      apr: 9.2,
-      healthScore: 92
-    },
-    {
-      id: "3",
-      grainType: "Soybeans",
-      amountDeposited: 8000,
-      lpTokens: 25.0,
-      earnedInterest: 156.80,
-      currentValue: 8156.80,
-      utilizationRate: 90,
-      apr: 7.8,
-      healthScore: 70
-    }
-  ];
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Simulate API call
     const fetchPortfolio = async () => {
+      if (!userAddress) {
+        setIsLoading(false);
+        return;
+      }
+
       setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      setPositions(mockPositions);
-      setIsLoading(false);
+      setError(null);
+      
+      try {
+        const response = await fetch(`/api/investor/portfolio/${userAddress}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to fetch portfolio: ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        setPortfolioData(data);
+      } catch (err) {
+        console.error('Error fetching portfolio:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch portfolio data');
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     fetchPortfolio();
-  }, []);
+  }, [userAddress]);
 
-  const totalDeposited = positions.reduce((sum, pos) => sum + pos.amountDeposited, 0);
-  const totalEarned = positions.reduce((sum, pos) => sum + pos.earnedInterest, 0);
-  const totalValue = positions.reduce((sum, pos) => sum + pos.currentValue, 0);
-  const avgHealthScore = positions.length > 0 ? positions.reduce((sum, pos) => sum + pos.healthScore, 0) / positions.length : 0;
+  // Use real data from portfolioData or fallback to 0
+  const totalDeposited = portfolioData?.totalDeposits || 0;
+  const totalEarned = portfolioData?.totalYield || 0;
+  const totalValue = portfolioData?.totalValue || 0;
+  const avgHealthScore = portfolioData?.riskScore || 0;
+  const positions = portfolioData?.positions || [];
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -109,12 +106,41 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
     return 'bg-red-500';
   };
 
+  const getUtilizationColor = (utilization: string) => {
+    const util = Number(utilization);
+    if (util >= 80) return 'text-red-600 bg-red-100';
+    if (util >= 60) return 'text-yellow-600 bg-yellow-100';
+    return 'text-green-600 bg-green-100';
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4 text-emerald-500 dark:text-emerald-400" />
           <p className="text-emerald-700/80 dark:text-emerald-300/70">Loading portfolio...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-red-100/80 dark:bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <Activity className="w-8 h-8 text-red-500 dark:text-red-400" />
+          </div>
+          <h3 className="text-lg font-semibold text-red-800 dark:text-red-200 mb-2">Error Loading Portfolio</h3>
+          <p className="text-red-600/80 dark:text-red-300/70 mb-4">{error}</p>
+          <Button
+            onClick={() => window.location.reload()}
+            variant="outline"
+            className="text-red-600 dark:text-red-400 border-red-200 dark:border-red-500/20 hover:bg-red-50/80 dark:hover:bg-red-500/10"
+          >
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Retry
+          </Button>
         </div>
       </div>
     );
@@ -203,7 +229,7 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
             <div className="flex items-center gap-2">
               <Activity className="w-5 h-5 text-lime-500 dark:text-lime-400" />
               <div>
-                <p className="text-sm text-lime-600/80 dark:text-lime-300/80">Health Score</p>
+                <p className="text-sm text-lime-600/80 dark:text-lime-300/80">Risk Score</p>
                 <p className="text-2xl font-bold text-lime-800 dark:text-lime-200">
                   {avgHealthScore.toFixed(0)}%
                 </p>
@@ -228,16 +254,16 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
             </CardContent>
           </Card>
         ) : (
-          positions.map((position) => (
-            <Card key={position.id} className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:shadow-lg transition-all duration-300">
+          positions.map((position, index) => (
+            <Card key={`${position.assetType}-${index}`} className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:shadow-lg transition-all duration-300">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl text-emerald-800 dark:text-emerald-200">{position.grainType}</CardTitle>
+                  <CardTitle className="text-xl text-emerald-800 dark:text-emerald-200">{position.assetType}</CardTitle>
                   <Badge 
                     variant="secondary" 
-                    className={`${getHealthColor(position.healthScore)} border-0`}
+                    className={`${getUtilizationColor(position.utilizationRate)} border-0`}
                   >
-                    Health: {position.healthScore}%
+                    Utilization: {Number(position.utilizationRate).toFixed(1)}%
                   </Badge>
                 </div>
               </CardHeader>
@@ -248,48 +274,48 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
                   <div className="bg-emerald-50/80 dark:bg-emerald-500/10 rounded-lg p-3">
                     <p className="text-xs text-emerald-600/80 dark:text-emerald-300/80 mb-1">Deposited</p>
                     <p className="font-bold text-emerald-800 dark:text-emerald-200">
-                      {showValues ? formatCurrency(position.amountDeposited) : '••••••'}
+                      {showValues ? formatCurrency(position.totalDeposited) : '••••••'}
                     </p>
                   </div>
                   
                   <div className="bg-teal-50/80 dark:bg-teal-500/10 rounded-lg p-3">
-                    <p className="text-xs text-teal-600/80 dark:text-teal-300/80 mb-1">LP Tokens</p>
+                    <p className="text-xs text-teal-600/80 dark:text-teal-300/80 mb-1">LP Shares</p>
                     <p className="font-bold text-teal-800 dark:text-teal-200">
-                      {showValues ? position.lpTokens.toFixed(2) : '••••••'}
+                      {showValues ? Number(position.shares).toFixed(6) : '••••••'}
                     </p>
                   </div>
                   
                   <div className="bg-green-50/80 dark:bg-green-500/10 rounded-lg p-3">
-                    <p className="text-xs text-green-600/80 dark:text-green-300/80 mb-1">Earned Interest</p>
+                    <p className="text-xs text-green-600/80 dark:text-green-300/80 mb-1">Yield Earned</p>
                     <p className="font-bold text-green-800 dark:text-green-200">
-                      {showValues ? formatCurrency(position.earnedInterest) : '••••••'}
+                      {showValues ? formatCurrency(position.yieldEarned) : '••••••'}
                     </p>
                   </div>
                   
                   <div className="bg-lime-50/80 dark:bg-lime-500/10 rounded-lg p-3">
                     <p className="text-xs text-lime-600/80 dark:text-lime-300/80 mb-1">Current Value</p>
                     <p className="font-bold text-lime-800 dark:text-lime-200">
-                      {showValues ? formatCurrency(position.currentValue) : '••••••'}
+                      {showValues ? formatCurrency(position.positionValue) : '••••••'}
                     </p>
                   </div>
                 </div>
 
-                {/* Health Bar */}
+                {/* Utilization Bar */}
                 <div className="space-y-2">
                   <div className="flex justify-between text-xs text-gray-600">
-                    <span>Portfolio Health</span>
-                    <span>{position.healthScore}%</span>
+                    <span>Pool Utilization</span>
+                    <span>{Number(position.utilizationRate).toFixed(1)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-3">
                     <div 
-                      className={`h-3 rounded-full transition-all duration-500 ${getHealthBarColor(position.healthScore)}`}
-                      style={{ width: `${Math.min(position.healthScore, 100)}%` }}
+                      className={`h-3 rounded-full transition-all duration-500 ${getHealthBarColor(Number(position.utilizationRate))}`}
+                      style={{ width: `${Math.min(Number(position.utilizationRate), 100)}%` }}
                     ></div>
                   </div>
                   <div className="flex justify-between text-xs text-gray-500">
-                    <span>Poor</span>
-                    <span>Good</span>
-                    <span>Excellent</span>
+                    <span>Low Risk</span>
+                    <span>Medium Risk</span>
+                    <span>High Risk</span>
                   </div>
                 </div>
 
@@ -297,11 +323,13 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-emerald-100 dark:border-emerald-500/15">
                   <div className="text-center">
                     <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Pool APR</p>
-                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{position.apr}%</p>
+                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{(position.apr * 100).toFixed(2)}%</p>
                   </div>
                   <div className="text-center">
-                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Utilization</p>
-                    <p className="font-semibold text-emerald-800 dark:text-emerald-200">{position.utilizationRate}%</p>
+                    <p className="text-xs text-emerald-600/70 dark:text-emerald-400/70">Pool Address</p>
+                    <p className="font-mono text-xs text-emerald-600/70 dark:text-emerald-400/70 break-all">
+                      {position.poolAddress.slice(0, 8)}...{position.poolAddress.slice(-6)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -311,7 +339,10 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
       </div>
 
       {/* Transaction History from HCS */}
-      <TransactionHistory userAddress={userAddress} />
+      <TransactionHistory 
+        userAddress={userAddress} 
+        transactions={portfolioData?.transactionHistory || []}
+      />
     </div>
   );
 }

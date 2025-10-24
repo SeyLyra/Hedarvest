@@ -1,0 +1,131 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  Query,
+  ParseIntPipe,
+  UseGuards,
+} from '@nestjs/common';
+import { WarehouseService } from './warehouse.service';
+import {
+  CreateDeliveryDto,
+  UpdateDeliveryStatusDto,
+  ReceiveDeliveryDto,
+  VerifyDeliveryDto,
+} from './dto';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+
+@Controller('warehouse')
+export class WarehouseController {
+  constructor(private readonly warehouseService: WarehouseService) {}
+
+  /**
+   * Create a new delivery request (called by farmer)
+   */
+  @Post('delivery-requests')
+  @UseGuards(JwtAuthGuard)
+  async createDeliveryRequest(@Body() createDeliveryDto: CreateDeliveryDto) {
+    return this.warehouseService.createDeliveryRequest(createDeliveryDto);
+  }
+
+  /**
+   * Get all delivery requests for a warehouse
+   */
+  @Get('delivery-requests')
+  async getDeliveryRequests(
+    @Query('warehouseId') warehouseId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.warehouseService.getDeliveryRequests(warehouseId, status);
+  }
+
+  /**
+   * Get delivery requests for a specific farmer
+   */
+  @Get('delivery-requests/farmer/:farmerId')
+  @UseGuards(JwtAuthGuard)
+  async getFarmerDeliveries(@Param('farmerId', ParseIntPipe) farmerId: number) {
+    return this.warehouseService.getFarmerDeliveries(farmerId);
+  }
+
+  /**
+   * Get a specific delivery request
+   */
+  @Get('delivery-requests/:id')
+  async getDeliveryRequest(@Param('id', ParseIntPipe) id: number) {
+    return this.warehouseService.getDeliveryRequest(id);
+  }
+
+  /**
+   * Update delivery request status
+   */
+  @Put('delivery-requests/:id/status')
+  async updateDeliveryStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() updateDto: UpdateDeliveryStatusDto,
+  ) {
+    return this.warehouseService.updateDeliveryStatus(id, updateDto);
+  }
+
+  /**
+   * Receive delivery at warehouse (creates IncomingDelivery)
+   */
+  @Post('delivery-requests/:id/receive')
+  async receiveDelivery(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() receiveDto: ReceiveDeliveryDto,
+  ) {
+    return this.warehouseService.receiveDelivery(id, receiveDto);
+  }
+
+  /**
+   * Get all incoming deliveries for warehouse
+   */
+  @Get('incoming-deliveries')
+  async getIncomingDeliveries(
+    @Query('warehouseId') warehouseId: string,
+    @Query('status') status?: string,
+  ) {
+    return this.warehouseService.getIncomingDeliveries(warehouseId, status);
+  }
+
+  /**
+   * Update incoming delivery status
+   */
+  @Put('incoming-deliveries/:id/status')
+  async updateIncomingDeliveryStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { status: string; notes?: string },
+  ) {
+    return this.warehouseService.updateIncomingDeliveryStatus(
+      id,
+      body.status,
+      body.notes,
+    );
+  }
+
+  /**
+   * Verify delivery and mint tokens
+   */
+  @Post('incoming-deliveries/:id/verify')
+  async verifyAndMintTokens(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() verifyDto: VerifyDeliveryDto,
+  ) {
+    return this.warehouseService.verifyAndMintTokens(id, verifyDto);
+  }
+
+  /**
+   * Reject delivery
+   */
+  @Post('incoming-deliveries/:id/reject')
+  async rejectDelivery(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { reason: string },
+  ) {
+    return this.warehouseService.rejectDelivery(id, body.reason);
+  }
+}

@@ -82,7 +82,7 @@ import {
 import CropPools from "./CropPools";
 import RegisterCrop from "./RegisterCrop";
 import FindWarehouse from "./FindWarehouse";
-import TransactionHistory from "./TransactionHistory";
+import ActivityFeed from "./ActivityFeed";
 import UserProfile from "./UserProfile";
 // import DepositCollateral from "./DepositCollateral";
 // import BorrowFunds from "./BorrowFunds";
@@ -92,27 +92,15 @@ import UserProfile from "./UserProfile";
 
 interface FarmerDashboardProps {
   farmerName: string;
+  farmerId: number;
   onLogout: () => void;
 }
 
-type DashboardSection = "overview" | "crop-management" | "defi-lending" | "transactions" | "profile" | "contact-agent";
-type CropManagementStep = "register-crop" | "find-warehouse" | "tokenize-crops" | "view-tokens";
-type DefiStep = "crop-pools" | "deposit-collateral" | "borrow-funds" | "loan-status" | "repay-loan" | "withdraw-funds";
+type DashboardSection = "overview" | "my-crops" | "borrow-loans" | "activity";
+type DefiStep = "crop-pools" | "deposit-collateral" | "borrow-funds" | "loan-status" | "repay-loan" | "withdraw-to-bank";
 
-interface ProgressStep {
-  id: string;
-  title: string;
-  description: string;
-  completed: boolean;
-  current: boolean;
-  disabled: boolean;
-  icon: React.ComponentType<any>;
-  color: string;
-}
-
-export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashboardProps) {
+export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: FarmerDashboardProps) {
   const [currentSection, setCurrentSection] = useState<DashboardSection>("overview");
-  const [cropManagementStep, setCropManagementStep] = useState<CropManagementStep | null>(null);
   const [defiStep, setDefiStep] = useState<DefiStep | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -125,7 +113,7 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
     nextRepayment: "2024-02-15",
     totalEarnings: 15000,
     kycStatus: "verified",
-    walletAddress: "0x742d...8a9c"
+    accountNumber: `MBR-${Date.now().toString().slice(-8)}` // Member account number instead of wallet address
   };
 
   const cropPools = [
@@ -194,100 +182,9 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
     }
   ];
 
-  const cropManagementSteps: ProgressStep[] = [
-    {
-      id: "register-crop",
-      title: "Register Crop",
-      description: "Input harvest details and upload photos",
-      completed: true,
-      current: false,
-      disabled: false,
-      icon: Upload,
-      color: "green"
-    },
-    {
-      id: "find-warehouse", 
-      title: "Find Warehouse",
-      description: "Locate nearby storage facilities",
-      completed: true,
-      current: false,
-      disabled: false,
-      icon: MapPin,
-      color: "blue"
-    },
-    {
-      id: "tokenize-crops",
-      title: "Tokenize Crops", 
-      description: "Mint digital certificates",
-      completed: true,
-      current: false,
-      disabled: false,
-      icon: Coins,
-      color: "purple"
-    },
-    {
-      id: "view-tokens",
-      title: "My Crop Tokens",
-      description: "View digital certificates",
-      completed: false,
-      current: true,
-      disabled: false,
-      icon: Eye,
-      color: "indigo"
-    }
-  ];
-
-  const defiSteps: ProgressStep[] = [
-    {
-      id: "crop-pools",
-      title: "Crop Pools",
-      description: "View available liquidity pools",
-      completed: false,
-      current: true,
-      disabled: false,
-      icon: BarChart3,
-      color: "emerald"
-    },
-    {
-      id: "deposit-collateral",
-      title: "Deposit Collateral",
-      description: "Lock tokens as collateral",
-      completed: false,
-      current: false,
-      disabled: true,
-      icon: Lock,
-      color: "orange"
-    },
-    {
-      id: "borrow-funds",
-      title: "Borrow Funds",
-      description: "Access loans using collateral",
-      completed: false,
-      current: false,
-      disabled: true,
-      icon: DollarSign,
-      color: "cyan"
-    },
-    {
-      id: "loan-status",
-      title: "Loan Status",
-      description: "Track loan health and deadlines",
-      completed: false,
-      current: false,
-      disabled: true,
-      icon: Activity,
-      color: "red"
-    }
-  ];
-
   const handleSectionChange = (section: DashboardSection) => {
     setCurrentSection(section);
-    if (section === "crop-management") {
-      setCropManagementStep("view-tokens");
-    } else {
-      setCropManagementStep(null);
-    }
-    if (section === "defi-lending") {
+    if (section === "borrow-loans") {
       setDefiStep("crop-pools");
     } else {
       setDefiStep(null);
@@ -295,82 +192,10 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
     setIsMobileMenuOpen(false);
   };
 
-  const handleCropStep = (step: CropManagementStep) => {
-    setCropManagementStep(step);
-    setCurrentSection("crop-management");
-  };
-
   const handleDefiStep = (step: DefiStep) => {
     setDefiStep(step);
-    setCurrentSection("defi-lending");
+    setCurrentSection("borrow-loans");
   };
-
-  const renderProgressTracker = (steps: ProgressStep[]) => (
-    <div className="mb-8">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-foreground">Progress Tracker</h3>
-        <Badge variant="outline" className="text-sm">
-          {steps.filter(s => s.completed).length} of {steps.length} completed
-        </Badge>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {steps.map((step, index) => {
-          const Icon = step.icon;
-          return (
-            <Card 
-              key={step.id}
-              className={`cursor-pointer transition-all duration-200 ${
-                step.disabled 
-                  ? 'opacity-50 cursor-not-allowed' 
-                  : 'hover:shadow-md hover:scale-105'
-              } ${
-                step.current 
-                  ? 'ring-2 ring-primary shadow-lg' 
-                  : step.completed 
-                    ? 'border-green-200 bg-green-50' 
-                    : 'border-gray-200'
-              }`}
-              onClick={() => !step.disabled && (
-                step.id.includes('crop') ? handleCropStep(step.id as CropManagementStep) : 
-                handleDefiStep(step.id as DefiStep)
-              )}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-3">
-                  <div className={`p-2 rounded-lg ${
-                    step.completed 
-                      ? 'bg-green-100 text-green-600' 
-                      : step.current 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    <Icon className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="text-sm font-medium text-foreground truncate">
-                      {step.title}
-                    </h4>
-                    <p className="text-xs text-muted-foreground truncate">
-                      {step.description}
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0">
-                    {step.completed ? (
-                      <CheckCircle className="h-4 w-4 text-green-500" />
-                    ) : step.current ? (
-                      <div className="w-4 h-4 rounded-full bg-primary animate-pulse" />
-                    ) : (
-                      <div className="w-4 h-4 rounded-full bg-gray-300" />
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-    </div>
-  );
 
   const renderOverview = () => (
     <div className="space-y-8">
@@ -464,25 +289,25 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
         </Card>
       </div>
 
-      {/* Contact Local Agent */}
+      {/* Quick Start Banner */}
       <Card className="mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
               <div className="p-3 bg-green-100 rounded-lg">
-                <Users className="h-6 w-6 text-green-600" />
+                <Wheat className="h-6 w-6 text-green-600" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground">Need Help?</h3>
-                <p className="text-sm text-muted-foreground">Contact your local agent for assistance with crops, storage, or financing</p>
+                <h3 className="text-lg font-semibold text-foreground">Get Started</h3>
+                <p className="text-sm text-muted-foreground">View your crop tokens and start borrowing against them</p>
               </div>
             </div>
-            <Button 
-              onClick={() => setCurrentSection("contact-agent")}
+            <Button
+              onClick={() => handleSectionChange("my-crops")}
               className="bg-green-600 hover:bg-green-700"
             >
-              <Users className="h-4 w-4 mr-2" />
-              Find Local Agent
+              <Wheat className="h-4 w-4 mr-2" />
+              View My Crops
             </Button>
           </div>
         </CardContent>
@@ -490,85 +315,61 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
 
       {/* Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Crop Management */}
-        <Card>
+        {/* My Crops */}
+        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => handleSectionChange("my-crops")}>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <Leaf className="h-5 w-5 text-green-600" />
-              <span>Crop Management</span>
+              <Wheat className="h-5 w-5 text-green-600" />
+              <span>My Crops</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {cropManagementSteps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <div 
-                  key={step.id}
-                  className="flex items-center space-x-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => handleCropStep(step.id as CropManagementStep)}
-                >
-                  <div className={`p-2 rounded-lg ${
-                    step.completed 
-                      ? 'bg-green-100 text-green-600' 
-                      : step.current 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-foreground">{step.title}</h4>
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                  </div>
-                  <ChevronRight className="h-4 w-4 text-gray-400" />
-                </div>
-              );
-            })}
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              View your stored crops and their current values
+            </p>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="p-3 bg-green-50 rounded-lg">
+                <p className="text-sm text-muted-foreground">Wheat Credits</p>
+                <p className="text-2xl font-bold text-green-600">1,250</p>
+              </div>
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-muted-foreground">Rice Credits</p>
+                <p className="text-2xl font-bold text-blue-600">800</p>
+              </div>
+            </div>
+            <Button className="w-full" onClick={(e) => { e.stopPropagation(); handleSectionChange("my-crops"); }}>
+              <Wheat className="h-4 w-4 mr-2" />
+              View My Crops
+            </Button>
           </CardContent>
         </Card>
 
-        {/* DeFi & Lending */}
-        <Card>
+        {/* Borrow & Loans */}
+        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => handleSectionChange("borrow-loans")}>
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
-              <TrendingUp className="h-5 w-5 text-blue-600" />
-              <span>DeFi & Lending</span>
+              <DollarSign className="h-5 w-5 text-blue-600" />
+              <span>Borrow & Loans</span>
             </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
-            {defiSteps.map((step) => {
-              const Icon = step.icon;
-              return (
-                <div 
-                  key={step.id}
-                  className={`flex items-center space-x-3 p-3 rounded-lg transition-colors ${
-                    step.disabled 
-                      ? 'opacity-50 cursor-not-allowed' 
-                      : 'hover:bg-gray-50 cursor-pointer'
-                  }`}
-                  onClick={() => !step.disabled && handleDefiStep(step.id as DefiStep)}
-                >
-                  <div className={`p-2 rounded-lg ${
-                    step.completed 
-                      ? 'bg-green-100 text-green-600' 
-                      : step.current 
-                        ? 'bg-primary/10 text-primary' 
-                        : 'bg-gray-100 text-gray-400'
-                  }`}>
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-foreground">{step.title}</h4>
-                    <p className="text-sm text-muted-foreground">{step.description}</p>
-                  </div>
-                  {step.disabled ? (
-                    <Lock className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <ChevronRight className="h-4 w-4 text-gray-400" />
-                  )}
-                </div>
-              );
-            })}
+          <CardContent>
+            <p className="text-muted-foreground mb-4">
+              Use your crop tokens as collateral to borrow funds
+            </p>
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-muted-foreground">Available Credit</p>
+                <p className="text-2xl font-bold text-blue-600">${farmerStats.availableCredit.toLocaleString()}</p>
+              </div>
+              <div className="p-3 bg-orange-50 rounded-lg">
+                <p className="text-sm text-muted-foreground">Active Loans</p>
+                <p className="text-2xl font-bold text-orange-600">{farmerStats.activeLoans}</p>
+              </div>
+            </div>
+            <Button className="w-full" onClick={(e) => { e.stopPropagation(); handleSectionChange("borrow-loans"); }}>
+              <DollarSign className="h-4 w-4 mr-2" />
+              Borrow Funds
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -891,11 +692,9 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
           <nav className="space-y-2">
             {[
               { id: "overview", label: "Overview", icon: Home },
-              { id: "crop-management", label: "Crop Management", icon: Leaf },
-              { id: "defi-lending", label: "DeFi & Lending", icon: TrendingUp },
-              { id: "transactions", label: "Transactions", icon: History },
-              { id: "profile", label: "Profile", icon: User },
-              { id: "contact-agent", label: "Contact Agent", icon: Users }
+              { id: "my-crops", label: "My Crops", icon: Wheat },
+              { id: "borrow-loans", label: "Borrow & Loans", icon: DollarSign },
+              { id: "activity", label: "Activity", icon: Activity }
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -903,8 +702,8 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
                   key={item.id}
                   onClick={() => handleSectionChange(item.id as DashboardSection)}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
-                    currentSection === item.id 
-                      ? 'bg-primary/10 text-primary' 
+                    currentSection === item.id
+                      ? 'bg-primary/10 text-primary'
                       : 'hover:bg-gray-100'
                   }`}
                 >
@@ -975,11 +774,9 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
           <div className="flex space-x-1 mb-8">
             {[
               { id: "overview", label: "Overview", icon: Home },
-              { id: "crop-management", label: "Crop Management", icon: Leaf },
-              { id: "defi-lending", label: "DeFi & Lending", icon: TrendingUp },
-              { id: "transactions", label: "Transactions", icon: History },
-              { id: "profile", label: "Profile", icon: User },
-              { id: "contact-agent", label: "Contact Agent", icon: Users }
+              { id: "my-crops", label: "My Crops", icon: Wheat },
+              { id: "borrow-loans", label: "Borrow & Loans", icon: DollarSign },
+              { id: "activity", label: "Activity", icon: Activity }
             ].map((item) => {
               const Icon = item.icon;
               return (
@@ -1000,33 +797,118 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
         {/* Main Content */}
         <div className="space-y-8">
           {currentSection === "overview" && renderOverview()}
-          {currentSection === "crop-management" && (
-            <div>
-              {renderProgressTracker(cropManagementSteps)}
-              {!cropManagementStep || cropManagementStep === "view-tokens" ? (
-                <div className="p-8 text-center">
-                  <h3 className="text-lg font-semibold mb-2">My Crop Tokens</h3>
-                  <p className="text-gray-600">Crop tokens list coming soon...</p>
+          {currentSection === "my-crops" && (
+            <div className="space-y-6">
+              {/* Header */}
+              <div className="text-center py-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="p-4 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full">
+                    <Wheat className="h-8 w-8 text-white" />
+                  </div>
                 </div>
-              ) : cropManagementStep === "register-crop" ? (
-                <RegisterCrop 
-                  onBack={() => setCropManagementStep("view-tokens")} 
-                  onNext={() => setCropManagementStep("find-warehouse")} 
-                />
-              ) : cropManagementStep === "find-warehouse" ? (
-                <FindWarehouse 
-                  onBack={() => setCropManagementStep("register-crop")} 
-                  onNext={(warehouseId) => {
-                    console.log("Selected warehouse:", warehouseId);
-                    setCropManagementStep("tokenize-crops");
-                  }} 
-                />
-              ) : cropManagementStep === "tokenize-crops" ? (
-                <div>Tokenize Crops Form</div>
-              ) : null}
+                <h2 className="text-3xl font-bold text-foreground mb-2">My Crop Tokens</h2>
+                <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                  View your tokenized crops and their current values
+                </p>
+              </div>
+
+              {/* Crop Token Balances */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+                {/* WHEAT Token */}
+                <Card className="hover:shadow-lg transition-all duration-200">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-4xl">🌾</div>
+                        <div>
+                          <CardTitle className="text-xl">Wheat Credits</CardTitle>
+                          <p className="text-sm text-muted-foreground">Stored Wheat Value</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Balance</p>
+                      <p className="text-3xl font-bold text-foreground">1,250 WHEAT</p>
+                      <p className="text-sm text-green-600 mt-1">≈ $3,125 USD</p>
+                    </div>
+                    <div className="pt-4 border-t">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-muted-foreground">Available</span>
+                        <span className="font-medium">750 WHEAT</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Pledged as Security</span>
+                        <span className="font-medium">500 WHEAT</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {/* RICE Token */}
+                <Card className="hover:shadow-lg transition-all duration-200">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-4xl">🌾</div>
+                        <div>
+                          <CardTitle className="text-xl">Rice Credits</CardTitle>
+                          <p className="text-sm text-muted-foreground">Stored Rice Value</p>
+                        </div>
+                      </div>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div>
+                      <p className="text-sm text-muted-foreground mb-1">Balance</p>
+                      <p className="text-3xl font-bold text-foreground">800 RICE</p>
+                      <p className="text-sm text-green-600 mt-1">≈ $2,400 USD</p>
+                    </div>
+                    <div className="pt-4 border-t">
+                      <div className="flex justify-between text-sm mb-2">
+                        <span className="text-muted-foreground">Available</span>
+                        <span className="font-medium">300 RICE</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Pledged as Security</span>
+                        <span className="font-medium">500 RICE</span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="max-w-4xl mx-auto">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Button
+                        className="h-16 text-base"
+                        onClick={() => handleSectionChange("borrow-loans")}
+                      >
+                        <Lock className="h-5 w-5 mr-2" />
+                        Use as Collateral
+                      </Button>
+                      <Button
+                        variant="outline"
+                        className="h-16 text-base"
+                        onClick={() => handleSectionChange("history")}
+                      >
+                        <History className="h-5 w-5 mr-2" />
+                        View Token History
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           )}
-          {currentSection === "defi-lending" && (
+          {currentSection === "borrow-loans" && (
             <div>
               {!defiStep || defiStep === "crop-pools" ? (
                 <CropPools 
@@ -1060,12 +942,75 @@ export default function FarmerDashboardNew({ farmerName, onLogout }: FarmerDashb
                   <h3 className="text-lg font-semibold mb-2">Repay Loan</h3>
                   <p className="text-gray-600">Repay loan form coming soon...</p>
                 </div>
+              ) : defiStep === "withdraw-to-bank" ? (
+                <div className="p-8 text-center">
+                  <div className="mb-6">
+                    <div className="mx-auto w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mb-4">
+                      <Banknote className="h-8 w-8 text-white" />
+                    </div>
+                    <h3 className="text-2xl font-bold mb-3">Withdraw to Bank Account</h3>
+                    <p className="text-gray-600 max-w-md mx-auto">
+                      Convert your USDC to local currency and withdraw directly to your bank account
+                    </p>
+                  </div>
+
+                  <Card className="max-w-md mx-auto">
+                    <CardContent className="p-6 space-y-4">
+                      <div className="text-left space-y-4">
+                        <div>
+                          <Label>Available USDC Balance</Label>
+                          <div className="text-2xl font-bold text-green-600">$5,000.00 USDC</div>
+                        </div>
+
+                        <div>
+                          <Label htmlFor="withdraw-amount">Withdrawal Amount</Label>
+                          <Input
+                            id="withdraw-amount"
+                            type="number"
+                            placeholder="Enter amount"
+                            className="text-lg h-12"
+                          />
+                        </div>
+
+                        <div>
+                          <Label htmlFor="bank-account">Bank Account</Label>
+                          <select
+                            id="bank-account"
+                            className="w-full px-3 py-3 border border-gray-300 rounded-md text-base"
+                          >
+                            <option>Select bank account</option>
+                            <option>Bank BCA - ****1234</option>
+                            <option>Bank Mandiri - ****5678</option>
+                          </select>
+                        </div>
+
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-left">
+                          <div className="flex items-start space-x-2">
+                            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+                            <div className="text-blue-800">
+                              <p className="font-medium mb-1">Conversion Rate</p>
+                              <p>1 USDC = 15,500 IDR (Indonesian Rupiah)</p>
+                              <p className="text-xs text-blue-600 mt-1">Processing time: 1-2 business days</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 h-12 text-base">
+                          <Banknote className="h-5 w-5 mr-2" />
+                          Withdraw to Bank
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="mt-6 text-xs text-gray-500">
+                    Funds will be converted to your local currency and transferred to your bank account within 1-2 business days
+                  </div>
+                </div>
               ) : null}
             </div>
           )}
-          {currentSection === "transactions" && <TransactionHistory />}
-          {currentSection === "profile" && <UserProfile />}
-          {currentSection === "contact-agent" && renderContactAgent()}
+          {currentSection === "activity" && <ActivityFeed farmerId={farmerId} />}
         </div>
       </div>
 

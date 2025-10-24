@@ -32,9 +32,10 @@ interface HCSEvent {
 
 interface TransactionHistoryProps {
   userAddress: string;
+  transactions?: any[];
 }
 
-export default function TransactionHistory({ userAddress }: TransactionHistoryProps) {
+export default function TransactionHistory({ userAddress, transactions }: TransactionHistoryProps) {
   const [events, setEvents] = useState<HCSEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,10 +66,29 @@ export default function TransactionHistory({ userAddress }: TransactionHistoryPr
   };
 
   useEffect(() => {
-    if (userAddress) {
+    if (transactions && transactions.length > 0) {
+      // Use transactions from portfolio data if available
+      const formattedEvents = transactions.map(tx => ({
+        id: tx.id?.toString(),
+        eventType: tx.type || 'Unknown',
+        payload: {
+          poolAddress: tx.poolAddress,
+          grainType: tx.grainType,
+          amount: tx.amount,
+          shares: tx.shares,
+          depositorAddress: tx.depositorAddress,
+          contractTxHash: tx.transactionHash,
+          timestamp: tx.timestamp
+        },
+        timestamp: tx.timestamp,
+        transactionId: tx.transactionHash
+      }));
+      setEvents(formattedEvents);
+      setIsLoading(false);
+    } else if (userAddress) {
       fetchEvents();
     }
-  }, [userAddress]);
+  }, [userAddress, transactions]);
 
   const getEventIcon = (eventType: string) => {
     if (eventType.includes('Deposit') || eventType.includes('deposit')) {

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { CROP_TOKEN_IDS } from "@/lib/contracts";
 import { 
   Lock, 
   Coins, 
@@ -138,6 +139,9 @@ import {
 interface DepositCollateralProps {
   onBack: () => void;
   onComplete: (data: CollateralData) => void;
+  userAddress: string;
+  hashconnect: any;
+  selectedPoolData?: any; // Pool data passed from parent
 }
 
 interface CollateralData {
@@ -251,13 +255,14 @@ const mockPools = [
   }
 ];
 
-export default function DepositCollateral({ onBack, onComplete }: DepositCollateralProps) {
+export default function DepositCollateral({ onBack, onComplete, userAddress, hashconnect, selectedPoolData: initialPoolData }: DepositCollateralProps) {
   const [selectedPool, setSelectedPool] = useState<string>("");
   const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
+  const [depositAmount, setDepositAmount] = useState<string>("");
   const [isDepositing, setIsDepositing] = useState(false);
 
   const availableTokens = mockCropTokens.filter(token => token.status === "available");
-  const selectedPoolData = mockPools.find(pool => pool.id === selectedPool);
+  const selectedPoolData = mockPools.find(pool => pool.id === selectedPool) || initialPoolData;
 
   const handleTokenSelect = (tokenId: string) => {
     setSelectedTokens(prev => 
@@ -288,27 +293,76 @@ export default function DepositCollateral({ onBack, onComplete }: DepositCollate
   };
 
   const handleDeposit = async () => {
-    if (!selectedPool || selectedTokens.length === 0) return;
+    if (!selectedPool || !depositAmount) {
+      alert('Please select a pool and enter an amount');
+      return;
+    }
+
+    // Get the collateral token ID based on the selected pool's crop type
+    const poolInfo = mockPools.find(p => p.id === selectedPool);
+    if (!poolInfo) {
+      alert('Pool not found');
+      return;
+    }
 
     setIsDepositing(true);
-    
-    // Simulate deposit process
-    await new Promise(resolve => setTimeout(resolve, 3000));
-    
-    const collateralData: CollateralData = {
-      id: `collateral_${Date.now()}`,
-      poolId: selectedPool,
-      poolName: selectedPoolData?.name || "",
-      tokenIds: selectedTokens,
-      totalValue: calculateTotalValue(),
-      collateralRatio: selectedPoolData?.collateralRatio || 0,
-      maxBorrowAmount: calculateMaxBorrow(),
-      depositDate: new Date().toISOString().split('T')[0],
-      status: "active"
-    };
 
-    setIsDepositing(false);
-    onComplete(collateralData);
+    try {
+      // Get farmer data from localStorage
+      const farmerData = localStorage.getItem('farmer');
+      const token = localStorage.getItem('token');
+
+      if (!farmerData || !token) {
+        alert('Please login first');
+        return;
+      }
+
+      const farmer = JSON.parse(farmerData);
+
+      // Call backend API to deposit collateral using custodial wallet
+      const response = await fetch('http://localhost:4000/farmers/collateral/deposit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          farmerId: farmer.id,
+          cropType: poolInfo.cropType.toLowerCase(), // 'rice', 'wheat', or 'corn'
+          amount: parseFloat(depositAmount)
+        })
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Failed to deposit collateral');
+      }
+
+      const result = await response.json();
+
+      // Show success message
+      alert(`Collateral deposited successfully!\n\nTransaction ID: ${result.contractTxId}\n\nYou can now borrow against your ${poolInfo.cropType} collateral.`);
+
+      // Create collateral data for completion callback
+      const collateralData: CollateralData = {
+        id: `collateral_${Date.now()}`,
+        poolId: selectedPool,
+        poolName: poolInfo.name,
+        tokenIds: [result.cropType],
+        totalValue: parseFloat(depositAmount),
+        collateralRatio: poolInfo.collateralRatio,
+        maxBorrowAmount: parseFloat(depositAmount) * poolInfo.collateralRatio,
+        depositDate: new Date().toISOString().split('T')[0],
+        status: "active"
+      };
+
+      onComplete(collateralData);
+    } catch (error) {
+      console.error('Error depositing collateral:', error);
+      alert(`Error: ${error instanceof Error ? error.message : 'Failed to deposit collateral'}`);
+    } finally {
+      setIsDepositing(false);
+    }
   };
 
   const getGradeColor = (grade: string) => {
@@ -381,14 +435,42 @@ export default function DepositCollateral({ onBack, onComplete }: DepositCollate
         </CardContent>
       </Card>
 
-      {/* Token Selection */}
+      {/* Amount Input */}
       {selectedPool && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <Coins className="h-5 w-5 text-green-600" />
+              <span>Deposit Amount</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              <Label htmlFor="depositAmount">Amount of {selectedPoolData?.cropType} tokens to deposit</Label>
+              <Input
+                id="depositAmount"
+                type="number"
+                placeholder="Enter amount"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                min="1"
+              />
+              <p className="text-sm text-muted-foreground">
+                Min: {selectedPoolData?.minDeposit || 1} tokens | Max: {selectedPoolData?.maxDeposit || 10000} tokens
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Token Selection */}
+      {selectedPool && depositAmount && (
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="flex items-center space-x-2">
                 <Coins className="h-5 w-5 text-green-600" />
-                <span>Select Crop Tokens</span>
+                <span>Select Crop Tokens (Optional)</span>
               </CardTitle>
               <Button variant="outline" onClick={handleSelectAll}>
                 {selectedTokens.length === availableTokens.length ? 'Deselect All' : 'Select All'}
@@ -457,7 +539,7 @@ export default function DepositCollateral({ onBack, onComplete }: DepositCollate
       )}
 
       {/* Summary */}
-      {selectedPool && selectedTokens.length > 0 && (
+      {selectedPool && depositAmount && (
         <Card className="bg-orange-50 border-orange-200">
           <CardHeader>
             <CardTitle className="flex items-center space-x-2">
@@ -468,31 +550,40 @@ export default function DepositCollateral({ onBack, onComplete }: DepositCollate
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="text-center">
-                <p className="text-sm text-muted-foreground">Total Collateral Value</p>
-                <p className="text-2xl font-bold text-foreground">${calculateTotalValue().toLocaleString()}</p>
+                <p className="text-sm text-muted-foreground">Collateral Amount</p>
+                <p className="text-2xl font-bold text-foreground">{depositAmount} {selectedPoolData?.cropType} tokens</p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Max Borrow Amount</p>
-                <p className="text-2xl font-bold text-green-600">${calculateMaxBorrow().toLocaleString()}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  ${((parseFloat(depositAmount) || 0) * (selectedPoolData?.collateralRatio || 0)).toLocaleString()}
+                </p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-muted-foreground">Collateral Ratio</p>
                 <p className="text-2xl font-bold text-blue-600">{Math.round((selectedPoolData?.collateralRatio || 0) * 100)}%</p>
               </div>
             </div>
-            
+
             <div className="bg-white p-4 rounded-lg">
-              <h4 className="font-semibold text-foreground mb-2">Selected Tokens ({selectedTokens.length})</h4>
+              <h4 className="font-semibold text-foreground mb-2">Deposit Summary</h4>
               <div className="space-y-1">
-                {selectedTokens.map(tokenId => {
-                  const token = availableTokens.find(t => t.id === tokenId);
-                  return token ? (
-                    <div key={tokenId} className="flex justify-between text-sm">
-                      <span>{token.tokenId} - {token.cropType}</span>
-                      <span className="font-medium">${token.value.toLocaleString()}</span>
-                    </div>
-                  ) : null;
-                })}
+                <div className="flex justify-between text-sm">
+                  <span>Pool:</span>
+                  <span className="font-medium">{selectedPoolData?.name}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Token Type:</span>
+                  <span className="font-medium">{selectedPoolData?.cropType}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Amount:</span>
+                  <span className="font-medium">{depositAmount} tokens</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>APY:</span>
+                  <span className="font-medium text-green-600">{selectedPoolData?.apy}%</span>
+                </div>
               </div>
             </div>
           </CardContent>
@@ -522,9 +613,9 @@ export default function DepositCollateral({ onBack, onComplete }: DepositCollate
           <ArrowLeft className="h-4 w-4 mr-2" />
           Back to Pools
         </Button>
-        <Button 
+        <Button
           onClick={handleDeposit}
-          disabled={!selectedPool || selectedTokens.length === 0 || isDepositing}
+          disabled={!selectedPool || !depositAmount || isDepositing}
           className="bg-orange-600 hover:bg-orange-700"
         >
           {isDepositing ? (

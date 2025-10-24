@@ -11,6 +11,7 @@ import {
   AccountBalanceQuery,
   TokenInfoQuery,
   TokenAssociateTransaction,
+  AccountCreateTransaction,
 } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 import { ContractService } from './contract.service';
@@ -37,7 +38,9 @@ export class HederaService {
       this.client = Client.forName(process.env.HEDERA_NETWORK! as any);
       this.client.setOperator(operatorId, operatorKey);
 
-      this.logger.log(`Hedera client initialized for ${process.env.HEDERA_NETWORK}`);
+      this.logger.log(
+        `Hedera client initialized for ${process.env.HEDERA_NETWORK}`,
+      );
     } catch (error) {
       this.logger.error('Failed to initialize Hedera client:', error);
       throw new Error('Hedera client initialization failed');
@@ -143,6 +146,25 @@ export class HederaService {
       this.logger.error('Failed to transfer token:', error);
       throw new Error(`Token transfer failed: ${error.message}`);
     }
+  }
+
+  /**
+   * Transfer tokens from treasury (operator) to a specific account
+   * Used for minting tokens to farmers after warehouse verification
+   */
+  async transferTokenToAccount(
+    tokenId: string,
+    toAccountId: string,
+    amount: number,
+  ): Promise<{ transactionId: string }> {
+    const operatorAccountId = this.client.operatorAccountId?.toString();
+    if (!operatorAccountId) {
+      throw new Error('Operator account ID not set');
+    }
+
+    this.logger.log(`Transferring ${amount} tokens of ${tokenId} to ${toAccountId}`);
+
+    return this.transferToken(tokenId, operatorAccountId, toAccountId, amount);
   }
 
   async transferHbar(
@@ -797,7 +819,7 @@ export class HederaService {
         'function baseLTV() external view returns (uint256)',
         'function priceOracle() external view returns (address)'
       ], this.contractService['wallet']);
-      
+
       const [collateral, borrows, baseLTV, oracleAddress] = await Promise.all([
         pool.collateral(farmerAddress),
         pool.borrows(farmerAddress),
@@ -818,6 +840,49 @@ export class HederaService {
     } catch (error) {
       this.logger.error(`Failed to get farmer position for ${farmerAddress}:`, error);
       throw new Error(`Failed to get farmer position: ${error.message}`);
+    }
+  }
+
+  /**
+   * Create a custodial Hedera account for farmers who don't understand wallets
+   * Returns both the Hedera account ID and the EVM address
+   */
+  async createCustodialAccount(farmerEmail: string): Promise<{
+    accountId: string;
+    evmAddress: string;
+    privateKey: string; // IMPORTANT: Must be encrypted before storing in database
+  }> {
+    try {
+      // Generate a new private key for the farmer's account
+      const newAccountPrivateKey = PrivateKey.generateED25519();
+      const newAccountPublicKey = newAccountPrivateKey.publicKey;
+
+      // Create the account with an initial balance (1 HBAR for transaction fees)
+      const newAccountTx = new AccountCreateTransaction()
+        .setKey(newAccountPublicKey)
+        .setInitialBalance(new Hbar(1)); // 1 HBAR to cover transaction fees
+
+      const txResponse = await newAccountTx.execute(this.client);
+      const receipt = await txResponse.getReceipt(this.client);
+      const newAccountId = receipt.accountId;
+
+      if (!newAccountId) {
+        throw new Error('Failed to get account ID from receipt');
+      }
+
+      // Convert to EVM address format
+      const evmAddress = `0x${newAccountId.toSolidityAddress()}`;
+
+      this.logger.log(`✅ Created custodial account for ${farmerEmail}: ${newAccountId.toString()} (${evmAddress})`);
+
+      return {
+        accountId: newAccountId.toString(),
+        evmAddress,
+        privateKey: newAccountPrivateKey.toString(), // WARNING: Must be encrypted before storing!
+      };
+    } catch (error) {
+      this.logger.error(`Failed to create custodial account for ${farmerEmail}:`, error);
+      throw new Error(`Failed to create custodial account: ${error.message}`);
     }
   }
 }

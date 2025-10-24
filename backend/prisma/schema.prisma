@@ -8,20 +8,24 @@ datasource db {
 }
 
 model Farmer {
-  id            Int      @id @default(autoincrement())
-  email         String?  @unique
-  password      String?
-  memberNumber  String   @unique
-  phoneNumber   String
-  nationalId    String?
-  walletAddress String   @unique
-  agentId       Int?
-  agent         Agent?   @relation(fields: [agentId], references: [id])
-  otpRequest    OtpRequest?
-  deposits      GrainDeposit[]
-  loans         Loan[]
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                    Int      @id @default(autoincrement())
+  email                 String?  @unique
+  password              String?
+  memberNumber          String   @unique
+  phoneNumber           String
+  nationalId            String?
+  walletAddress         String   @unique
+  hederaAccountId       String?  @unique // Hedera account ID (0.0.xxxxx format)
+  encryptedPrivateKey   String?  // Encrypted private key for custodial accounts
+  isCustodial           Boolean  @default(false) // True if wallet is managed by platform
+  agentId               Int?
+  agent                 Agent?   @relation(fields: [agentId], references: [id])
+  otpRequest            OtpRequest?
+  deposits              GrainDeposit[]
+  loans                 Loan[]
+  deliveryRequests      DeliveryRequest[]
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Agent {
@@ -46,8 +50,8 @@ model GrainDeposit {
   id              Int      @id @default(autoincrement())
   farmer          Farmer   @relation(fields: [farmerId], references: [id])
   farmerId        Int
-  agent           Agent    @relation(fields: [agentId], references: [id])
-  agentId         Int
+  agent           Agent?   @relation(fields: [agentId], references: [id])
+  agentId         Int?
   grainType       String
   weightKg        Decimal
   qualityGrade    String?
@@ -116,4 +120,48 @@ model OtpRequest {
   createdAt  DateTime @default(now())
 
   farmer     Farmer   @relation(fields: [farmerId], references: [id])
+}
+
+model DeliveryRequest {
+  id                Int      @id @default(autoincrement())
+  farmer            Farmer   @relation(fields: [farmerId], references: [id])
+  farmerId          Int
+  warehouseId       String   // Reference to warehouse operator
+  cropType          String
+  variety           String?
+  estimatedWeight   Decimal
+  unit              String   @default("kg")
+  estimatedGrade    String?
+  moistureContent   Decimal?
+  temperature       Decimal?
+  scheduledDate     DateTime
+  location          String?
+  status            String   @default("pending") // pending, confirmed, in_transit, received, completed, cancelled
+  notes             String?
+  photos            Json?    // Array of photo URLs/paths
+  incomingDelivery  IncomingDelivery?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model IncomingDelivery {
+  id                  Int              @id @default(autoincrement())
+  deliveryRequest     DeliveryRequest  @relation(fields: [deliveryRequestId], references: [id])
+  deliveryRequestId   Int              @unique
+  farmerName          String
+  farmerId            Int
+  cropType            String
+  weight              Decimal          // Actual measured weight
+  unit                String           @default("kg")
+  grade               String?
+  arrivalDate         DateTime
+  status              String           @default("pending") // pending, inspecting, verified, rejected
+  priority            String           @default("medium") // low, medium, high
+  estimatedValue      Decimal?
+  storageLocation     String?
+  notes               String?
+  qualityInspectionId Int?             // Link to quality inspection record
+  grainDepositId      Int?             // Link to final grain deposit after verification
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 }
