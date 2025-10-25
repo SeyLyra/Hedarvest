@@ -31,9 +31,10 @@ interface PoolsPageProps {
   onDeposit: (poolAddress: string, amount: string) => Promise<void>;
   onWithdraw: (poolAddress: string, shares: string) => Promise<void>;
   isLoading: boolean;
+  onRefreshNeeded?: () => void;
 }
 
-export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPageProps) {
+export default function PoolsPage({ onDeposit, onWithdraw, isLoading, onRefreshNeeded }: PoolsPageProps) {
   const [pools, setPools] = useState<PoolData[]>([]);
   const [amounts, setAmounts] = useState<{ [key: string]: string }>({});
   const [poolsLoading, setPoolsLoading] = useState(true);
@@ -79,6 +80,12 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
       return;
     }
     await onDeposit(poolAddress, amount);
+
+    // Auto-refresh pool data after successful deposit
+    setTimeout(() => {
+      fetchPools();
+      onRefreshNeeded?.();
+    }, 3000);
   };
 
   const handleWithdraw = async (poolAddress: string) => {
@@ -88,6 +95,12 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading }: PoolsPag
       return;
     }
     await onWithdraw(poolAddress, amount);
+
+    // Auto-refresh pool data after successful withdrawal
+    setTimeout(() => {
+      fetchPools();
+      onRefreshNeeded?.();
+    }, 3000);
   };
 
   const formatNumber = (value: string) => {

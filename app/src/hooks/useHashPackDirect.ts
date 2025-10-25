@@ -49,18 +49,19 @@ export function useHashPackDirect(): HashPackDirectHook {
     const init = async () => {
       try {
         
-        // Clear any stale HashConnect data from localStorage to prevent "No matching key" errors
+        // Clear only stale HashConnect SDK data, but preserve our wallet account persistence
         const keys = Object.keys(localStorage);
         keys.forEach(key => {
-          if (key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')) {
+          // Only clear HashConnect SDK keys, NOT our hashpack_account key
+          if (key.startsWith('hashconnect') && !key.includes('hashpack_account')) {
             localStorage.removeItem(key);
           }
         });
-        
-        // Also clear sessionStorage
+
+        // Also clear sessionStorage (but not our persistent data)
         const sessionKeys = Object.keys(sessionStorage);
         sessionKeys.forEach(key => {
-          if (key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')) {
+          if (key.startsWith('hashconnect')) {
             sessionStorage.removeItem(key);
           }
         });
@@ -198,14 +199,7 @@ export function useHashPackDirect(): HashPackDirectHook {
   // Also check connection state immediately on component mount
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      // Clear any stale connection data first
-      const staleKeys = Object.keys(localStorage).filter(key => 
-        key.startsWith('hashconnect') || key.includes('hashpack') || key.includes('hedera')
-      );
-      if (staleKeys.length > 0) {
-        staleKeys.forEach(key => localStorage.removeItem(key));
-      }
-      
+      // Check for persisted account (don't clear hashpack_account!)
       const storedAccount = localStorage.getItem('hashpack_account');
       if (storedAccount) {
         setAccountId(storedAccount);

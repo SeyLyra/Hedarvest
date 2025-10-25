@@ -27,6 +27,7 @@ export default function FarmerPage() {
   const [showMap, setShowMap] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [farmerName, setFarmerName] = useState("");
+  const [farmerId, setFarmerId] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -38,6 +39,7 @@ export default function FarmerPage() {
 
       const token = localStorage.getItem('farmerToken');
       const storedEmail = localStorage.getItem('farmerEmail');
+      const storedFarmerId = localStorage.getItem('farmerId');
 
       if (token && storedEmail) {
         // Verify token is still valid by making a test request
@@ -51,15 +53,23 @@ export default function FarmerPage() {
           if (response.ok) {
             const data = await response.json();
             setFarmerName(data.farmer?.email?.split('@')[0] || storedEmail.split('@')[0]);
+            setFarmerId(data.farmer?.id || (storedFarmerId ? parseInt(storedFarmerId) : 0));
+            setIsLoggedIn(true);
+          } else if (response.status === 404) {
+            // Profile endpoint doesn't exist yet, just trust the token
+            setFarmerName(storedEmail.split('@')[0]);
+            setFarmerId(storedFarmerId ? parseInt(storedFarmerId) : 0);
             setIsLoggedIn(true);
           } else {
-            // Token is invalid, clear it
+            // Token is actually invalid (401, 403, etc.), clear it
             localStorage.removeItem('farmerToken');
             localStorage.removeItem('farmerEmail');
+            localStorage.removeItem('farmerId');
           }
         } catch (error) {
-          // If profile endpoint doesn't exist yet, just trust the token
+          // Network error or other issue, just trust the token
           setFarmerName(storedEmail.split('@')[0]);
+          setFarmerId(storedFarmerId ? parseInt(storedFarmerId) : 0);
           setIsLoggedIn(true);
         }
       }
@@ -88,10 +98,12 @@ export default function FarmerPage() {
       if (response.ok) {
         const name = data.farmer.email.split('@')[0];
         setFarmerName(name);
+        setFarmerId(data.farmer.id);
         setIsLoggedIn(true);
-        // Store token and email for future sessions
+        // Store token, email, and farmer ID for future sessions
         localStorage.setItem('farmerToken', data.token);
         localStorage.setItem('farmerEmail', data.farmer.email);
+        localStorage.setItem('farmerId', data.farmer.id.toString());
       } else {
         setError(data.message || "Invalid email or password");
       }
@@ -105,10 +117,12 @@ export default function FarmerPage() {
   const handleLogout = () => {
     setIsLoggedIn(false);
     setFarmerName("");
+    setFarmerId(0);
     setError("");
     // Clear stored credentials
     localStorage.removeItem('farmerToken');
     localStorage.removeItem('farmerEmail');
+    localStorage.removeItem('farmerId');
   };
 
   // Show loading state while checking authentication
@@ -129,5 +143,5 @@ export default function FarmerPage() {
   }
 
   // Show dashboard if logged in
-  return <FarmerDashboardNew farmerName={farmerName} onLogout={handleLogout} />;
+  return <FarmerDashboardNew farmerName={farmerName} farmerId={farmerId} onLogout={handleLogout} />;
 }

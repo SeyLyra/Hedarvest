@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
 
 export interface LogTransactionDto {
@@ -10,6 +10,8 @@ export interface LogTransactionDto {
 
 @Injectable()
 export class TransactionService {
+  private readonly logger = new Logger(TransactionService.name);
+
   constructor(private prisma: PrismaService) {}
 
   async logTransaction(data: LogTransactionDto) {
@@ -51,8 +53,13 @@ export class TransactionService {
   }
 
   async getTransactionsByEntityAndAddress(entity: string, address: string, limit: number = 10) {
-    return this.prisma.txLog.findMany({
-      where: { 
+    this.logger.log(`\n[TransactionService] Querying transactions:`);
+    this.logger.log(`  Entity: "${entity}"`);
+    this.logger.log(`  Address: "${address}"`);
+    this.logger.log(`  Limit: ${limit}`);
+
+    const results = await this.prisma.txLog.findMany({
+      where: {
         entity,
         meta: {
           path: ['depositorAddress'],
@@ -62,6 +69,26 @@ export class TransactionService {
       orderBy: { createdAt: 'desc' },
       take: limit,
     });
+
+    this.logger.log(`  Found: ${results.length} transactions`);
+
+    // If no results, try to find ANY investor transactions to help debug
+    if (results.length === 0 && entity === 'Investor') {
+      const allInvestorTxs = await this.prisma.txLog.findMany({
+        where: { entity: 'Investor' },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      });
+
+      this.logger.warn(`  No transactions found for address "${address}"`);
+      this.logger.warn(`  Sample of recent Investor transactions in DB:`);
+      allInvestorTxs.forEach((tx, i) => {
+        const meta = tx.meta as any || {};
+        this.logger.warn(`    ${i + 1}. depositorAddress="${meta.depositorAddress}", kind="${tx.kind}"`);
+      });
+    }
+
+    return results;
   }
 
   async getAllTransactions(limit: number = 100, offset: number = 0) {

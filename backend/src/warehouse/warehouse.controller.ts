@@ -17,10 +17,31 @@ import {
   VerifyDeliveryDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { WAREHOUSES } from './warehouses.constant';
 
 @Controller('warehouse')
 export class WarehouseController {
   constructor(private readonly warehouseService: WarehouseService) {}
+
+  /**
+   * Get all available warehouses
+   */
+  @Get('list')
+  async getWarehouses() {
+    return WAREHOUSES;
+  }
+
+  /**
+   * Get warehouse by ID
+   */
+  @Get(':id')
+  async getWarehouseById(@Param('id') id: string) {
+    const warehouse = WAREHOUSES.find((w) => w.id === id);
+    if (!warehouse) {
+      return { error: 'Warehouse not found' };
+    }
+    return warehouse;
+  }
 
   /**
    * Create a new delivery request (called by farmer)

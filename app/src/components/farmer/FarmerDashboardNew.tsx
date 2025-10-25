@@ -103,6 +103,8 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
   const [currentSection, setCurrentSection] = useState<DashboardSection>("overview");
   const [defiStep, setDefiStep] = useState<DefiStep | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [deliveryWorkflow, setDeliveryWorkflow] = useState<"findWarehouse" | "registerCrop" | null>(null);
+  const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
 
   // Mock data
   const farmerStats = {
@@ -796,8 +798,32 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
 
         {/* Main Content */}
         <div className="space-y-8">
-          {currentSection === "overview" && renderOverview()}
-          {currentSection === "my-crops" && (
+          {/* Delivery Workflow */}
+          {deliveryWorkflow === "findWarehouse" && (
+            <FindWarehouse
+              onBack={() => setDeliveryWorkflow(null)}
+              onNext={(warehouseId) => {
+                setSelectedWarehouseId(warehouseId);
+                setDeliveryWorkflow("registerCrop");
+              }}
+            />
+          )}
+
+          {deliveryWorkflow === "registerCrop" && (
+            <RegisterCrop
+              onBack={() => setDeliveryWorkflow("findWarehouse")}
+              onNext={() => {
+                setDeliveryWorkflow(null);
+                setSelectedWarehouseId(null);
+                setCurrentSection("my-crops");
+              }}
+              warehouseId={selectedWarehouseId || undefined}
+            />
+          )}
+
+          {/* Regular Dashboard Sections */}
+          {!deliveryWorkflow && currentSection === "overview" && renderOverview()}
+          {!deliveryWorkflow && currentSection === "my-crops" && (
             <div className="space-y-6">
               {/* Header */}
               <div className="text-center py-6">
@@ -886,7 +912,14 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                     <CardTitle>Quick Actions</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <Button
+                        className="h-16 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        onClick={() => setDeliveryWorkflow("findWarehouse")}
+                      >
+                        <Truck className="h-5 w-5 mr-2" />
+                        Request Delivery
+                      </Button>
                       <Button
                         className="h-16 text-base"
                         onClick={() => handleSectionChange("borrow-loans")}
@@ -897,10 +930,10 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                       <Button
                         variant="outline"
                         className="h-16 text-base"
-                        onClick={() => handleSectionChange("history")}
+                        onClick={() => handleSectionChange("activity")}
                       >
                         <History className="h-5 w-5 mr-2" />
-                        View Token History
+                        View Activity
                       </Button>
                     </div>
                   </CardContent>
@@ -908,20 +941,22 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
               </div>
             </div>
           )}
-          {currentSection === "borrow-loans" && (
+          {!deliveryWorkflow && currentSection === "borrow-loans" && (
             <div>
               {!defiStep || defiStep === "crop-pools" ? (
-                <CropPools 
-                  onDeposit={(poolId) => {
-                    console.log("Deposit to pool:", poolId);
-                    setDefiStep("deposit-collateral");
-                  }} 
-                  onViewDetails={(poolId) => console.log("View details for pool:", poolId)}
-                  onBorrow={(poolId) => {
-                    console.log("Borrow from pool:", poolId);
-                    setDefiStep("borrow-funds");
-                  }}
-                />
+                <div className="space-y-6">
+                  <CropPools
+                    onDeposit={(poolId) => {
+                      console.log("Deposit to pool:", poolId);
+                      setDefiStep("deposit-collateral");
+                    }}
+                    onViewDetails={(poolId) => console.log("View details for pool:", poolId)}
+                    onBorrow={(poolId) => {
+                      console.log("Borrow from pool:", poolId);
+                      setDefiStep("borrow-funds");
+                    }}
+                  />
+                </div>
               ) : defiStep === "deposit-collateral" ? (
                 <div className="p-8 text-center">
                   <h3 className="text-lg font-semibold mb-2">Deposit Collateral</h3>
@@ -943,15 +978,29 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                   <p className="text-gray-600">Repay loan form coming soon...</p>
                 </div>
               ) : defiStep === "withdraw-to-bank" ? (
-                <div className="p-8 text-center">
+                <div className="p-8">
+                  {/* Back Button */}
                   <div className="mb-6">
-                    <div className="mx-auto w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mb-4">
-                      <Banknote className="h-8 w-8 text-white" />
+                    <Button
+                      variant="ghost"
+                      onClick={() => setDefiStep("crop-pools")}
+                      className="mb-4"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Pools
+                    </Button>
+                  </div>
+
+                  <div className="text-center">
+                    <div className="mb-6">
+                      <div className="mx-auto w-16 h-16 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full flex items-center justify-center mb-4">
+                        <Banknote className="h-8 w-8 text-white" />
+                      </div>
+                      <h3 className="text-2xl font-bold mb-3">Withdraw to Bank Account</h3>
+                      <p className="text-gray-600 max-w-md mx-auto">
+                        Convert your USDC to local currency and withdraw directly to your bank account
+                      </p>
                     </div>
-                    <h3 className="text-2xl font-bold mb-3">Withdraw to Bank Account</h3>
-                    <p className="text-gray-600 max-w-md mx-auto">
-                      Convert your USDC to local currency and withdraw directly to your bank account
-                    </p>
                   </div>
 
                   <Card className="max-w-md mx-auto">
@@ -1003,8 +1052,8 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                     </CardContent>
                   </Card>
 
-                  <div className="mt-6 text-xs text-gray-500">
-                    Funds will be converted to your local currency and transferred to your bank account within 1-2 business days
+                  <div className="mt-6 text-xs text-gray-500 text-center">
+                    {`Funds will be converted to your local currency and transferred to your bank account within 1-2 business days`}
                   </div>
                 </div>
               ) : null}

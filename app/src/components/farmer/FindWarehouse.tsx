@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,137 +66,57 @@ interface Warehouse {
   status: "available" | "full" | "maintenance";
 }
 
-const mockWarehouses: Warehouse[] = [
-  {
-    id: "wh001",
-    name: "Green Valley Storage",
-    address: "123 Farm Road",
-    city: "Agricultural City",
-    state: "Farm State",
-    distance: 2.5,
-    rating: 4.8,
-    capacity: 1000,
-    available: 250,
-    utilization: 75,
-    services: ["Storage", "Quality Testing", "Insurance", "Transportation"],
-    contact: {
-      phone: "+1 (555) 123-4567",
-      email: "info@greenvalley.com",
-      manager: "John Smith"
-    },
-    operatingHours: {
-      weekdays: "6:00 AM - 8:00 PM",
-      weekends: "8:00 AM - 6:00 PM"
-    },
-    features: ["Climate Control", "24/7 Security", "Quality Lab", "Loading Dock"],
-    pricing: {
-      storage: 15,
-      handling: 5
-    },
-    certifications: ["ISO 9001", "Food Safety", "Organic Certified"],
-    lastUpdated: "2 hours ago",
-    status: "available"
-  },
-  {
-    id: "wh002",
-    name: "Central Grain Hub",
-    address: "456 Industrial Blvd",
-    city: "Central City",
-    state: "Farm State",
-    distance: 5.2,
-    rating: 4.6,
-    capacity: 2000,
-    available: 0,
-    utilization: 100,
-    services: ["Storage", "Quality Testing", "Insurance"],
-    contact: {
-      phone: "+1 (555) 234-5678",
-      email: "contact@centralgrain.com",
-      manager: "Sarah Johnson"
-    },
-    operatingHours: {
-      weekdays: "7:00 AM - 7:00 PM",
-      weekends: "9:00 AM - 5:00 PM"
-    },
-    features: ["Climate Control", "Security", "Quality Lab"],
-    pricing: {
-      storage: 12,
-      handling: 4
-    },
-    certifications: ["ISO 9001", "Food Safety"],
-    lastUpdated: "1 hour ago",
-    status: "full"
-  },
-  {
-    id: "wh003",
-    name: "Premium Storage Solutions",
-    address: "789 Storage Lane",
-    city: "Storage City",
-    state: "Farm State",
-    distance: 8.1,
-    rating: 4.9,
-    capacity: 1500,
-    available: 600,
-    utilization: 60,
-    services: ["Storage", "Quality Testing", "Insurance", "Transportation", "Processing"],
-    contact: {
-      phone: "+1 (555) 345-6789",
-      email: "premium@storage.com",
-      manager: "Mike Davis"
-    },
-    operatingHours: {
-      weekdays: "5:00 AM - 9:00 PM",
-      weekends: "7:00 AM - 7:00 PM"
-    },
-    features: ["Climate Control", "24/7 Security", "Quality Lab", "Loading Dock", "Cold Storage"],
-    pricing: {
-      storage: 18,
-      handling: 6
-    },
-    certifications: ["ISO 9001", "Food Safety", "Organic Certified", "HACCP"],
-    lastUpdated: "30 minutes ago",
-    status: "available"
-  },
-  {
-    id: "wh004",
-    name: "Rural Storage Co-op",
-    address: "321 Country Road",
-    city: "Rural Town",
-    state: "Farm State",
-    distance: 12.3,
-    rating: 4.4,
-    capacity: 800,
-    available: 200,
-    utilization: 75,
-    services: ["Storage", "Quality Testing", "Insurance"],
-    contact: {
-      phone: "+1 (555) 456-7890",
-      email: "coop@ruralstorage.com",
-      manager: "Lisa Brown"
-    },
-    operatingHours: {
-      weekdays: "8:00 AM - 6:00 PM",
-      weekends: "9:00 AM - 4:00 PM"
-    },
-    features: ["Climate Control", "Security", "Quality Lab"],
-    pricing: {
-      storage: 10,
-      handling: 3
-    },
-    certifications: ["Food Safety", "Organic Certified"],
-    lastUpdated: "1 hour ago",
-    status: "available"
-  }
-];
-
 export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedWarehouse, setSelectedWarehouse] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [sortBy, setSortBy] = useState<"distance" | "rating" | "price" | "availability">("distance");
   const [filterStatus, setFilterStatus] = useState<"all" | "available" | "full">("all");
 
-  const filteredWarehouses = mockWarehouses
+  // Fetch warehouses from backend
+  useEffect(() => {
+    const fetchWarehouses = async () => {
+      try {
+        setIsLoading(true);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/warehouse/list`);
+        if (response.ok) {
+          const data = await response.json();
+          // Calculate distance from user's location (mock for now)
+          const warehousesWithDistance = data.map((wh: any) => ({
+            ...wh,
+            distance: calculateDistance(wh.latitude, wh.longitude), // Mock distance calculation
+            lastUpdated: getTimeAgo(new Date()) // Mock last updated
+          }));
+          setWarehouses(warehousesWithDistance);
+        } else {
+          console.error('Failed to fetch warehouses');
+        }
+      } catch (error) {
+        console.error('Error fetching warehouses:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchWarehouses();
+  }, []);
+
+  // Mock distance calculation (in a real app, use geolocation API)
+  const calculateDistance = (lat?: number, lng?: number) => {
+    if (!lat || !lng) return Math.random() * 20 + 1; // Random 1-20 km
+    // For now, return random distance
+    return Math.random() * 20 + 1;
+  };
+
+  // Get time ago string
+  const getTimeAgo = (date: Date) => {
+    const hours = Math.floor(Math.random() * 5) + 1;
+    return hours === 1 ? '1 hour ago' : `${hours} hours ago`;
+  };
+
+  const filteredWarehouses = warehouses
     .filter(warehouse => 
       warehouse.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       warehouse.city.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -262,8 +182,20 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
         </p>
       </div>
 
+      {/* Loading State */}
+      {isLoading && (
+        <Card className="mb-6">
+          <CardContent className="p-12 text-center">
+            <div className="flex items-center justify-center space-x-2">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+              <p className="text-lg text-muted-foreground">Loading warehouses...</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Search and Filters */}
-      <Card className="mb-6">
+      {!isLoading && <Card className="mb-6">
         <CardContent className="p-6">
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1">
@@ -309,10 +241,10 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card>}
 
       {/* Warehouses List */}
-      <div className="space-y-4">
+      {!isLoading && <div className="space-y-4">
         {filteredWarehouses.map((warehouse) => (
           <Card 
             key={warehouse.id} 
@@ -438,10 +370,10 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
             </CardContent>
           </Card>
         ))}
-      </div>
+      </div>}
 
       {/* Empty State */}
-      {filteredWarehouses.length === 0 && (
+      {!isLoading && filteredWarehouses.length === 0 && (
         <Card className="text-center py-12">
           <CardContent>
             <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
@@ -463,7 +395,7 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
       )}
 
       {/* Selection Summary */}
-      {selectedWarehouse && (
+      {!isLoading && selectedWarehouse && (
         <Card className="mt-6 bg-primary/5 border-primary/20">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
@@ -471,7 +403,7 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
                 <CheckCircle className="h-6 w-6 text-green-500" />
                 <div>
                   <h4 className="font-semibold text-foreground">
-                    Selected: {mockWarehouses.find(w => w.id === selectedWarehouse)?.name}
+                    Selected: {warehouses.find(w => w.id === selectedWarehouse)?.name}
                   </h4>
                   <p className="text-sm text-muted-foreground">
                     Ready to proceed with warehouse selection

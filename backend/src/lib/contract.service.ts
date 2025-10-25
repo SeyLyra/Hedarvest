@@ -444,24 +444,25 @@ export class ContractService {
       // Calculate utilization rate as percentage (0-100)
       const utilizationRate = totalAssets > 0 ? ((Number(totalBorrowed) * 100) / Number(totalAssets)).toFixed(2) : '0';
       
-      // Calculate dynamic APR based on utilization rate
+      // Fetch borrow rate from pool details
       let currentAPR = '5'; // Default fallback
       try {
-        const borrowRate = await pool.getBorrowRate();
+        const poolDetails = await pool.getPoolDetails();
+        const borrowRate = poolDetails.borrowRate;
         currentAPR = ((Number(borrowRate) / 1e18) * 100).toFixed(2);
       } catch (rateError) {
         this.logger.warn('Could not fetch borrow rate, calculating dynamic APR:', rateError);
-        
+
         // Calculate dynamic APR based on utilization rate
         // Base APR: 3%, increases with utilization up to 15%
         const utilizationPercent = parseFloat(utilizationRate) / 100; // Convert to decimal
         const baseAPR = 3.0;
         const maxAPR = 15.0;
-        
+
         // Linear scaling: 3% + (utilization * 12%)
         const dynamicAPR = Math.min(baseAPR + (utilizationPercent * 12), maxAPR);
         currentAPR = dynamicAPR.toFixed(2);
-        
+
         this.logger.log(`Dynamic APR calculated: ${currentAPR}% (utilization: ${utilizationRate}%)`);
       }
 
@@ -938,6 +939,31 @@ export class ContractService {
       );
       throw new Error(
         `Failed to get liquidity index: ${
+          error instanceof Error ? error.message : 'Unknown error'
+        }`,
+      );
+    }
+  }
+
+  /**
+   * Get underlying token decimals for a pool
+   */
+  async getUnderlyingTokenDecimals(poolAddress: string): Promise<number> {
+    try {
+      const pool = new ethers.Contract(
+        poolAddress,
+        LENDING_POOL_ABI,
+        this.wallet,
+      );
+      const decimals = await pool.underlyingTokenDecimals();
+      return Number(decimals);
+    } catch (error) {
+      this.logger.error(
+        `Failed to get underlying token decimals for pool ${poolAddress}:`,
+        error,
+      );
+      throw new Error(
+        `Failed to get underlying token decimals: ${
           error instanceof Error ? error.message : 'Unknown error'
         }`,
       );

@@ -26,7 +26,7 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
     // Minimum check time to show loading state (prevents flash)
     const minCheckTime = setTimeout(() => {
       setHasChecked(true);
-    }, 1500); // Show loading for at least 1.5 seconds
+    }, 500); // Reduced to 500ms for faster UX
 
     return () => clearTimeout(minCheckTime);
   }, []);
@@ -44,11 +44,14 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="w-full max-w-md mx-4">
           <CardContent className="p-8 text-center">
-            <Loader 
-              size="lg" 
-              message={isConnecting ? "Connecting wallet..." : "Checking wallet connection..."}
+            <Loader
+              size="lg"
+              message={isConnecting ? "Connecting to HashPack..." : "Loading dashboard..."}
               variant="card"
             />
+            <p className="text-sm text-muted-foreground mt-4">
+              {isConnecting ? "Please approve the connection in HashPack" : "Restoring your session"}
+            </p>
           </CardContent>
         </Card>
       </div>

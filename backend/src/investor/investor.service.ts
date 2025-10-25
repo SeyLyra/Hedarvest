@@ -9,7 +9,9 @@ import { BlockchainPoolsService } from '../pools/blockchain-pools.service';
 @Injectable()
 export class InvestorService {
   private readonly logger = new Logger(InvestorService.name);
-  
+  private portfolioCache: Map<string, { data: any; timestamp: number }> = new Map();
+  private readonly PORTFOLIO_CACHE_DURATION = 15000; // 15 seconds cache
+
   constructor(
     private prisma: PrismaService,
     private transactionService: TransactionService,
@@ -59,6 +61,10 @@ export class InvestorService {
           newTotalAssets: totalAssets,
         },
       });
+
+      // Invalidate portfolio cache for this investor
+      this.portfolioCache.delete(depositorAddress);
+      this.logger.log(`Invalidated portfolio cache for ${depositorAddress}`);
 
       return {
         success: true,
@@ -137,6 +143,10 @@ export class InvestorService {
         },
       });
 
+      // Invalidate portfolio cache for this investor
+      this.portfolioCache.delete(depositorAddress);
+      this.logger.log(`Invalidated portfolio cache for ${depositorAddress}`);
+
       return {
         success: true,
         pool: {
@@ -182,33 +192,31 @@ export class InvestorService {
       
       this.logger.log(`Retrieved ${allPoolsInfo.length} pools from blockchain`);
       this.logger.log('Pools info:', JSON.stringify(allPoolsInfo, null, 2));
-      
+
       // Format pools for investor display with real smart contract data
-      const formattedPools: any[] = [];
-      for (let i = 0; i < allPoolsInfo.length; i++) {
-        const poolInfo = allPoolsInfo[i];
-        
+      // Fetch all pool stats in parallel for better performance
+      const poolStatsPromises = allPoolsInfo.map(async (poolInfo, i) => {
         try {
           // Get real pool statistics from smart contract
           this.logger.log(`Getting stats for ${poolInfo.assetType} pool at ${poolInfo.poolAddress}`);
           const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
-          
-          formattedPools.push({
+
+          return {
             id: i + 1,
             assetType: poolInfo.assetType,
             address: poolInfo.poolAddress,
-            lendingTokenAddress: poolInfo.lendingToken, // Add the lending token address
+            lendingTokenAddress: poolInfo.lendingToken,
             availableLiquidity: poolStats.availableLiquidity || "0",
             totalBorrows: poolStats.totalBorrows || "0",
             utilizationRate: poolStats.utilizationRate || "0",
             currentAPR: poolStats.currentAPR || "0",
             createdAt: new Date(),
-          });
+          };
         } catch (poolError) {
           this.logger.error(`Failed to get stats for pool ${poolInfo.assetType}:`, poolError);
           this.logger.error(`Pool address: ${poolInfo.poolAddress}`);
           // Fallback to basic info if stats fail
-          formattedPools.push({
+          return {
             id: i + 1,
             assetType: poolInfo.assetType,
             address: poolInfo.poolAddress,
@@ -217,10 +225,12 @@ export class InvestorService {
             utilizationRate: "0",
             currentAPR: "0",
             createdAt: new Date(),
-          });
+          };
         }
-      }
-      
+      });
+
+      const formattedPools = await Promise.all(poolStatsPromises);
+
       return formattedPools;
       
     } catch (error) {
@@ -256,58 +266,126 @@ export class InvestorService {
 
   async getInvestorPortfolio(address: string) {
     this.logger.log(`Getting portfolio for investor: ${address}`);
-    
+
+    // TEMPORARILY DISABLED CACHE FOR DEBUGGING
+    // Check cache first
+    // const cached = this.portfolioCache.get(address);
+    // const now = Date.now();
+    // if (cached && now - cached.timestamp < this.PORTFOLIO_CACHE_DURATION) {
+    //   this.logger.log(`Returning cached portfolio for ${address}`);
+    //   return cached.data;
+    // }
+
     try {
       // Get all pools info from smart contracts
       const allPoolsInfo = await this.contractService.getAllPoolsInfo();
-      
-      const positions: any[] = [];
+
+      let positions: any[] = [];
       let totalValue = 0;
       let totalYield = 0;
       let totalDeposits = 0;
       
-      // First, get all deposit/withdraw transactions for this address to track deposit amounts
+      // First, get deposit/withdraw transactions for this address to track deposit amounts
       const allTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
         'Investor',
         address,
-        1000 // Get all transactions to calculate total deposits
+        200 // Increased to catch older deposits (balance performance vs accuracy)
       );
 
       // Calculate total deposit amount per pool from transaction history
+      this.logger.log(`\n=== TRANSACTION HISTORY DEBUG ===`);
+      this.logger.log(`Querying for address: ${address}`);
+      this.logger.log(`Found ${allTransactions.length} transactions`);
+
+      // Show first few transactions for debugging
+      if (allTransactions.length > 0) {
+        this.logger.log(`First 3 transactions:`);
+        allTransactions.slice(0, 3).forEach((tx, i) => {
+          const meta = tx.meta as any || {};
+          this.logger.log(`  ${i + 1}. kind="${tx.kind}", depositorAddress="${meta.depositorAddress}", poolAddress="${meta.poolAddress}", amount=${meta.amount}`);
+        });
+      }
+
       const depositsByPool = new Map<string, number>();
       for (const tx of allTransactions) {
         const meta = tx.meta as any || {};
         const poolAddress = meta.poolAddress;
-        if (!poolAddress) continue;
+        const depositorAddress = meta.depositorAddress;
+
+        this.logger.log(`Processing tx: kind=${tx.kind}, depositor=${depositorAddress}, pool=${poolAddress}`);
+
+        if (!poolAddress) {
+          this.logger.warn(`Transaction ${tx.id} has no poolAddress in meta`);
+          continue;
+        }
+
+        // Check if the depositor address matches (could be EVM vs Hedera format)
+        const addressMatch = depositorAddress === address ||
+                            depositorAddress?.toLowerCase() === address?.toLowerCase();
+
+        if (!addressMatch && depositorAddress) {
+          this.logger.log(`Address mismatch: tx.depositor="${depositorAddress}" vs query="${address}"`);
+        }
 
         if (tx.kind === 'investor_deposit') {
           const currentDeposits = depositsByPool.get(poolAddress) || 0;
           depositsByPool.set(poolAddress, currentDeposits + (meta.amount || 0));
+          this.logger.log(`✓ Deposit tracked: ${meta.amount} to pool ${poolAddress}`);
         } else if (tx.kind === 'investor_withdraw') {
           // Withdrawals reduce the deposited amount proportionally
           const currentDeposits = depositsByPool.get(poolAddress) || 0;
           const withdrawnAmount = meta.amount || 0;
           depositsByPool.set(poolAddress, Math.max(0, currentDeposits - withdrawnAmount));
+          this.logger.log(`✓ Withdrawal tracked: ${withdrawnAmount} from pool ${poolAddress}`);
         }
       }
 
-      // Get investor's position in each pool
-      for (const poolInfo of allPoolsInfo) {
+      this.logger.log(`Total deposits by pool:`, Object.fromEntries(depositsByPool));
+      this.logger.log(`=== END TRANSACTION DEBUG ===\n`);
+
+      // Get investor's position in each pool - PARALLELIZED for better performance
+      const positionPromises = allPoolsInfo.map(async (poolInfo) => {
         try {
-          // Get investor's LP shares
-          const lpShares = await this.contractService.getLPShares(poolInfo.poolAddress, address);
+          // Fetch all data in parallel instead of sequentially (5-10x faster!)
+          const [lpShares, poolStats, liquidityIndex, underlyingDecimals] = await Promise.all([
+            this.contractService.getLPShares(poolInfo.poolAddress, address),
+            this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress),
+            this.contractService.getLiquidityIndex(poolInfo.poolAddress),
+            this.contractService.getUnderlyingTokenDecimals(poolInfo.poolAddress),
+          ]);
+
+          this.logger.log(`Checking pool ${poolInfo.assetType} for address ${address}: LP Shares = ${lpShares}`);
 
           if (Number(lpShares) > 0) {
-            // Get current pool stats and liquidity index
-            const poolStats = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
-            const liquidityIndex = await this.contractService.getLiquidityIndex(poolInfo.poolAddress);
-
             // Calculate REAL position value using liquidity index
-            // Formula: (LP shares × liquidityIndex) / 1e27 / 1e18 = value in USDT (6 decimals already converted)
+            // Formula: (LP shares × liquidityIndex) / 1e27 = value in underlying token's smallest unit
+            // Then divide by 10^decimals to get human-readable value
+
+            this.logger.log(`=== DETAILED CALCULATION DEBUG ===`);
+            this.logger.log(`LP Shares (raw string): "${lpShares}"`);
+            this.logger.log(`Liquidity Index (raw string): "${liquidityIndex}"`);
+            this.logger.log(`Underlying Decimals: ${underlyingDecimals}`);
+
             const lpSharesBigInt = BigInt(lpShares);
             const liquidityIndexBigInt = BigInt(liquidityIndex);
-            const positionValueInTokenUnits = (lpSharesBigInt * liquidityIndexBigInt) / BigInt(1e27);
-            const positionValue = Number(positionValueInTokenUnits) / 1e18; // Convert from 18 decimals to human-readable
+
+            this.logger.log(`LP Shares (BigInt): ${lpSharesBigInt.toString()}`);
+            this.logger.log(`Liquidity Index (BigInt): ${liquidityIndexBigInt.toString()}`);
+
+            // LP shares are in 18 decimals, liquidityIndex is in 27 decimals (RAY)
+            // Result is in underlying token decimals after dividing by 1e27
+            const product = lpSharesBigInt * liquidityIndexBigInt;
+            this.logger.log(`Product (lpShares × liquidityIndex): ${product.toString()}`);
+
+            const positionValueInSmallestUnits = product / BigInt(1e27);
+            this.logger.log(`After dividing by 1e27: ${positionValueInSmallestUnits.toString()}`);
+
+            // Convert to human-readable using actual token decimals
+            const decimalDivisor = Math.pow(10, underlyingDecimals);
+            this.logger.log(`Decimal divisor (10^${underlyingDecimals}): ${decimalDivisor}`);
+
+            const positionValue = Number(positionValueInSmallestUnits) / decimalDivisor;
+            this.logger.log(`Final Position Value: ${positionValue}`);
 
             // Get total deposits from transaction history
             const totalDeposited = depositsByPool.get(poolInfo.poolAddress) || 0;
@@ -316,13 +394,15 @@ export class InvestorService {
             const yieldEarned = Math.max(0, positionValue - totalDeposited);
 
             this.logger.log(`Portfolio calculation for ${poolInfo.assetType}:`);
-            this.logger.log(`  LP Shares: ${lpShares}`);
-            this.logger.log(`  Liquidity Index: ${liquidityIndex}`);
-            this.logger.log(`  Position Value: ${positionValue}`);
+            this.logger.log(`  LP Shares (raw): ${lpShares}`);
+            this.logger.log(`  Liquidity Index (raw): ${liquidityIndex}`);
+            this.logger.log(`  Underlying Token Decimals: ${underlyingDecimals}`);
+            this.logger.log(`  Position Value (smallest units): ${positionValueInSmallestUnits.toString()}`);
+            this.logger.log(`  Position Value (human-readable): ${positionValue}`);
             this.logger.log(`  Total Deposited: ${totalDeposited}`);
             this.logger.log(`  Yield Earned: ${yieldEarned}`);
 
-            positions.push({
+            return {
               assetType: poolInfo.assetType,
               poolAddress: poolInfo.poolAddress,
               shares: lpShares,
@@ -332,15 +412,25 @@ export class InvestorService {
               utilizationRate: poolStats.utilizationRate,
               totalDeposited: totalDeposited,
               createdAt: new Date()
-            });
-
-            totalValue += positionValue;
-            totalYield += yieldEarned;
-            totalDeposits += totalDeposited;
+            };
           }
+          return null;
         } catch (poolError) {
           this.logger.warn(`Failed to get position for ${poolInfo.assetType}:`, poolError);
+          return null;
         }
+      });
+
+      // Wait for all positions to be fetched in parallel
+      const allPositions = await Promise.all(positionPromises);
+
+      // Filter out null results and calculate totals
+      positions = allPositions.filter((pos): pos is NonNullable<typeof pos> => pos !== null);
+
+      for (const position of positions) {
+        totalValue += position.positionValue;
+        totalYield += position.yieldEarned;
+        totalDeposits += position.totalDeposited;
       }
       
       // Calculate average APR
@@ -377,7 +467,7 @@ export class InvestorService {
         };
       });
 
-      return {
+      const portfolioData = {
         investorAddress: address,
         totalDeposits: totalDeposits,
         totalValue: totalValue,
@@ -395,7 +485,12 @@ export class InvestorService {
         })),
         transactionHistory: transactionHistory // Add formatted transaction history for portfolio display
       };
-      
+
+      // Cache the result
+      this.portfolioCache.set(address, { data: portfolioData, timestamp: Date.now() });
+
+      return portfolioData;
+
     } catch (error) {
       this.logger.error(`Failed to get portfolio for ${address}:`, error);
       

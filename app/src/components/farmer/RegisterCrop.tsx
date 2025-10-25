@@ -33,6 +33,7 @@ import {
 interface RegisterCropProps {
   onBack: () => void;
   onNext: () => void;
+  warehouseId?: string; // Selected warehouse ID from FindWarehouse
 }
 
 interface CropData {
@@ -68,7 +69,7 @@ const qualityGrades = [
   { value: "grade-c", label: "Grade C", description: "Lower quality, basic condition" }
 ];
 
-export default function RegisterCrop({ onBack, onNext }: RegisterCropProps) {
+export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCropProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [cropData, setCropData] = useState<CropData>({
     type: "",
@@ -141,30 +142,35 @@ export default function RegisterCrop({ onBack, onNext }: RegisterCropProps) {
     console.log("Submitting crop registration:", cropData);
 
     try {
-      // Get farmer ID from localStorage or context
-      const farmerData = localStorage.getItem('farmer');
-      if (!farmerData) {
-        alert("Please login first");
+      // Check if warehouse is selected
+      if (!warehouseId) {
+        alert("Please select a warehouse first");
         return;
       }
 
-      const farmer = JSON.parse(farmerData);
-      const token = localStorage.getItem('token');
+      // Get farmer ID and token from localStorage
+      const farmerId = localStorage.getItem('farmerId');
+      const token = localStorage.getItem('farmerToken');
+
+      if (!farmerId || !token) {
+        alert("Please login first");
+        return;
+      }
 
       // Upload photos (in a real app, you'd upload to cloud storage)
       // For now, we'll just send empty array or convert to base64 if needed
       const photoUrls: string[] = [];
 
       // Create delivery request
-      const response = await fetch('http://localhost:4000/warehouse/delivery-requests', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/warehouse/delivery-requests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
-          farmerId: farmer.id,
-          warehouseId: 'WH001', // This should come from FindWarehouse component
+          farmerId: parseInt(farmerId),
+          warehouseId: warehouseId, // Now using the prop from FindWarehouse
           cropType: cropData.type,
           variety: cropData.variety,
           estimatedWeight: parseFloat(cropData.quantity),
@@ -180,17 +186,18 @@ export default function RegisterCrop({ onBack, onNext }: RegisterCropProps) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to submit delivery request');
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to submit delivery request');
       }
 
       const result = await response.json();
       console.log('Delivery request created:', result);
 
-      alert(`Crop registration submitted successfully! Delivery request ID: ${result.id}\n\nYou can now find a warehouse to deliver your crops.`);
+      alert(`Crop registration submitted successfully!\n\nDelivery request ID: ${result.id}\nWarehouse: ${warehouseId}\n\nYour crops will be delivered to the selected warehouse.`);
       onNext();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error submitting crop registration:', error);
-      alert('Failed to submit crop registration. Please try again.');
+      alert(`Failed to submit crop registration: ${error.message || 'Please try again.'}`);
     }
   };
 
