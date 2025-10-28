@@ -64,7 +64,7 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
       const token = localStorage.getItem('token');
 
       const response = await fetch(
-        `http://localhost:4000/warehouse/delivery-requests/farmer/${farmerId}`,
+        `http://localhost:3001/warehouse/delivery-requests/farmer/${farmerId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`

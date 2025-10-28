@@ -320,7 +320,7 @@ export default function DepositCollateral({ onBack, onComplete, userAddress, has
       const farmer = JSON.parse(farmerData);
 
       // Call backend API to deposit collateral using custodial wallet
-      const response = await fetch('http://localhost:4000/farmers/collateral/deposit', {
+      const response = await fetch('http://localhost:3001/farmers/collateral/deposit', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

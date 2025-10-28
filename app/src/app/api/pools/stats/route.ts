@@ -6,20 +6,14 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const poolId = searchParams.get('poolId')
-    
-    // If no poolId provided, return general stats
+
+    // poolId is required
     if (!poolId) {
-      const mockStats = {
-        totalPools: 3,
-        totalLiquidity: 3000000,
-        totalBorrowed: 2250000,
-        averageAPR: 8.5,
-        activeInvestors: 45
-      };
-      
       return NextResponse.json({
-        success: true,
-        data: mockStats,
+        success: false,
+        error: "poolId is required"
+      }, {
+        status: 400
       })
     }
 
@@ -38,14 +32,14 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json()
-    
+
     return NextResponse.json({
       success: true,
       data: data,
     })
   } catch (error) {
     console.error("Pool stats error:", error)
-    
+
     return NextResponse.json(
       { success: false, error: error instanceof Error ? error.message : "Failed to fetch pool stats" },
       { status: 500 }

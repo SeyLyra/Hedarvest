@@ -79,7 +79,7 @@ export class InvestorService {
         },
         transactions: {
           contractTxHash: contractTxHash,
-          dbTransactionId: transaction.id,
+          hcsMessageId: transaction.hcsMessageId,
         },
       };
     } catch (error) {
@@ -160,7 +160,7 @@ export class InvestorService {
         },
         transactions: {
           contractTxHash: contractTxHash,
-          dbTransactionId: transaction.id,
+          hcsMessageId: transaction.hcsMessageId,
         },
       };
     } catch (error) {
@@ -284,64 +284,6 @@ export class InvestorService {
       let totalValue = 0;
       let totalYield = 0;
       let totalDeposits = 0;
-      
-      // First, get deposit/withdraw transactions for this address to track deposit amounts
-      const allTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
-        'Investor',
-        address,
-        200 // Increased to catch older deposits (balance performance vs accuracy)
-      );
-
-      // Calculate total deposit amount per pool from transaction history
-      this.logger.log(`\n=== TRANSACTION HISTORY DEBUG ===`);
-      this.logger.log(`Querying for address: ${address}`);
-      this.logger.log(`Found ${allTransactions.length} transactions`);
-
-      // Show first few transactions for debugging
-      if (allTransactions.length > 0) {
-        this.logger.log(`First 3 transactions:`);
-        allTransactions.slice(0, 3).forEach((tx, i) => {
-          const meta = tx.meta as any || {};
-          this.logger.log(`  ${i + 1}. kind="${tx.kind}", depositorAddress="${meta.depositorAddress}", poolAddress="${meta.poolAddress}", amount=${meta.amount}`);
-        });
-      }
-
-      const depositsByPool = new Map<string, number>();
-      for (const tx of allTransactions) {
-        const meta = tx.meta as any || {};
-        const poolAddress = meta.poolAddress;
-        const depositorAddress = meta.depositorAddress;
-
-        this.logger.log(`Processing tx: kind=${tx.kind}, depositor=${depositorAddress}, pool=${poolAddress}`);
-
-        if (!poolAddress) {
-          this.logger.warn(`Transaction ${tx.id} has no poolAddress in meta`);
-          continue;
-        }
-
-        // Check if the depositor address matches (could be EVM vs Hedera format)
-        const addressMatch = depositorAddress === address ||
-                            depositorAddress?.toLowerCase() === address?.toLowerCase();
-
-        if (!addressMatch && depositorAddress) {
-          this.logger.log(`Address mismatch: tx.depositor="${depositorAddress}" vs query="${address}"`);
-        }
-
-        if (tx.kind === 'investor_deposit') {
-          const currentDeposits = depositsByPool.get(poolAddress) || 0;
-          depositsByPool.set(poolAddress, currentDeposits + (meta.amount || 0));
-          this.logger.log(`✓ Deposit tracked: ${meta.amount} to pool ${poolAddress}`);
-        } else if (tx.kind === 'investor_withdraw') {
-          // Withdrawals reduce the deposited amount proportionally
-          const currentDeposits = depositsByPool.get(poolAddress) || 0;
-          const withdrawnAmount = meta.amount || 0;
-          depositsByPool.set(poolAddress, Math.max(0, currentDeposits - withdrawnAmount));
-          this.logger.log(`✓ Withdrawal tracked: ${withdrawnAmount} from pool ${poolAddress}`);
-        }
-      }
-
-      this.logger.log(`Total deposits by pool:`, Object.fromEntries(depositsByPool));
-      this.logger.log(`=== END TRANSACTION DEBUG ===\n`);
 
       // Get investor's position in each pool - PARALLELIZED for better performance
       const positionPromises = allPoolsInfo.map(async (poolInfo) => {
@@ -358,13 +300,13 @@ export class InvestorService {
 
           if (Number(lpShares) > 0) {
             // Calculate REAL position value using liquidity index
-            // Formula: (LP shares × liquidityIndex) / 1e27 = value in underlying token's smallest unit
-            // Then divide by 10^decimals to get human-readable value
+            // Formula: (LP shares × liquidityIndex) / 1e27 / 10^decimals = value in underlying token (human-readable)
+            // LP shares are in the same decimals as the underlying token (e.g., USDT = 6 decimals)
 
             this.logger.log(`=== DETAILED CALCULATION DEBUG ===`);
             this.logger.log(`LP Shares (raw string): "${lpShares}"`);
             this.logger.log(`Liquidity Index (raw string): "${liquidityIndex}"`);
-            this.logger.log(`Underlying Decimals: ${underlyingDecimals}`);
+            this.logger.log(`Underlying Token Decimals: ${underlyingDecimals}`);
 
             const lpSharesBigInt = BigInt(lpShares);
             const liquidityIndexBigInt = BigInt(liquidityIndex);
@@ -372,43 +314,48 @@ export class InvestorService {
             this.logger.log(`LP Shares (BigInt): ${lpSharesBigInt.toString()}`);
             this.logger.log(`Liquidity Index (BigInt): ${liquidityIndexBigInt.toString()}`);
 
-            // LP shares are in 18 decimals, liquidityIndex is in 27 decimals (RAY)
-            // Result is in underlying token decimals after dividing by 1e27
+            // LP shares are in underlying token decimals, liquidityIndex is in 27 decimals (RAY)
+            // Result after dividing by 1e27 is in underlying token decimals
             const product = lpSharesBigInt * liquidityIndexBigInt;
             this.logger.log(`Product (lpShares × liquidityIndex): ${product.toString()}`);
 
             const positionValueInSmallestUnits = product / BigInt(1e27);
             this.logger.log(`After dividing by 1e27: ${positionValueInSmallestUnits.toString()}`);
 
-            // Convert to human-readable using actual token decimals
+            // Convert to human-readable using actual token decimals (e.g., USDT has 6 decimals)
             const decimalDivisor = Math.pow(10, underlyingDecimals);
             this.logger.log(`Decimal divisor (10^${underlyingDecimals}): ${decimalDivisor}`);
 
             const positionValue = Number(positionValueInSmallestUnits) / decimalDivisor;
             this.logger.log(`Final Position Value: ${positionValue}`);
 
-            // Get total deposits from transaction history
-            const totalDeposited = depositsByPool.get(poolInfo.poolAddress) || 0;
+            // Calculate total deposited from LP shares
+            // When you deposit, you get LP shares at liquidity index ≈ 1e27 (initial)
+            // So: total deposited ≈ LP shares / 10^decimals
+            const totalDeposited = Number(lpShares) / decimalDivisor;
 
-            // Calculate REAL yield earned
+            // Calculate REAL yield earned from smart contract data
             const yieldEarned = Math.max(0, positionValue - totalDeposited);
 
-            this.logger.log(`Portfolio calculation for ${poolInfo.assetType}:`);
-            this.logger.log(`  LP Shares (raw): ${lpShares}`);
-            this.logger.log(`  Liquidity Index (raw): ${liquidityIndex}`);
-            this.logger.log(`  Underlying Token Decimals: ${underlyingDecimals}`);
-            this.logger.log(`  Position Value (smallest units): ${positionValueInSmallestUnits.toString()}`);
-            this.logger.log(`  Position Value (human-readable): ${positionValue}`);
-            this.logger.log(`  Total Deposited: ${totalDeposited}`);
-            this.logger.log(`  Yield Earned: ${yieldEarned}`);
+            this.logger.log(`\n=== Portfolio calculation for ${poolInfo.assetType} ===`);
+            this.logger.log(`LP Shares (raw): ${lpShares}`);
+            this.logger.log(`Number(lpShares): ${Number(lpShares)}`);
+            this.logger.log(`decimalDivisor: ${decimalDivisor}`);
+            this.logger.log(`LP Shares (human-readable): ${Number(lpShares) / decimalDivisor}`);
+            this.logger.log(`Liquidity Index (raw): ${liquidityIndex}`);
+            this.logger.log(`Position Value (smallest units): ${positionValueInSmallestUnits.toString()}`);
+            this.logger.log(`Position Value (human-readable): ${positionValue}`);
+            this.logger.log(`Total Deposited calculation: Number(${lpShares}) / ${decimalDivisor} = ${totalDeposited}`);
+            this.logger.log(`Yield Earned: ${yieldEarned}`);
 
             return {
               assetType: poolInfo.assetType,
               poolAddress: poolInfo.poolAddress,
               shares: lpShares,
+              sharesFormatted: Number(lpShares) / decimalDivisor, // Human-readable LP shares
               positionValue: positionValue,
               yieldEarned: yieldEarned,
-              apr: Number(poolStats.currentAPR) / 100, // Convert basis points to percentage
+              apr: Number(poolStats.currentAPR) / 100, // Convert percentage string (e.g. "8.50") to decimal (e.g. 0.085)
               utilizationRate: poolStats.utilizationRate,
               totalDeposited: totalDeposited,
               createdAt: new Date()
@@ -443,29 +390,32 @@ export class InvestorService {
         ? Math.round(positions.reduce((sum, pos) => sum + Number(pos.utilizationRate), 0) / positions.length)
         : 0;
       
-      // Get recent transactions from database (HCS-logged transactions)
-      const recentTransactions = await this.transactionService.getTransactionsByEntityAndAddress(
-        'Investor',
-        address,
-        20 // Increased limit for transaction history
-      );
+      // Transaction history is optional - if we can't get it from database, just skip it
+      let recentTransactions: any[] = [];
+      let transactionHistory: any[] = [];
 
-      // Transform transactions to include transaction history details
-      const transactionHistory = recentTransactions.map(tx => {
-        const meta = tx.meta as any || {};
-        return {
-          id: tx.id,
-          type: this.mapTransactionKindToType(tx.kind),
-          grainType: meta.assetType || meta.grainType || 'Unknown',
-          amount: meta.amount || 0,
-          shares: meta.shares || 0,
-          timestamp: tx.createdAt.toISOString(),
-          status: tx.kind.includes('_failed') ? 'failed' : 'completed',
-          transactionHash: meta.contractTxHash || tx.ref,
-          poolAddress: meta.poolAddress || '',
-          depositorAddress: meta.depositorAddress || address
-        };
-      });
+      try {
+        const allInvestorTxs = await this.transactionService.getTransactionsByEntity('Investor');
+        recentTransactions = allInvestorTxs.slice(0, 20);
+
+        transactionHistory = recentTransactions.map(tx => {
+          const meta = tx.meta as any || {};
+          return {
+            id: tx.id,
+            type: this.mapTransactionKindToType(tx.kind),
+            grainType: meta.assetType || meta.grainType || 'Unknown',
+            amount: meta.amount || 0,
+            shares: meta.shares || 0,
+            timestamp: tx.createdAt.toISOString(),
+            status: tx.kind.includes('_failed') ? 'failed' : 'completed',
+            transactionHash: meta.contractTxHash || tx.ref,
+            poolAddress: meta.poolAddress || '',
+            depositorAddress: meta.depositorAddress || address
+          };
+        });
+      } catch (txError) {
+        this.logger.warn('Failed to fetch transaction history from database:', txError);
+      }
 
       const portfolioData = {
         investorAddress: address,

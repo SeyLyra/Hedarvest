@@ -1,14 +1,9 @@
-import { Controller, Get, Param, Query, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Param, Query } from '@nestjs/common';
 import { TransactionService } from './transaction.service';
 
 @Controller('tx')
 export class TransactionController {
   constructor(private readonly transactionService: TransactionService) {}
-
-  @Get(':id')
-  async getTransactionById(@Param('id', ParseIntPipe) id: number) {
-    return this.transactionService.getTransactionById(id);
-  }
 
   @Get('ref/:ref')
   async getTransactionsByRef(@Param('ref') ref: string) {

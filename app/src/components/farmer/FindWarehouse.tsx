@@ -80,7 +80,7 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
     const fetchWarehouses = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/warehouse/list`);
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/warehouse/list`);
         if (response.ok) {
           const data = await response.json();
           // Calculate distance from user's location (mock for now)

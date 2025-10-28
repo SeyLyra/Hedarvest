@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -144,20 +144,40 @@ export default function WarehousePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Restore session from localStorage on mount
+  useEffect(() => {
+    const token = localStorage.getItem('warehouseToken');
+    const savedOperatorName = localStorage.getItem('warehouseOperatorName');
+    const savedWarehouseId = localStorage.getItem('warehouseId');
+
+    if (token && savedOperatorName && savedWarehouseId) {
+      setOperatorName(savedOperatorName);
+      setWarehouseId(savedWarehouseId);
+      setIsLoggedIn(true);
+    }
+  }, []);
+
   const handleLogin = async (email: string, password: string) => {
     setIsLoading(true);
     setError("");
-    
+
     try {
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1500));
-      
+
       // Mock successful login
       if (email === "operator@warehouse.com" && password === "password") {
-        setOperatorName("Jane Operator");
-        setWarehouseId("WH-001");
+        const operator = "Jane Operator";
+        const whId = "WH001";
+
+        setOperatorName(operator);
+        setWarehouseId(whId);
         setIsLoggedIn(true);
+
+        // Persist to localStorage
         localStorage.setItem('warehouseToken', 'mock-token');
+        localStorage.setItem('warehouseOperatorName', operator);
+        localStorage.setItem('warehouseId', whId);
       } else {
         setError("Invalid email or password");
       }
@@ -173,7 +193,11 @@ export default function WarehousePage() {
     setOperatorName("");
     setWarehouseId("");
     setError("");
+
+    // Clear all session data
     localStorage.removeItem('warehouseToken');
+    localStorage.removeItem('warehouseOperatorName');
+    localStorage.removeItem('warehouseId');
   };
 
   // Show login form if not logged in

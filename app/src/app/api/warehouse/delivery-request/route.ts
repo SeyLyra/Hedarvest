@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
 
     // Forward request to backend
-    const response = await fetch('http://localhost:4000/warehouse/delivery-requests', {
+    const response = await fetch('http://localhost:3001/warehouse/delivery-requests', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -40,9 +40,9 @@ export async function GET(request: NextRequest) {
     const farmerId = searchParams.get('farmerId');
     const token = request.headers.get('authorization')?.replace('Bearer ', '');
 
-    let url = 'http://localhost:4000/warehouse/delivery-requests';
+    let url = 'http://localhost:3001/warehouse/delivery-requests';
     if (farmerId) {
-      url = `http://localhost:4000/warehouse/delivery-requests/farmer/${farmerId}`;
+      url = `http://localhost:3001/warehouse/delivery-requests/farmer/${farmerId}`;
     }
 
     const response = await fetch(url, {

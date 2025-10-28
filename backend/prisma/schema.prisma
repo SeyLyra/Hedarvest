@@ -22,7 +22,6 @@ model Farmer {
   agent                 Agent?   @relation(fields: [agentId], references: [id])
   otpRequest            OtpRequest?
   deposits              GrainDeposit[]
-  loans                 Loan[]
   deliveryRequests      DeliveryRequest[]
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
@@ -61,29 +60,26 @@ model GrainDeposit {
   depositedAt     DateTime  @default(now())
 }
 
-model Loan {
-  id               Int      @id @default(autoincrement())
-  farmer           Farmer   @relation(fields: [farmerId], references: [id])
-  farmerId         Int
-  pool             Pool?    @relation(fields: [poolId], references: [id])
-  poolId           Int?
-  grainType        String   // Store grain type instead of pool relation
-  amount           Decimal
-  collateralTokens Decimal   @default(0)
-  interestRate     Decimal   @default(0)
-  status           String    @default("active")
-  dueDate          DateTime?
-  createdAt        DateTime  @default(now())
-  repaidAt         DateTime?
-}
-
-model TxLog {
-  id        Int      @id @default(autoincrement())
-  kind      String
-  ref       String
-  entity    String?
-  meta      Json?
-  createdAt DateTime @default(now())
+model Warehouse {
+  id                    Int      @id @default(autoincrement())
+  email                 String   @unique
+  password              String
+  name                  String
+  warehouseId           String   @unique // e.g., WH001
+  walletAddress         String   @unique
+  hederaAccountId       String?  @unique
+  encryptedPrivateKey   String?
+  isCustodial           Boolean  @default(true)
+  address               String?
+  city                  String?
+  state                 String?
+  country               String?
+  phone                 String?
+  manager               String?
+  capacity              Decimal  @default(0)
+  status                String   @default("active") // active, inactive, maintenance
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 }
 
 model Pool {
@@ -107,7 +103,6 @@ model Pool {
   riskPremium           Decimal  @default(0.05)
   debtCeiling           Decimal  @default(1000000)
   isActive              Boolean  @default(true)
-  loans                 Loan[]
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }

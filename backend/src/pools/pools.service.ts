@@ -57,17 +57,12 @@ export class PoolsService {
   async getAllPools() {
     try {
       const pools = await this.prisma.pool.findMany({
-        include: {
-          loans: {
-            where: { status: 'active' },
-            select: { amount: true },
-          },
-        },
         orderBy: { createdAt: 'desc' },
       });
 
       // Calculate derived fields
-      return pools.map(pool => ({
+      // Note: Loan data is now in smart contracts, not database
+      return pools.map((pool) => ({
         id: pool.id,
         grainType: pool.grainType,
         poolAddress: pool.poolAddress,
@@ -81,7 +76,6 @@ export class PoolsService {
         totalReserves: pool.totalReserves.toString(),
         utilizationRate: pool.utilizationRate.toString(),
         isActive: pool.isActive,
-        activeLoans: pool.loans.length,
         createdAt: pool.createdAt,
         updatedAt: pool.updatedAt,
       }));
@@ -95,18 +89,15 @@ export class PoolsService {
     try {
       const pool = await this.prisma.pool.findUnique({
         where: { grainType },
-        include: {
-          loans: {
-            where: { status: 'active' },
-            include: { farmer: true },
-          },
-        },
       });
 
       if (!pool) {
-        throw new NotFoundException(`Pool not found for grain type: ${grainType}`);
+        throw new NotFoundException(
+          `Pool not found for grain type: ${grainType}`
+        );
       }
 
+      // Note: Loan data is now in smart contracts
       return {
         id: pool.id,
         grainType: pool.grainType,
@@ -121,7 +112,6 @@ export class PoolsService {
         totalReserves: pool.totalReserves.toString(),
         utilizationRate: pool.utilizationRate.toString(),
         isActive: pool.isActive,
-        loans: pool.loans,
         createdAt: pool.createdAt,
         updatedAt: pool.updatedAt,
       };
@@ -129,7 +119,10 @@ export class PoolsService {
       if (error instanceof NotFoundException) {
         throw error;
       }
-      this.logger.error(`Failed to fetch pool by grain type ${grainType}:`, error);
+      this.logger.error(
+        `Failed to fetch pool by grain type ${grainType}:`,
+        error
+      );
       throw new Error('Failed to fetch pool');
     }
   }
@@ -138,17 +131,13 @@ export class PoolsService {
     try {
       const pool = await this.prisma.pool.findUnique({
         where: { id },
-        include: {
-          loans: {
-            include: { farmer: true },
-          },
-        },
       });
 
       if (!pool) {
         throw new NotFoundException(`Pool not found with id: ${id}`);
       }
 
+      // Note: Loan data is now in smart contracts
       return pool;
     } catch (error) {
       if (error instanceof NotFoundException) {

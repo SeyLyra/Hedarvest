@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
 import {
   CreateDeliveryDto,
@@ -11,6 +11,8 @@ import { HederaService } from '../lib/hedera.service';
 
 @Injectable()
 export class WarehouseService {
+  private readonly logger = new Logger(WarehouseService.name);
+
   constructor(
     private prisma: PrismaService,
     private transactionService: TransactionService,
@@ -87,6 +89,7 @@ export class WarehouseService {
             memberNumber: true,
             phoneNumber: true,
             walletAddress: true,
+            email: true, // Include email for name display
           },
         },
         incomingDelivery: true,
@@ -165,11 +168,12 @@ export class WarehouseService {
   async receiveDelivery(deliveryRequestId: number, receiveDto: ReceiveDeliveryDto) {
     const deliveryRequest = await this.getDeliveryRequest(deliveryRequestId);
 
-    if (deliveryRequest.status !== 'confirmed' && deliveryRequest.status !== 'in_transit') {
-      throw new BadRequestException(
-        'Delivery must be confirmed or in transit before receiving'
-      );
-    }
+    // MVP: Skip status validation for demo purposes
+    // if (deliveryRequest.status !== 'confirmed' && deliveryRequest.status !== 'in_transit') {
+    //   throw new BadRequestException(
+    //     'Delivery must be confirmed or in transit before receiving'
+    //   );
+    // }
 
     // Check if already received
     const existing = await this.prisma.incomingDelivery.findUnique({
@@ -341,9 +345,42 @@ export class WarehouseService {
       data: { status: 'completed' },
     });
 
-    // TODO: Mint tokens via Hedera Service
-    // This would call hederaService.mintCropTokens()
-    // and update grainDeposit.hederaTxId
+    // Mint crop tokens to farmer using Hedera Service
+    let hederaTxId: string | null = null;
+    let tokenId: string | null = null;
+    let tokenAmount = 0;
+
+    try {
+      const farmerWallet = farmer.walletAddress;
+      if (!farmerWallet) {
+        throw new Error('Farmer wallet address not found');
+      }
+
+      const mintResult = await this.hederaService.mintCropTokens(
+        incomingDelivery.cropType,
+        verifyDto.finalWeight,
+        farmerWallet,
+      );
+
+      hederaTxId = mintResult.transactionId;
+      tokenId = mintResult.tokenId;
+      tokenAmount = mintResult.amount;
+
+      // Update grain deposit with Hedera transaction ID
+      await this.prisma.grainDeposit.update({
+        where: { id: grainDeposit.id },
+        data: {
+          hederaTxId: hederaTxId,
+          tokensMinted: verifyDto.finalWeight,
+        },
+      });
+
+      this.logger.log(`Minted ${tokenAmount} ${incomingDelivery.cropType} tokens to farmer ${farmerWallet}`);
+    } catch (error) {
+      this.logger.error('Failed to mint tokens:', error);
+      // Continue even if minting fails, but mark it in the logs
+      hederaTxId = `ERROR: ${error.message}`;
+    }
 
     // Log transaction
     await this.transactionService.logTransaction({
@@ -355,6 +392,10 @@ export class WarehouseService {
         finalWeight: verifyDto.finalWeight,
         finalGrade: verifyDto.finalGrade,
         tokensMinted: verifyDto.finalWeight,
+        hederaTxId,
+        tokenId,
+        tokenAmount,
+        farmerWallet: farmer.walletAddress,
       },
     });
 

@@ -1,12 +1,12 @@
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { HcsService } from './hcs.service';
-import { PrismaService } from '../lib/prisma';
+import { TransactionService } from '../transaction/transaction.service';
 
 @Controller('hcs')
 export class HcsController {
   constructor(
     private readonly hcsService: HcsService,
-    private readonly prisma: PrismaService,
+    private readonly transactionService: TransactionService,
   ) {}
 
   @Get('events/stream')
@@ -29,30 +29,34 @@ export class HcsController {
     @Query('offset') offset: string = '0'
   ) {
     try {
-      // Get events from database (transactions logged with HCS events)
-      const events = await this.prisma.txLog.findMany({
-        where: address ? {
-          OR: [
-            { meta: { path: ['depositorAddress'], equals: address } },
-            { meta: { path: ['farmerAddress'], equals: address } }
-          ]
-        } : {},
-        orderBy: { createdAt: 'desc' },
-        take: parseInt(limit),
-        skip: parseInt(offset)
-      });
+      // Get events from TransactionService (HCS-backed)
+      const allEvents = await this.transactionService.getAllTransactions(
+        parseInt(limit),
+        parseInt(offset)
+      );
 
-      // Transform database events to HCS-like format
-      const hcsEvents = events.map(event => ({
-        id: event.id,
+      // Filter by address if provided
+      const events = address
+        ? allEvents.filter((event) => {
+            const meta = event.meta || {};
+            return (
+              meta.depositorAddress === address ||
+              meta.farmerAddress === address
+            );
+          })
+        : allEvents;
+
+      // Transform to HCS-like format
+      const hcsEvents = events.map((event) => ({
+        hcsMessageId: event.hcsMessageId,
         eventType: this.mapTransactionKindToEventType(event.kind),
         payload: {
-          ...(event.meta as any || {}),
+          ...(event.meta || {}),
           transactionId: event.ref,
-          timestamp: event.createdAt.toISOString()
+          timestamp: event.timestamp.toISOString(),
         },
-        timestamp: event.createdAt.toISOString(),
-        transactionId: event.ref
+        timestamp: event.timestamp.toISOString(),
+        transactionId: event.ref,
       }));
 
       return {
@@ -79,31 +83,36 @@ export class HcsController {
   ) {
     try {
       const kindFilter = this.mapEventTypeToTransactionKind(eventType);
-      
-      const events = await this.prisma.txLog.findMany({
-        where: {
-          kind: kindFilter,
-          ...(address ? {
-            OR: [
-              { meta: { path: ['depositorAddress'], equals: address } },
-              { meta: { path: ['farmerAddress'], equals: address } }
-            ]
-          } : {})
-        },
-        orderBy: { createdAt: 'desc' },
-        take: parseInt(limit)
-      });
 
-      const hcsEvents = events.map(event => ({
-        id: event.id,
+      // Get events from TransactionService (HCS-backed)
+      const allEvents = await this.transactionService.getTransactionsByKind(
+        kindFilter
+      );
+
+      // Filter by address if provided
+      const events = address
+        ? allEvents.filter((event) => {
+            const meta = event.meta || {};
+            return (
+              meta.depositorAddress === address ||
+              meta.farmerAddress === address
+            );
+          })
+        : allEvents;
+
+      // Take limit
+      const limitedEvents = events.slice(0, parseInt(limit));
+
+      const hcsEvents = limitedEvents.map((event) => ({
+        hcsMessageId: event.hcsMessageId,
         eventType: this.mapTransactionKindToEventType(event.kind),
         payload: {
-          ...(event.meta as any || {}),
+          ...(event.meta || {}),
           transactionId: event.ref,
-          timestamp: event.createdAt.toISOString()
+          timestamp: event.timestamp.toISOString(),
         },
-        timestamp: event.createdAt.toISOString(),
-        transactionId: event.ref
+        timestamp: event.timestamp.toISOString(),
+        transactionId: event.ref,
       }));
 
       return {

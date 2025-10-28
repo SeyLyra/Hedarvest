@@ -118,8 +118,9 @@ export default function FarmerLogin({ onLogin, isLoading = false, error }: Farme
           <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <h4 className="text-sm font-semibold text-blue-800 mb-2">Demo Credentials</h4>
             <div className="space-y-1 text-xs text-blue-700">
-              <p><strong>Email:</strong> farmer1@example.com</p>
+              <p><strong>Email:</strong> john.kamau@farm.ke</p>
               <p><strong>Password:</strong> password123</p>
+              <p className="text-blue-600 mt-1">Member: FMR001 | Wallet: 0.0.7097158</p>
             </div>
           </div>
           

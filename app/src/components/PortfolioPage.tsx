@@ -19,6 +19,7 @@ interface PortfolioPosition {
   assetType: string;
   poolAddress: string;
   shares: string;
+  sharesFormatted?: number;
   positionValue: number;
   yieldEarned: number;
   apr: number;
@@ -281,7 +282,7 @@ export default function PortfolioPage({ userAddress }: PortfolioPageProps) {
                   <div className="bg-teal-50/80 dark:bg-teal-500/10 rounded-lg p-3">
                     <p className="text-xs text-teal-600/80 dark:text-teal-300/80 mb-1">LP Shares</p>
                     <p className="font-bold text-teal-800 dark:text-teal-200">
-                      {showValues ? Number(position.shares).toFixed(6) : '••••••'}
+                      {showValues ? (position.sharesFormatted ?? 0).toFixed(6) : '••••••'}
                     </p>
                   </div>
                   

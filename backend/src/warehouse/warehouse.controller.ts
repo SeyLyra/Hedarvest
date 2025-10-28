@@ -28,19 +28,8 @@ export class WarehouseController {
    */
   @Get('list')
   async getWarehouses() {
-    return WAREHOUSES;
-  }
-
-  /**
-   * Get warehouse by ID
-   */
-  @Get(':id')
-  async getWarehouseById(@Param('id') id: string) {
-    const warehouse = WAREHOUSES.find((w) => w.id === id);
-    if (!warehouse) {
-      return { error: 'Warehouse not found' };
-    }
-    return warehouse;
+    // For demo, only return WH001 (Green Valley Storage)
+    return WAREHOUSES.filter(w => w.id === 'WH001');
   }
 
   /**
@@ -148,5 +137,17 @@ export class WarehouseController {
     @Body() body: { reason: string },
   ) {
     return this.warehouseService.rejectDelivery(id, body.reason);
+  }
+
+  /**
+   * Get warehouse by ID (MUST be last to avoid catching other routes)
+   */
+  @Get(':id')
+  async getWarehouseById(@Param('id') id: string) {
+    const warehouse = WAREHOUSES.find((w) => w.id === id);
+    if (!warehouse) {
+      return { error: 'Warehouse not found' };
+    }
+    return warehouse;
   }
 }

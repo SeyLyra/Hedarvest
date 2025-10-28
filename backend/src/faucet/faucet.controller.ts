@@ -10,19 +10,26 @@ export class FaucetController {
 
   @Post('mint')
   async mintTokens(@Body() mintRequest: MintTokensDto) {
-    this.logger.log(`Minting ${mintRequest.amount} USDT to ${mintRequest.address}`);
-    
+    this.logger.log(
+      `Minting ${mintRequest.amount} USDT to ${mintRequest.address}`,
+    );
+
     try {
       const result = await this.faucetService.mintTokens(
         mintRequest.address,
-        mintRequest.amount.toString()
+        mintRequest.amount.toString(),
       );
-      
+
       return {
         success: true,
-        transactionHash: 'transactionHash' in result ? result.transactionHash : 'mintTransactionId' in result ? result.mintTransactionId : 'pending',
+        transactionHash:
+          'transactionHash' in result
+            ? result.transactionHash
+            : 'mintTransactionId' in result
+              ? result.mintTransactionId
+              : 'pending',
         amount: mintRequest.amount,
-        address: mintRequest.address
+        address: mintRequest.address,
       };
     } catch (error) {
       this.logger.error('Failed to mint tokens:', error);
@@ -33,26 +40,26 @@ export class FaucetController {
   @Get('balance/:address')
   async getBalance(@Param('address') address: string) {
     this.logger.log(`Getting balance for ${address}`);
-    
+
     try {
       const result = await this.faucetService.getTokenBalance(address);
-      
+
       return {
         success: true,
         balance: result.balance,
         tokenId: result.tokenId,
         hbarBalance: result.hbarBalance,
         isAssociated: result.isAssociated,
-        address: address
+        address: address,
       };
     } catch (error) {
       this.logger.error('Failed to get balance:', error);
       return {
         success: false,
         balance: '0',
-        tokenId: '0.0.7115536',
+        tokenId: process.env.USDC_MOCK_TOKEN_ID || '0.0.7115536',
         isAssociated: false,
-        address: address
+        address: address,
       };
     }
   }

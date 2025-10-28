@@ -133,6 +133,7 @@ import {
 } from "lucide-react";
 import QualityInspection from "./QualityInspection";
 import TokenizeReceipts from "./TokenizeReceipts";
+import { Toast, ToastType } from "@/components/ui/toast";
 
 interface WarehouseDashboardProps {
   operatorName: string;
@@ -156,6 +157,8 @@ interface Delivery {
   estimatedValue: number;
   location: string;
   notes?: string;
+  moisture?: number;
+  temperature?: number;
 }
 
 interface QualityInspection {
@@ -199,111 +202,23 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const [showTokenizeReceipts, setShowTokenizeReceipts] = useState(false);
   const [recentDeliveries, setRecentDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
-  // Fetch incoming deliveries from API
+  // Fetch delivery requests and incoming deliveries from API
   useEffect(() => {
-    const fetchDeliveries = async () => {
-      try {
-        setIsLoading(true);
-        const response = await fetch(`http://localhost:4000/warehouse/incoming-deliveries?warehouseId=${warehouseId}`);
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // Transform API data to match component interface
-          const transformedDeliveries: Delivery[] = data.map((item: any) => ({
-            id: `del${item.id}`,
-            farmerName: item.farmerName,
-            farmerId: `farmer_${item.farmerId}`,
-            cropType: item.cropType,
-            weight: parseFloat(item.weight),
-            unit: item.unit,
-            grade: item.grade || "Unknown",
-            arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
-            status: item.status as "pending" | "inspecting" | "verified" | "rejected",
-            priority: item.priority as "low" | "medium" | "high",
-            estimatedValue: parseFloat(item.estimatedValue || "0"),
-            location: item.storageLocation || "Unknown",
-            notes: item.notes
-          }));
-
-          setRecentDeliveries(transformedDeliveries);
-        } else {
-          console.error('Failed to fetch deliveries');
-          // Fall back to mock data if API fails
-          setRecentDeliveries(mockDeliveries);
-        }
-      } catch (error) {
-        console.error('Error fetching deliveries:', error);
-        // Fall back to mock data on error
-        setRecentDeliveries(mockDeliveries);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchDeliveries();
+    setIsLoading(true);
+    fetchDeliveriesData();
   }, [warehouseId]);
 
-  // Mock data as fallback
-  const mockDeliveries: Delivery[] = [
-    {
-      id: "del001",
-      farmerName: "John Smith",
-      farmerId: "farmer_001",
-      cropType: "Rice",
-      weight: 500,
-      unit: "kg",
-      grade: "Premium",
-      arrivalDate: "2024-01-15",
-      status: "pending",
-      priority: "high",
-      estimatedValue: 2500,
-      location: "Bay A-1",
-      notes: "High quality Basmati rice"
-    },
-    {
-      id: "del002",
-      farmerName: "Sarah Johnson",
-      farmerId: "farmer_002",
-      cropType: "Corn",
-      weight: 1200,
-      unit: "kg",
-      grade: "Grade A",
-      arrivalDate: "2024-01-15",
-      status: "inspecting",
-      priority: "medium",
-      estimatedValue: 1800,
-      location: "Bay B-3"
-    },
-    {
-      id: "del003",
-      farmerName: "Mike Davis",
-      farmerId: "farmer_003",
-      cropType: "Wheat",
-      weight: 800,
-      unit: "kg",
-      grade: "Grade B",
-      arrivalDate: "2024-01-14",
-      status: "verified",
-      priority: "low",
-      estimatedValue: 1200,
-      location: "Bay C-2"
-    }
-  ];
-
-  // Mock data
+  // Calculate stats from real data
   const warehouseStats = {
-    totalTokensIssued: 1247,
-    pendingDeliveries: 23,
-    verifiedToday: 15,
-    totalValue: 1250000,
-    averageProcessingTime: "2.3 hours",
-    staffCount: 8,
-    lastInspection: "2 hours ago",
+    totalTokensIssued: 1247, // TODO: Get from backend
     pendingDeliveries: recentDeliveries.filter(d => d.status === "pending").length,
     verifiedToday: recentDeliveries.filter(d => d.status === "verified").length,
-    totalValue: recentDeliveries.reduce((sum, d) => sum + d.estimatedValue, 0)
+    totalValue: recentDeliveries.reduce((sum, d) => sum + d.estimatedValue, 0),
+    averageProcessingTime: "2.3 hours", // TODO: Calculate from backend
+    staffCount: 8, // TODO: Get from backend
+    lastInspection: "2 hours ago" // TODO: Get from backend
   };
 
   const recentTokens: TokenizedReceipt[] = [
@@ -346,10 +261,173 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     setIsMobileMenuOpen(false);
   };
 
+  const showToast = (message: string, type: ToastType = "info") => {
+    setToast({ message, type });
+  };
+
+  const viewDeliveryDetails = (delivery: Delivery) => {
+    // For MVP, show a simple toast. In production, this would open a modal
+    showToast(`${delivery.farmerName} - ${delivery.cropType} (${delivery.weight}${delivery.unit})`, "info");
+  };
+
+  const receiveDeliveryRequest = async (deliveryId: string, delivery: Delivery) => {
+    try {
+      const numericId = parseInt(deliveryId.replace('req', ''));
+      const response = await fetch(`http://localhost:3001/warehouse/delivery-requests/${numericId}/receive`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          actualWeight: delivery.weight,
+          unit: delivery.unit,
+          grade: delivery.grade,
+          arrivalDate: new Date().toISOString(),
+          priority: delivery.priority,
+          estimatedValue: delivery.estimatedValue || 0,
+          storageLocation: delivery.location,
+          notes: 'Delivery received at warehouse'
+        })
+      });
+
+      if (response.ok) {
+        showToast('Delivery received successfully!', 'success');
+        // Refetch deliveries instead of reloading the page
+        setTimeout(() => {
+          setIsLoading(true);
+          fetchDeliveriesData();
+        }, 1000);
+      } else {
+        const error = await response.json();
+        showToast(`Failed: ${error.message || 'Unknown error'}`, 'error');
+      }
+    } catch (error) {
+      console.error('Error receiving delivery:', error);
+      showToast('Error receiving delivery', 'error');
+    }
+  };
+
+  // Extract fetchDeliveries logic into a separate function for reuse
+  const fetchDeliveriesData = async () => {
+    try {
+      // Fetch both delivery requests and incoming deliveries
+      const [deliveryRequestsRes, incomingDeliveriesRes] = await Promise.all([
+        fetch(`http://localhost:3001/warehouse/delivery-requests?warehouseId=${warehouseId}`),
+        fetch(`http://localhost:3001/warehouse/incoming-deliveries?warehouseId=${warehouseId}`)
+      ]);
+
+      const allDeliveries: Delivery[] = [];
+
+      // Process delivery requests (pending deliveries)
+      if (deliveryRequestsRes.ok) {
+        const deliveryRequests = await deliveryRequestsRes.json();
+        const transformedRequests: Delivery[] = deliveryRequests
+          .filter((item: any) => {
+            // Only show delivery requests that haven't been received yet
+            // AND aren't already completed
+            return !item.incomingDelivery &&
+                   item.status !== 'completed' &&
+                   item.status !== 'cancelled';
+          })
+          .map((item: any) => {
+            // Extract farmer name from email (john.kamau@farm.ke -> John Kamau)
+            let farmerName = item.farmer?.memberNumber || `Farmer ${item.farmerId}`;
+            if (item.farmer?.email) {
+              const emailName = item.farmer.email.split('@')[0];
+              // Convert john.kamau to John Kamau
+              farmerName = emailName.split('.').map((part: string) =>
+                part.charAt(0).toUpperCase() + part.slice(1)
+              ).join(' ');
+            }
+
+            return {
+              id: `req${item.id}`,
+              farmerName: farmerName,
+              farmerId: `farmer_${item.farmerId}`,
+              cropType: item.cropType,
+              weight: parseFloat(item.estimatedWeight),
+              unit: item.unit || "kg",
+              grade: item.estimatedGrade || "Pending",
+              arrivalDate: new Date(item.scheduledDate).toISOString().split('T')[0],
+              status: "pending" as const,
+              priority: "medium" as "low" | "medium" | "high",
+              estimatedValue: 0,
+              location: item.location || "Not assigned",
+              notes: item.notes,
+              moisture: item.moistureContent,
+              temperature: item.temperature
+            };
+          });
+        allDeliveries.push(...transformedRequests);
+      }
+
+      // Process incoming deliveries (already received but not yet verified)
+      if (incomingDeliveriesRes.ok) {
+        const incomingDeliveries = await incomingDeliveriesRes.json();
+        const transformedIncoming: Delivery[] = incomingDeliveries
+          .filter((item: any) => {
+            // Only show incoming deliveries that need action (not verified/rejected)
+            return item.status === 'pending' || item.status === 'inspecting';
+          })
+          .map((item: any) => {
+            // Extract farmer name from email if available
+            let farmerName = item.farmerName || item.farmer?.memberNumber || `Farmer ${item.farmerId}`;
+            if (item.farmer?.email) {
+              const emailName = item.farmer.email.split('@')[0];
+              // Convert john.kamau to John Kamau
+              farmerName = emailName.split('.').map((part: string) =>
+                part.charAt(0).toUpperCase() + part.slice(1)
+              ).join(' ');
+            }
+
+            return {
+              id: `del${item.id}`,
+              farmerName: farmerName,
+              farmerId: `farmer_${item.farmerId}`,
+              cropType: item.cropType,
+              weight: parseFloat(item.weight),
+              unit: item.unit,
+              grade: item.grade || "Unknown",
+              arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
+              status: item.status as "pending" | "inspecting" | "verified" | "rejected",
+              priority: item.priority as "low" | "medium" | "high",
+              estimatedValue: parseFloat(item.estimatedValue || "0"),
+              location: item.storageLocation || "Unknown",
+              notes: item.notes
+            };
+          });
+        allDeliveries.push(...transformedIncoming);
+      }
+
+      if (allDeliveries.length > 0) {
+        // Sort by arrival date
+        allDeliveries.sort((a, b) =>
+          new Date(a.arrivalDate).getTime() - new Date(b.arrivalDate).getTime()
+        );
+      }
+
+      // Always set the real data (even if empty array)
+      setRecentDeliveries(allDeliveries);
+    } catch (error) {
+      console.error('Error fetching deliveries:', error);
+      // Don't fall back to mock data, just show empty state
+      setRecentDeliveries([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const updateDeliveryStatus = async (deliveryId: string, newStatus: string) => {
     try {
+      // Check if it's a delivery request (req) or incoming delivery (del)
+      if (deliveryId.startsWith('req')) {
+        // For delivery requests, we need to receive them first
+        showToast('Please use the "Receive" button to accept this delivery first', 'warning');
+        return;
+      }
+
       const numericId = parseInt(deliveryId.replace('del', ''));
-      const response = await fetch(`http://localhost:4000/warehouse/incoming-deliveries/${numericId}/status`, {
+      const response = await fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -366,13 +444,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
           d.id === deliveryId ? { ...d, status: newStatus as any } : d
         );
         setRecentDeliveries(updatedDeliveries);
-        alert(`Delivery status updated to ${newStatus}`);
+        showToast(`Status updated to ${newStatus}`, 'success');
       } else {
-        alert('Failed to update delivery status');
+        showToast('Failed to update delivery status', 'error');
       }
     } catch (error) {
       console.error('Error updating delivery status:', error);
-      alert('Error updating delivery status');
+      showToast('Error updating delivery status', 'error');
     }
   };
 
@@ -683,8 +761,10 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Crop</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
@@ -708,6 +788,11 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                         {delivery.grade}
                       </Badge>
                     </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-foreground max-w-[150px] truncate" title={delivery.location}>
+                        {delivery.location}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                       {delivery.arrivalDate}
                     </td>
@@ -716,31 +801,61 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                         {delivery.status}
                       </Badge>
                     </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-muted-foreground max-w-[200px] truncate" title={delivery.notes || ''}>
+                        {delivery.notes || '-'}
+                      </div>
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
-                        <Button size="sm" variant="outline">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => viewDeliveryDetails(delivery)}
+                          title="View Details"
+                        >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setSelectedDelivery(delivery);
-                            setShowQualityInspection(true);
-                            setCurrentSection("quality-inspection");
-                          }}
-                          title="Start Quality Inspection"
-                        >
-                          <FlaskConical className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => updateDeliveryStatus(delivery.id, delivery.status === 'pending' ? 'inspecting' : 'verified')}
-                          title={delivery.status === 'pending' ? 'Start Inspection' : 'Verify Delivery'}
-                        >
-                          <CheckCircle className="h-4 w-4" />
-                        </Button>
+
+                        {/* Show "Receive" button only for delivery requests (req) */}
+                        {delivery.id.startsWith('req') && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => receiveDeliveryRequest(delivery.id, delivery)}
+                            title="Receive Delivery"
+                          >
+                            <Truck className="h-4 w-4 mr-1" />
+                            Receive
+                          </Button>
+                        )}
+
+                        {/* Show inspection/verification buttons only for incoming deliveries (del) */}
+                        {delivery.id.startsWith('del') && (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedDelivery(delivery);
+                                setShowQualityInspection(true);
+                                setCurrentSection("quality-inspection");
+                              }}
+                              title="Start Quality Inspection"
+                            >
+                              <FlaskConical className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => updateDeliveryStatus(delivery.id, delivery.status === 'pending' ? 'inspecting' : 'verified')}
+                              title={delivery.status === 'pending' ? 'Start Inspection' : 'Verify Delivery'}
+                            >
+                              <CheckCircle className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -933,6 +1048,15 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && renderMobileMenu()}
+
+      {/* Toast Notification */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 }

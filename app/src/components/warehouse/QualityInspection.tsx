@@ -79,6 +79,16 @@ import {
 
 interface QualityInspectionProps {
   deliveryId: string;
+  deliveryData?: {
+    farmerName?: string;
+    cropType?: string;
+    weight?: number;
+    unit?: string;
+    grade?: string;
+    moisture?: number;
+    temperature?: number;
+    notes?: string;
+  };
   onBack: () => void;
   onComplete: (inspectionData: InspectionData) => void;
 }
@@ -136,23 +146,23 @@ const testTypes = [
   "Nutritional Analysis"
 ];
 
-export default function QualityInspection({ deliveryId, onBack, onComplete }: QualityInspectionProps) {
+export default function QualityInspection({ deliveryId, deliveryData, onBack, onComplete }: QualityInspectionProps) {
   const [currentStep, setCurrentStep] = useState(1);
   const [inspectionData, setInspectionData] = useState<Partial<InspectionData>>({
     id: `insp_${Date.now()}`,
     deliveryId,
-    moisture: 0,
+    moisture: deliveryData?.moisture || 0,
     impurities: 0,
-    temperature: 0,
-    qualityGrade: "",
+    temperature: deliveryData?.temperature || 0,
+    qualityGrade: deliveryData?.grade || "",
     inspectorName: "John Inspector",
     inspectionDate: new Date().toISOString().split('T')[0],
     testResults: [],
     photos: [],
-    notes: "",
+    notes: deliveryData?.notes || "",
     status: "in-progress",
     measurements: {
-      weight: 0,
+      weight: deliveryData?.weight || 0,
       volume: 0,
       density: 0,
       color: "",

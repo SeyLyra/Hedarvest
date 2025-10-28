@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from "next/server"
-import { MOCK_POOLS } from "@/lib/contracts"
+import { NextResponse } from "next/server"
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'
 
-export async function GET(request: NextRequest) {
+export async function GET() {
   try {
     // Fetch real pool data from backend with shorter timeout for better UX
     const controller = new AbortController();
@@ -48,19 +47,13 @@ export async function GET(request: NextRequest) {
       }
     })
   } catch (error) {
-    
-    // Fallback to deployed contract data
-    const mockPools = MOCK_POOLS;
-    
+    console.error("Failed to fetch pools from backend:", error);
+
     return NextResponse.json({
-      success: true,
-      data: mockPools,
-      fallback: true,
-      error: error instanceof Error ? error.message : "Backend unavailable - using mock data"
+      success: false,
+      error: error instanceof Error ? error.message : "Failed to fetch pools from backend"
     }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120', // Longer cache for fallback
-      }
+      status: 500
     })
   }
 }

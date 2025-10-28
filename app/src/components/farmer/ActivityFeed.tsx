@@ -58,10 +58,11 @@ export default function ActivityFeed({ farmerId }: ActivityFeedProps) {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
 
       // Fetch deliveries
       const deliveriesResponse = await fetch(
-        `http://localhost:4000/warehouse/delivery-requests/farmer/${farmerId}`,
+        `${BACKEND_URL}/warehouse/delivery-requests/farmer/${farmerId}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 

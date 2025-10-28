@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaService } from '../lib/prisma';
+import {
+  TopicCreateTransaction,
+  TopicMessageSubmitTransaction,
+  TopicId,
+} from '@hashgraph/sdk';
+import { HederaService } from '../lib/hedera.service';
 
 export interface LogTransactionDto {
   kind: string;
@@ -8,94 +13,178 @@ export interface LogTransactionDto {
   meta?: any;
 }
 
+export interface TransactionLog {
+  kind: string;
+  ref: string;
+  entity?: string;
+  meta?: any;
+  timestamp: Date;
+  hcsMessageId?: string;
+}
+
 @Injectable()
 export class TransactionService {
   private readonly logger = new Logger(TransactionService.name);
+  private topicId: TopicId | null = null;
+  private transactionCache: TransactionLog[] = []; // In-memory cache
 
-  constructor(private prisma: PrismaService) {}
-
-  async logTransaction(data: LogTransactionDto) {
-    return this.prisma.txLog.create({
-      data: {
-        kind: data.kind,
-        ref: data.ref,
-        entity: data.entity,
-        meta: data.meta,
-      },
-    });
+  constructor(private hederaService: HederaService) {
+    this.initializeHCSTopic();
   }
 
-  async getTransactionById(id: number) {
-    return this.prisma.txLog.findUnique({
-      where: { id },
-    });
+  /**
+   * Initialize HCS Topic for transaction logs
+   */
+  private async initializeHCSTopic() {
+    try {
+      // Use existing topic ID or create a new one
+      const existingTopicId = process.env.HCS_TRANSACTION_TOPIC_ID;
+
+      if (existingTopicId) {
+        this.topicId = TopicId.fromString(existingTopicId);
+        this.logger.log(
+          `Using existing HCS topic for transactions: ${existingTopicId}`,
+        );
+      } else {
+        // Create a new topic
+        const client = this.hederaService['client'];
+        const transaction = await new TopicCreateTransaction()
+          .setTopicMemo('Hedarvest Transaction Logs')
+          .execute(client);
+
+        const receipt = await transaction.getReceipt(client);
+        this.topicId = receipt.topicId!;
+
+        this.logger.log(
+          `Created new HCS topic for transactions: ${this.topicId.toString()}`,
+        );
+        this.logger.warn(
+          `⚠️  Add this to .env: HCS_TRANSACTION_TOPIC_ID=${this.topicId.toString()}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to initialize HCS topic:', error);
+      this.logger.warn('Transaction logging will use in-memory cache only');
+    }
   }
 
-  async getTransactionsByRef(ref: string) {
-    return this.prisma.txLog.findMany({
-      where: { ref },
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * Log a transaction to HCS (Hedera Consensus Service)
+   */
+  async logTransaction(data: LogTransactionDto): Promise<TransactionLog> {
+    const transactionLog: TransactionLog = {
+      ...data,
+      timestamp: new Date(),
+    };
+
+    // Add to in-memory cache
+    this.transactionCache.push(transactionLog);
+
+    // Keep cache size manageable
+    if (this.transactionCache.length > 1000) {
+      this.transactionCache = this.transactionCache.slice(-1000);
+    }
+
+    // Submit to HCS
+    try {
+      if (this.topicId) {
+        const client = this.hederaService['client'];
+        const message = JSON.stringify(transactionLog);
+
+        const transaction = await new TopicMessageSubmitTransaction({
+          topicId: this.topicId,
+          message: message,
+        }).execute(client);
+
+        const receipt = await transaction.getReceipt(client);
+
+        transactionLog.hcsMessageId = `${this.topicId.toString()}@${receipt.topicSequenceNumber?.toString()}`;
+
+        this.logger.log(
+          `✅ Transaction logged to HCS: ${transactionLog.hcsMessageId}`,
+        );
+      }
+    } catch (error) {
+      this.logger.error('Failed to log transaction to HCS:', error);
+      // Continue even if HCS fails - we have in-memory cache
+    }
+
+    return transactionLog;
   }
 
-  async getTransactionsByKind(kind: string) {
-    return this.prisma.txLog.findMany({
-      where: { kind },
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * Get transactions by reference
+   */
+  async getTransactionsByRef(ref: string): Promise<TransactionLog[]> {
+    return this.transactionCache
+      .filter((tx) => tx.ref === ref)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
 
-  async getTransactionsByEntity(entity: string) {
-    return this.prisma.txLog.findMany({
-      where: { entity },
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * Get transactions by kind
+   */
+  async getTransactionsByKind(kind: string): Promise<TransactionLog[]> {
+    return this.transactionCache
+      .filter((tx) => tx.kind === kind)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
   }
 
-  async getTransactionsByEntityAndAddress(entity: string, address: string, limit: number = 10) {
-    this.logger.log(`\n[TransactionService] Querying transactions:`);
+  /**
+   * Get transactions by entity
+   */
+  async getTransactionsByEntity(entity: string): Promise<TransactionLog[]> {
+    return this.transactionCache
+      .filter((tx) => tx.entity === entity)
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+  }
+
+  /**
+   * Get transactions by entity and address
+   */
+  async getTransactionsByEntityAndAddress(
+    entity: string,
+    address: string,
+    limit: number = 10,
+  ): Promise<TransactionLog[]> {
+    this.logger.log(`\n[TransactionService] Querying transactions from HCS:`);
     this.logger.log(`  Entity: "${entity}"`);
     this.logger.log(`  Address: "${address}"`);
     this.logger.log(`  Limit: ${limit}`);
 
-    const results = await this.prisma.txLog.findMany({
-      where: {
-        entity,
-        meta: {
-          path: ['depositorAddress'],
-          equals: address
-        }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
+    const results = this.transactionCache
+      .filter((tx) => {
+        if (tx.entity !== entity) return false;
+        if (!tx.meta) return false;
+
+        // Check if depositorAddress matches
+        const depositorAddress = tx.meta.depositorAddress;
+        return depositorAddress === address;
+      })
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(0, limit);
 
     this.logger.log(`  Found: ${results.length} transactions`);
-
-    // If no results, try to find ANY investor transactions to help debug
-    if (results.length === 0 && entity === 'Investor') {
-      const allInvestorTxs = await this.prisma.txLog.findMany({
-        where: { entity: 'Investor' },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-      });
-
-      this.logger.warn(`  No transactions found for address "${address}"`);
-      this.logger.warn(`  Sample of recent Investor transactions in DB:`);
-      allInvestorTxs.forEach((tx, i) => {
-        const meta = tx.meta as any || {};
-        this.logger.warn(`    ${i + 1}. depositorAddress="${meta.depositorAddress}", kind="${tx.kind}"`);
-      });
-    }
 
     return results;
   }
 
-  async getAllTransactions(limit: number = 100, offset: number = 0) {
-    return this.prisma.txLog.findMany({
-      take: limit,
-      skip: offset,
-      orderBy: { createdAt: 'desc' },
-    });
+  /**
+   * Get all transactions
+   */
+  async getAllTransactions(
+    limit: number = 100,
+    offset: number = 0,
+  ): Promise<TransactionLog[]> {
+    return this.transactionCache
+      .sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+      .slice(offset, offset + limit);
+  }
+
+  /**
+   * Get HCS Topic ID
+   */
+  getTopicId(): string | null {
+    return this.topicId?.toString() || null;
   }
 }

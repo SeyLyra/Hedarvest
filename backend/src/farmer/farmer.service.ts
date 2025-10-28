@@ -249,11 +249,6 @@ export class FarmerService {
             agent: true,
           },
         },
-        loans: {
-          include: {
-            pool: true,
-          },
-        },
       },
     });
 
@@ -275,13 +270,11 @@ export class FarmerService {
   }
 
   async getFarmerLoans(farmerId: number) {
-    return this.prisma.loan.findMany({
-      where: { farmerId },
-      include: {
-        pool: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    // Loans are now stored in smart contracts, not database
+    // Query from blockchain via ContractService
+    throw new BadRequestException(
+      'Loan data is stored in smart contracts. Use ContractService.getFarmerPosition() instead'
+    );
   }
 
   async getFarmerByMemberNumber(memberNumber: string) {

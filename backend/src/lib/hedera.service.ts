@@ -25,7 +25,7 @@ export class HederaService {
 
   constructor(
     private readonly contractService: ContractService,
-    private readonly hcsService: HcsService
+    private readonly hcsService: HcsService,
   ) {
     this.initializeClient();
   }
@@ -96,9 +96,6 @@ export class HederaService {
   ): Promise<{ transactionId: string; newTotalSupply: number }> {
     try {
       const tokenIdObj = TokenId.fromString(tokenId);
-      const toAccount = toAccountId 
-        ? AccountId.fromString(toAccountId)
-        : this.client.operatorAccountId;
 
       const tokenMintTx = new TokenMintTransaction()
         .setTokenId(tokenIdObj)
@@ -115,6 +112,7 @@ export class HederaService {
       };
     } catch (error) {
       this.logger.error('Failed to mint token:', error);
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
       throw new Error(`Token minting failed: ${error.message}`);
     }
   }
@@ -145,6 +143,57 @@ export class HederaService {
     } catch (error) {
       this.logger.error('Failed to transfer token:', error);
       throw new Error(`Token transfer failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Mint crop tokens to farmer after warehouse verification
+   * Uses whitelisted RICE and WHEAT tokens only
+   */
+  async mintCropTokens(
+    cropType: string,
+    weightKg: number,
+    farmerAccountId: string,
+  ): Promise<{ transactionId: string; tokenId: string; amount: number }> {
+    try {
+      // Map crop type to token ID (only whitelist RICE and WHEAT)
+      const tokenIdMap: Record<string, string> = {
+        'rice': process.env.RICE_TOKEN_ID || '0.0.7121334',
+        'wheat': process.env.WHEAT_TOKEN_ID || '0.0.7121333',
+      };
+
+      const tokenId = tokenIdMap[cropType.toLowerCase()];
+      if (!tokenId) {
+        throw new Error(`Crop type ${cropType} is not whitelisted. Only RICE and WHEAT are supported.`);
+      }
+
+      // Convert weight to token amount (1 kg = 1 token with 6 decimals)
+      const tokenAmount = Math.floor(weightKg * 1e6);
+
+      this.logger.log(`Minting ${weightKg} kg (${tokenAmount} smallest units) of ${cropType} tokens (${tokenId}) for farmer ${farmerAccountId}`);
+
+      // Mint tokens to treasury first
+      const mintResult = await this.mintToken(tokenId, tokenAmount);
+
+      // Transfer tokens from treasury to farmer
+      const treasuryAccount = this.client.operatorAccountId?.toString() || '';
+      const transferResult = await this.transferToken(
+        tokenId,
+        treasuryAccount,
+        farmerAccountId,
+        tokenAmount,
+      );
+
+      this.logger.log(`Successfully minted and transferred ${weightKg} ${cropType} tokens to farmer ${farmerAccountId}`);
+
+      return {
+        transactionId: transferResult.transactionId,
+        tokenId,
+        amount: tokenAmount,
+      };
+    } catch (error) {
+      this.logger.error('Failed to mint crop tokens:', error);
+      throw new Error(`Crop token minting failed: ${error.message}`);
     }
   }
 
@@ -857,10 +906,11 @@ export class HederaService {
       const newAccountPrivateKey = PrivateKey.generateED25519();
       const newAccountPublicKey = newAccountPrivateKey.publicKey;
 
-      // Create the account with an initial balance (1 HBAR for transaction fees)
+      // Create the account with auto-association enabled for automatic token acceptance
       const newAccountTx = new AccountCreateTransaction()
         .setKey(newAccountPublicKey)
-        .setInitialBalance(new Hbar(1)); // 1 HBAR to cover transaction fees
+        .setInitialBalance(new Hbar(1)) // 1 HBAR to cover transaction fees
+        .setMaxAutomaticTokenAssociations(100); // Auto-associate up to 100 tokens
 
       const txResponse = await newAccountTx.execute(this.client);
       const receipt = await txResponse.getReceipt(this.client);
@@ -873,7 +923,9 @@ export class HederaService {
       // Convert to EVM address format
       const evmAddress = `0x${newAccountId.toSolidityAddress()}`;
 
-      this.logger.log(`✅ Created custodial account for ${farmerEmail}: ${newAccountId.toString()} (${evmAddress})`);
+      this.logger.log(
+        `✅ Created custodial account with auto-association for ${farmerEmail}: ${newAccountId.toString()} (${evmAddress})`
+      );
 
       return {
         accountId: newAccountId.toString(),

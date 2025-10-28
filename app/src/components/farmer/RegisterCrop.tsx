@@ -162,7 +162,7 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
       const photoUrls: string[] = [];
 
       // Create delivery request
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'}/warehouse/delivery-requests`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/warehouse/delivery-requests`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -1,18 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
   Client,
-  TokenMintTransaction,
   TransferTransaction,
   AccountId,
   TokenId,
   PrivateKey,
   AccountBalanceQuery,
-  TokenInfoQuery,
 } from '@hashgraph/sdk';
 
 // Hedera Token ID for USDC (from deployed contracts)
 const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID || '0.0.7115536';
-
 
 @Injectable()
 export class FaucetService {
@@ -44,7 +41,7 @@ export class FaucetService {
         this.hederaAccountId,
         this.hederaPrivateKey,
       );
-      
+
       this.logger.log(
         `Hedera faucet service initialized with account: ${this.hederaAccountId.toString()}`,
       );
@@ -58,7 +55,7 @@ export class FaucetService {
 
   async mintTokens(address: string, amount: string) {
     this.logger.log(`Minting ${amount} USDC to ${address}`);
-    
+
     // Check if Hedera client is initialized
     if (!this.hederaClient) {
       this.logger.error('Hedera client not initialized - cannot mint tokens');
@@ -66,18 +63,18 @@ export class FaucetService {
         'Faucet service not properly configured. Hedera client not initialized.',
       );
     }
-    
+
     // Transfer existing tokens from faucet account
-    this.logger.log(
-      `Attempting to transfer ${amount} USDC to ${address}`,
-    );
-    
+    this.logger.log(`Attempting to transfer ${amount} USDC to ${address}`);
+
     try {
       return await this.transferUSDC(address, amount);
     } catch (error: any) {
       // If minting fails due to association, return instructions
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         error.message &&
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         error.message.includes('TOKEN_NOT_ASSOCIATED_TO_ACCOUNT')
       ) {
         this.logger.warn(
@@ -95,6 +92,7 @@ export class FaucetService {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/require-await
   async associateToken(
     address: string,
   ): Promise<{ success: boolean; message: string; transactionId?: string }> {
@@ -125,9 +123,7 @@ export class FaucetService {
     }
   }
 
-  async getTokenBalance(
-    address: string,
-  ): Promise<{
+  async getTokenBalance(address: string): Promise<{
     balance: string;
     tokenId: string;
     hbarBalance?: string;
@@ -137,9 +133,11 @@ export class FaucetService {
       this.logger.log(
         `Getting token balance for ${address}, USDC_TOKEN_ID: ${USDC_TOKEN_ID}`,
       );
-      
+
       if (!this.hederaClient) {
-        this.logger.error('Hedera client not initialized - cannot get token balance');
+        this.logger.error(
+          'Hedera client not initialized - cannot get token balance',
+        );
         throw new Error(
           'Faucet service not properly configured. Hedera client not initialized.',
         );
@@ -152,20 +150,19 @@ export class FaucetService {
 
       // Query account balance using AccountBalanceQuery
       const query = new AccountBalanceQuery().setAccountId(accountId);
-      
+
       const accountBalance = await query.execute(this.hederaClient);
-      
+
       this.logger.log(`Account balance query executed for ${address}`);
-      
+
       // Get HBAR balance
       const hbarBalance = accountBalance.hbars.toString();
-      
+
       // Get the balance for our specific token
       const tokenBalance = accountBalance.tokens?.get(tokenId);
-      
+
       // Token is associated if it exists in the map (even with 0 balance)
       const isAssociated = tokenBalance !== null && tokenBalance !== undefined;
-      
       if (!isAssociated) {
         this.logger.log(
           `Token ${tokenId.toString()} - NOT associated for ${address}`,
@@ -180,11 +177,11 @@ export class FaucetService {
 
       // Convert from smallest unit (6 decimals for USDC)
       const balance = (Number(tokenBalance.toString()) / 1000000).toFixed(2);
-      
+
       this.logger.log(
         `✅ Balance for ${address} - HBAR: ${hbarBalance}, USDC: ${balance}, Associated: YES`,
       );
-      
+
       return {
         balance: balance,
         tokenId: tokenId.toString(),
@@ -194,9 +191,11 @@ export class FaucetService {
     } catch (error: any) {
       this.logger.error(
         `Failed to get token balance for ${address}:`,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         error.message || error,
       );
       throw new Error(
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         `Failed to get token balance: ${error.message || 'Unknown error'}`,
       );
     }
@@ -204,9 +203,9 @@ export class FaucetService {
 
   private mockMintResponse(address: string, amount: string) {
     const mockTxId = `0.0.${Math.floor(Math.random() * 1000000)}@${Date.now() / 1000}`;
-    
+
     this.logger.log(`[MOCK] Minted ${amount} USDC to ${address}`);
-    
+
     return {
       transactionHash: mockTxId,
       mintTransactionId: mockTxId,
@@ -214,7 +213,7 @@ export class FaucetService {
       amount: amount,
       address: address,
       mock: true,
-      message: 'Mock mint - Hedera client not configured'
+      message: 'Mock mint - Hedera client not configured',
     };
   }
 
@@ -231,11 +230,15 @@ export class FaucetService {
       const transferAmount = parseInt(amount) * 1000000; // 6 decimals for USDC
 
       // Check faucet account balance first
-      const faucetBalance = await this.getTokenBalance(this.hederaAccountId.toString());
+      const faucetBalance = await this.getTokenBalance(
+        this.hederaAccountId.toString(),
+      );
       const faucetBalanceAmount = parseFloat(faucetBalance.balance) * 1000000; // Convert to smallest units
 
       if (faucetBalanceAmount < transferAmount) {
-        this.logger.error(`⚠️ Faucet account has insufficient balance. Available: ${faucetBalance.balance}, Required: ${amount}`);
+        this.logger.error(
+          `⚠️ Faucet account has insufficient balance. Available: ${faucetBalance.balance}, Required: ${amount}`,
+        );
         throw new Error(
           `Faucet account has insufficient USDC balance. Available: ${faucetBalance.balance}, Required: ${amount}`,
         );
@@ -259,13 +262,14 @@ export class FaucetService {
         amount: amount,
         address: address,
       };
-      
     } catch (error: any) {
       this.logger.error('❌ Failed to transfer USDC:', error);
-      
+
       // Check if it's a TOKEN_NOT_ASSOCIATED_TO_ACCOUNT error
       if (
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         error.message &&
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
         error.message.includes('TOKEN_NOT_ASSOCIATED_TO_ACCOUNT')
       ) {
         this.logger.warn(
@@ -275,22 +279,25 @@ export class FaucetService {
           `Please associate USDC token (${USDC_TOKEN_ID}) with your account first using HashPack wallet. Go to the token page and click "Associate Token".`,
         );
       }
-      
+
       // Check if it's an INVALID_TOKEN_ID error
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
       if (error.message && error.message.includes('INVALID_TOKEN_ID')) {
-        this.logger.error('⚠️  Token ID is invalid or token cannot be transferred');
+        this.logger.error(
+          '⚠️  Token ID is invalid or token cannot be transferred',
+        );
         throw new Error(
           `Invalid token ID: ${USDC_TOKEN_ID}. Please check the token configuration.`,
         );
       }
-      
+
       // Re-throw the original error instead of returning mock response
       this.logger.error(
         '❌ Transfer failed with error:',
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         error.message || error,
       );
       throw error;
     }
   }
-
 }
