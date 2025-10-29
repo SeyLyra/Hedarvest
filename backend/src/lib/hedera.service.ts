@@ -1,3 +1,4 @@
+/* eslint-disable */
 import { Injectable, Logger } from '@nestjs/common';
 import {
   Client,
@@ -12,6 +13,10 @@ import {
   TokenInfoQuery,
   TokenAssociateTransaction,
   AccountCreateTransaction,
+  ContractCallQuery,
+  ContractFunctionParameters,
+  ContractId,
+  Long,
 } from '@hashgraph/sdk';
 import { ethers } from 'ethers';
 import { ContractService } from './contract.service';
@@ -354,15 +359,27 @@ export class HederaService {
       const accountIdObj = AccountId.fromString(accountId);
       const tokenIdObj = TokenId.fromString(tokenId);
       
-      // Parse the private key - handle both hex and PEM formats
-      let userPrivateKey: PrivateKey;
-      try {
-        // Try as hex string first (most common format)
-        userPrivateKey = PrivateKey.fromString(privateKey);
+      // Parse the private key - support DER and raw hex formats
+      const parseKey = (keyStr: string): PrivateKey => {
+        const trimmed = (keyStr || '').trim();
+        // Try standard parse
+        try {
+          return PrivateKey.fromString(trimmed);
       } catch {
-        // If that fails, might be PEM format or other, let SDK handle it
-        userPrivateKey = PrivateKey.fromString(privateKey);
-      }
+          // Try raw hex (ED25519)
+          const hexOnly = trimmed.replace(/^0x/i, '');
+          const isHex64 = /^[0-9a-fA-F]{64}$/.test(hexOnly);
+          if (isHex64 && typeof (PrivateKey as any).fromStringED25519 === 'function') {
+            return (PrivateKey as any).fromStringED25519(hexOnly);
+          }
+          if (isHex64) {
+            return PrivateKey.fromString(`0x${hexOnly}`);
+          }
+          throw new Error('Unsupported private key format');
+        }
+      };
+
+      const userPrivateKey: PrivateKey = parseKey(privateKey);
 
       // Create token association transaction
       const transaction = new TokenAssociateTransaction()
@@ -406,7 +423,9 @@ export class HederaService {
     tokenId: string,
   ): Promise<{ isAssociated: boolean; tokenInfo?: any }> {
     try {
-      const accountIdObj = AccountId.fromString(accountId);
+      const accountIdObj = accountId.startsWith('0x')
+        ? AccountId.fromSolidityAddress(accountId)
+        : AccountId.fromString(accountId);
       const balanceQuery = new AccountBalanceQuery().setAccountId(accountIdObj);
       const balance = await balanceQuery.execute(this.client);
 
@@ -861,34 +880,177 @@ export class HederaService {
     maxBorrow: string;
   }> {
     try {
+      this.logger.log(`🔍 Getting farmer position for ${grainType}, address: ${farmerAddress}`);
        const poolAddress = await this.contractService.getPoolAddress(grainType);
-      const pool = new ethers.Contract(poolAddress, [
-        'function borrows(address) external view returns (uint256)',
-        'function collateral(address) external view returns (uint256)',
-        'function baseLTV() external view returns (uint256)',
-        'function priceOracle() external view returns (address)'
-      ], this.contractService['wallet']);
+      this.logger.log(`📍 Pool address for ${grainType}: ${poolAddress}`);
+      
+      // For rice, expected pool: 0x8298E55ddFA89Ec942cE7C7e81DD4BbD0d69f00a
+      // For wheat, expected pool: 0x5CCA4F0F0e4e79b5D3B701B214F502183D3f903a
+      if (grainType.toLowerCase() === 'rice') {
+        this.logger.log(`   ⚠️ Rice pool should be: 0x8298E55ddFA89Ec942cE7C7e81DD4BbD0d69f00a`);
+        this.logger.log(`   ⚠️ Querying pool: ${poolAddress}`);
+        if (poolAddress.toLowerCase() !== '0x8298E55ddFA89Ec942cE7C7e81DD4BbD0d69f00a') {
+          this.logger.warn(`   ⚠️ POOL ADDRESS MISMATCH! Expected rice pool but got different address!`);
+        }
+      }
+      
+      if (!poolAddress || poolAddress === '0x0000000000000000000000000000000000000000') {
+        throw new Error(`Pool address not found for ${grainType}`);
+      }
+      
+      // Convert EVM address to ContractId if needed
+      const contractId = poolAddress.startsWith('0x')
+        ? ContractId.fromSolidityAddress(poolAddress)
+        : ContractId.fromString(poolAddress);
 
-      const [collateral, borrows, baseLTV, oracleAddress] = await Promise.all([
-        pool.collateral(farmerAddress),
-        pool.borrows(farmerAddress),
-        pool.baseLTV(),
-        pool.priceOracle()
-      ]);
+      // Ensure address has 0x prefix (ContractFunctionParameters.addAddress expects it)
+      const normalizedAddress = farmerAddress.startsWith('0x') ? farmerAddress : `0x${farmerAddress}`;
+      this.logger.log(`📞 Calling contract methods using Hedera SDK for ${grainType} pool...`);
+      this.logger.log(`   Farmer address (received): ${farmerAddress}`);
+      this.logger.log(`   Farmer address (normalized): ${normalizedAddress}`);
+      this.logger.log(`   Contract ID: ${contractId.toString()}`);
+      this.logger.log(`   Pool address (original): ${poolAddress}`);
+      
+      // Verify the address format by trying to create an AccountId from it
+      // This helps debug address format issues
+      try {
+        if (normalizedAddress.startsWith('0x')) {
+          // Try to convert EVM address back to Hedera Account ID to verify
+          const testAccountId = AccountId.fromSolidityAddress(normalizedAddress);
+          this.logger.log(`   Address verification: ${normalizedAddress} -> ${testAccountId.toString()}`);
+        }
+      } catch (verifyErr) {
+        this.logger.warn(`   Address verification failed (may be normal for EVM-only addresses):`, verifyErr);
+      }
 
-      const price = await this.contractService.getPrice(oracleAddress);
-      const collateralValueUSD = (BigInt(collateral) * BigInt(price)) / BigInt(10**18);
-      const maxBorrow = (collateralValueUSD * BigInt(baseLTV)) / 10000n;
+      // Call userCollateral(address)
+      const userCollateralParams = new ContractFunctionParameters().addAddress(normalizedAddress);
+      const userCollateralQuery = new ContractCallQuery()
+        .setContractId(contractId)
+        .setGas(100000)
+        .setFunction('userCollateral', userCollateralParams);
+      
+      // Call getCollateralValue(address)
+      const getCollateralValueParams = new ContractFunctionParameters().addAddress(normalizedAddress);
+      const getCollateralValueQuery = new ContractCallQuery()
+        .setContractId(contractId)
+        .setGas(100000)
+        .setFunction('getCollateralValue', getCollateralValueParams);
+      
+      // Call getBorrowValue(address)
+      const getBorrowValueParams = new ContractFunctionParameters().addAddress(normalizedAddress);
+      const getBorrowValueQuery = new ContractCallQuery()
+        .setContractId(contractId)
+        .setGas(100000)
+        .setFunction('getBorrowValue', getBorrowValueParams);
+      
+      // Call loanToValue() - no parameters
+      const loanToValueQuery = new ContractCallQuery()
+        .setContractId(contractId)
+        .setGas(100000)
+        .setFunction('loanToValue', new ContractFunctionParameters());
 
+      // Execute all queries with error handling
+      this.logger.log(`   Executing ContractCallQuery for userCollateral...`);
+      let rawCollateralResponse;
+      try {
+        rawCollateralResponse = await userCollateralQuery.execute(this.client);
+        this.logger.log(`   ✅ userCollateral query succeeded`);
+      } catch (err: any) {
+        this.logger.error(`   ❌ userCollateral query failed:`, err);
+        throw new Error(`Failed to query userCollateral: ${err.message}`);
+      }
+
+      this.logger.log(`   Executing ContractCallQuery for getCollateralValue...`);
+      let collateralValueResponse;
+      try {
+        collateralValueResponse = await getCollateralValueQuery.execute(this.client);
+        this.logger.log(`   ✅ getCollateralValue query succeeded`);
+      } catch (err: any) {
+        this.logger.error(`   ❌ getCollateralValue query failed:`, err);
+        throw new Error(`Failed to query getCollateralValue: ${err.message}`);
+      }
+
+      this.logger.log(`   Executing ContractCallQuery for getBorrowValue...`);
+      let borrowsResponse;
+      try {
+        borrowsResponse = await getBorrowValueQuery.execute(this.client);
+        this.logger.log(`   ✅ getBorrowValue query succeeded`);
+      } catch (err: any) {
+        this.logger.error(`   ❌ getBorrowValue query failed:`, err);
+        throw new Error(`Failed to query getBorrowValue: ${err.message}`);
+      }
+
+      this.logger.log(`   Executing ContractCallQuery for loanToValue...`);
+      let loanToValueResponse;
+      try {
+        loanToValueResponse = await loanToValueQuery.execute(this.client);
+        this.logger.log(`   ✅ loanToValue query succeeded`);
+      } catch (err: any) {
+        this.logger.error(`   ❌ loanToValue query failed:`, err);
+        throw new Error(`Failed to query loanToValue: ${err.message}`);
+      }
+
+      // Log raw response bytes for debugging
+      this.logger.log(`   Raw response bytes length: userCollateral=${rawCollateralResponse.bytes.length}, collateralValue=${collateralValueResponse.bytes.length}, borrows=${borrowsResponse.bytes.length}, loanToValue=${loanToValueResponse.bytes.length}`);
+      
+      // Log first few bytes to verify we're getting data
+      if (rawCollateralResponse.bytes.length > 0) {
+        this.logger.log(`   userCollateral first 32 bytes (hex): ${Buffer.from(rawCollateralResponse.bytes.slice(0, 32)).toString('hex')}`);
+      } else {
+        this.logger.warn(`   ⚠️ userCollateral response is empty!`);
+      }
+
+      // Decode results - all return uint256
+      this.logger.log(`   Decoding responses...`);
+      let rawCollateral: Long;
+      let collateralValueUSD: Long;
+      let borrows: Long;
+      let loanToValue: Long;
+
+      try {
+        rawCollateral = rawCollateralResponse.getUint256(0);
+        collateralValueUSD = collateralValueResponse.getUint256(0);
+        borrows = borrowsResponse.getUint256(0);
+        loanToValue = loanToValueResponse.getUint256(0);
+      } catch (decodeErr: any) {
+        this.logger.error(`   ❌ Failed to decode response:`, decodeErr);
+        this.logger.error(`   Response bytes (hex): userCollateral=${Buffer.from(rawCollateralResponse.bytes).toString('hex')}`);
+        throw new Error(`Failed to decode contract response: ${decodeErr.message}`);
+      }
+
+      this.logger.log(`   Raw response values before conversion:`);
+      this.logger.log(`     rawCollateral: ${rawCollateral.toString()}`);
+      this.logger.log(`     collateralValueUSD: ${collateralValueUSD.toString()}`);
+      this.logger.log(`     borrows: ${borrows.toString()}`);
+      this.logger.log(`     loanToValue: ${loanToValue.toString()}`);
+
+      // Calculate max borrow: (collateralValueUSD * loanToValue) / 1e18
+      // loanToValue is in 18 decimals (e.g., 0.6e18 = 60%)
+      // Convert Long to string without scientific notation for BigInt conversion
+      const collateralValueStr = collateralValueUSD.toString(10);
+      const loanToValueStr = loanToValue.toString(10);
+      const maxBorrow = (BigInt(collateralValueStr) * BigInt(loanToValueStr)) / BigInt(10**18);
+
+      this.logger.log(`✅ Contract call results for ${farmerAddress}:`);
+      this.logger.log(`   Raw collateral: ${rawCollateral.toString()}`);
+      this.logger.log(`   Collateral value (USD): ${collateralValueUSD.toString()}`);
+      this.logger.log(`   Borrows: ${borrows.toString()}`);
+      this.logger.log(`   Loan to Value: ${loanToValue.toString()} (${Number(loanToValue.toString()) / 1e18 * 100}%)`);
+      this.logger.log(`   Max borrow: ${maxBorrow.toString()}`);
+
+      // Convert Long values to strings without scientific notation
       return {
-        collateral: collateral.toString(),
-        borrows: borrows.toString(),
-        collateralValueUSD: collateralValueUSD.toString(),
+        collateral: rawCollateral.toString(10),
+        borrows: borrows.toString(10),
+        collateralValueUSD: collateralValueUSD.toString(10),
         maxBorrow: maxBorrow.toString()
       };
-    } catch (error) {
-      this.logger.error(`Failed to get farmer position for ${farmerAddress}:`, error);
-      throw new Error(`Failed to get farmer position: ${error.message}`);
+    } catch (error: any) {
+      const errorMsg = error?.message || String(error);
+      this.logger.error(`❌ Failed to get farmer position for ${farmerAddress} (${grainType}):`, errorMsg);
+      this.logger.error(`   Full error:`, error);
+      throw new Error(`Failed to get farmer position: ${errorMsg}`);
     }
   }
 

@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
 import { FarmerService } from './farmer.service';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto } from './dto';
+import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto, BorrowFundsDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('farmers')
@@ -55,6 +55,46 @@ export class FarmerController {
       console.error('❌ Failed to create wallet:', error);
       throw error;
     }
+  }
+
+  @Post('collateral/deposit')
+  @UseGuards(JwtAuthGuard)
+  async depositCollateral(
+    @Request() req,
+    @Body() body: { grainType: string; amount: number },
+  ) {
+    const farmerId = req.user.sub as number;
+    const depositDto: DepositCollateralDto = {
+      farmerId,
+      cropType: body.grainType,
+      amount: body.amount,
+    };
+    return this.farmerService.depositCollateral(depositDto);
+  }
+
+  @Get('borrow/allowance/:grainType')
+  @UseGuards(JwtAuthGuard)
+  async getBorrowAllowance(
+    @Request() req,
+    @Param('grainType') grainType: string,
+  ) {
+    const farmerId = req.user.sub as number;
+    return this.farmerService.getBorrowAllowance(farmerId, grainType);
+  }
+
+  @Post('borrow/funds')
+  @UseGuards(JwtAuthGuard)
+  async borrowFunds(
+    @Request() req,
+    @Body() body: { grainType: string; amount: number },
+  ) {
+    const farmerId = req.user.sub as number;
+    const borrowDto: BorrowFundsDto = {
+      farmerId,
+      cropType: body.grainType,
+      amount: body.amount,
+    };
+    return this.farmerService.borrowFunds(borrowDto);
   }
 
   @Post('fix-wallet-by-email')

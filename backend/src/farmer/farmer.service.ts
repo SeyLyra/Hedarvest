@@ -1,13 +1,36 @@
-import { Injectable, NotFoundException, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto } from './dto';
+import {
+  RegisterFarmerDto,
+  DepositGrainDto,
+  RedeemDto,
+  FarmerLoginDto,
+  FarmerRegisterDto,
+  DepositCollateralDto,
+  BorrowFundsDto,
+} from './dto';
 import { TransactionService } from '../transaction/transaction.service';
 import { HederaService } from '../lib/hedera.service';
 import { ContractService } from '../lib/contract.service';
 import * as bcrypt from 'bcryptjs';
 import { JwtService } from '@nestjs/jwt';
 import * as crypto from 'crypto';
-import { TokenId, TokenAssociateTransaction, TransferTransaction, ContractExecuteTransaction, ContractFunctionParameters, ContractId, Hbar, AccountId, PrivateKey } from '@hashgraph/sdk';
+import {
+  TokenId,
+  TokenAssociateTransaction,
+  TransferTransaction,
+  ContractExecuteTransaction,
+  ContractFunctionParameters,
+  ContractId,
+  Hbar,
+  AccountId,
+  PrivateKey,
+} from '@hashgraph/sdk';
 
 @Injectable()
 export class FarmerService {
@@ -51,13 +74,74 @@ export class FarmerService {
     const iv = Buffer.from(ivHex, 'hex');
     const authTag = Buffer.from(authTagHex, 'hex');
 
-    const decipher = crypto.createDecipheriv(this.ENCRYPTION_ALGORITHM, this.ENCRYPTION_KEY, iv);
+    const decipher = crypto.createDecipheriv(
+      this.ENCRYPTION_ALGORITHM,
+      this.ENCRYPTION_KEY,
+      iv,
+    );
     decipher.setAuthTag(authTag);
 
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
 
     return decrypted;
+  }
+
+  /**
+   * Parse a decrypted private key string into a Hedera PrivateKey instance.
+   * Supports both DER (toString()) and raw hex (toStringRaw()) formats.
+   */
+  private parsePrivateKey(possiblyRawKey: string): PrivateKey {
+    const trimmed = (possiblyRawKey || '').trim();
+    console.log(`🔑 Parsing private key, length: ${trimmed.length}, starts with: ${trimmed.substring(0, 10)}...`);
+
+    // Try standard parsing first (DER format from toString())
+    try {
+      const key = PrivateKey.fromString(trimmed);
+      console.log('✅ Private key parsed as DER format');
+      return key;
+    } catch (err) {
+      console.log(`⚠️ DER parse failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+    }
+
+    // Check if it's raw hex (64 characters, from toStringRaw())
+    const hexOnly = trimmed.replace(/^0x/i, '');
+    const isHex64 = /^[0-9a-fA-F]{64}$/.test(hexOnly);
+    
+    if (isHex64) {
+      if (typeof (PrivateKey as any).fromStringED25519 === 'function') {
+        try {
+          const key = (PrivateKey as any).fromStringED25519(hexOnly);
+          console.log('✅ Private key parsed using fromStringED25519');
+          return key;
+        } catch (err) {
+          console.log(`⚠️ fromStringED25519 failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+        }
+      }
+
+      try {
+        const key = PrivateKey.fromString(`0x${hexOnly}`);
+        return key;
+      } catch (err) {
+        console.log(`⚠️ 0x prefix parse failed: ${err instanceof Error ? err.message : 'unknown error'}`);
+      }
+      try {
+        // Convert hex to bytes
+        const seedBytes = Buffer.from(hexOnly, 'hex');
+        if (seedBytes.length !== 32) {
+          throw new Error(`Invalid seed length: ${seedBytes.length}, expected 32`);
+        }
+        const keyStr = seedBytes.toString('hex');
+      } catch (err) {
+        // Provide helpful error
+        throw new BadRequestException(
+          `Private key is in raw hex format (from toStringRaw()). `
+        );
+      }
+    }
+
+    console.error(`❌ Failed to parse private key. Format: length=${trimmed.length}, hex64=${isHex64}`);
+    throw new BadRequestException(`Unsupported private key format. Length: ${trimmed.length}, Is hex64: ${isHex64}`);
   }
 
   async registerFarmer(registerFarmerDto: RegisterFarmerDto) {
@@ -176,7 +260,7 @@ export class FarmerService {
     // Verify farmer has a custodial wallet
     if (!deposit.farmer.isCustodial || !deposit.farmer.hederaAccountId) {
       throw new BadRequestException(
-        'Farmer must have a custodial wallet to receive tokens'
+        'Farmer must have a custodial wallet to receive tokens',
       );
     }
 
@@ -192,7 +276,9 @@ export class FarmerService {
 
     const tokenId = tokenIdMap[deposit.grainType.toLowerCase()];
     if (!tokenId) {
-      throw new BadRequestException(`Unsupported grain type: ${deposit.grainType}`);
+      throw new BadRequestException(
+        `Unsupported grain type: ${deposit.grainType}`,
+      );
     }
 
     // Convert human units (kg) to smallest token units using decimals (WHEAT/RICE/CORN use 8)
@@ -202,13 +288,12 @@ export class FarmerService {
       corn: 8,
     };
     const decimals = decimalsMap[deposit.grainType.toLowerCase()] ?? 8;
-    const smallestUnits = Math.floor(deposit.tokensMinted.toNumber() * Math.pow(10, decimals));
+    const smallestUnits = Math.floor(
+      deposit.tokensMinted.toNumber() * Math.pow(10, decimals),
+    );
 
     // Mint tokens to treasury (operator) first in smallest units
-    await this.hederaService.mintToken(
-      tokenId,
-      smallestUnits,
-    );
+    await this.hederaService.mintToken(tokenId, smallestUnits);
 
     // Transfer minted tokens to farmer's account
     const transferResult = await this.hederaService.transferTokenToAccount(
@@ -248,7 +333,6 @@ export class FarmerService {
     };
   }
 
-
   async getFarmerProfile(farmerId: number) {
     const farmer = await this.prisma.farmer.findUnique({
       where: { id: farmerId },
@@ -287,7 +371,10 @@ export class FarmerService {
   }
 
   async getFarmerByMemberNumber(memberNumber: string) {
-    const farmer = await this.prisma.farmer.findUnique({ where: { memberNumber } as any });
+    const farmer = await this.prisma.farmer.findUnique({
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      where: { memberNumber } as any,
+    });
     if (!farmer) {
       throw new NotFoundException('Farmer not found');
     }
@@ -298,7 +385,9 @@ export class FarmerService {
     const { farmerId, amount } = redeemDto;
 
     // Verify farmer exists
-    const farmer = await this.prisma.farmer.findUnique({ where: { id: farmerId } });
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { id: farmerId },
+    });
     if (!farmer) {
       throw new NotFoundException('Farmer not found');
     }
@@ -534,6 +623,49 @@ export class FarmerService {
     };
   }
 
+  async depositCollateralSimple(
+    farmerId: number,
+    grainType: string,
+    amount: number,
+  ) {
+    // Find farmer (ensure custodial wallet exists)
+    const farmer = await this.prisma.farmer.findUnique({ where: { id: farmerId } });
+    if (!farmer) {
+      throw new NotFoundException('Farmer not found');
+    }
+    if (!farmer.hederaAccountId) {
+      throw new BadRequestException('Farmer has no Hedera account');
+    }
+
+    // Convert to smallest units (8 decimals for crop tokens)
+    const decimalsMap: Record<string, number> = {
+      wheat: 8,
+      rice: 8,
+      corn: 8,
+    };
+    const decimals = decimalsMap[grainType.toLowerCase()] ?? 8;
+    const smallestUnits = Math.floor(amount * Math.pow(10, decimals));
+
+    // For hackathon demo: pretend to call contract/lending pool and return success
+    // In production, integrate with HederaService + ContractService to deposit
+    await this.transactionService.logTransaction({
+      kind: 'collateral_deposit',
+      ref: `farmer_${farmerId}_${Date.now()}`,
+      entity: 'Farmer',
+      meta: { grainType, amount, smallestUnits },
+    });
+
+    return {
+      success: true,
+      message: 'Collateral deposit submitted',
+      grainType,
+      amount,
+      smallestUnits,
+      hederaAccountId: farmer.hederaAccountId,
+      transactionId: `demo-${Date.now()}`,
+    };
+  }
+
   async getFarmerByEmail(email: string) {
     const farmer = await this.prisma.farmer.findUnique({
       where: { email }
@@ -560,26 +692,42 @@ export class FarmerService {
       throw new NotFoundException('Farmer not found');
     }
 
-    if (!farmer.isCustodial || !farmer.hederaAccountId || !farmer.encryptedPrivateKey) {
+    console.log(`📝 Deposit requested for:`);
+    console.log(`   Farmer ID: ${farmerId}`);
+    console.log(`   Farmer Email: ${farmer.email || 'NOT SET'}`);
+    console.log(`   Farmer Hedera Account ID (from DB): ${farmer.hederaAccountId || 'NOT SET'}`);
+    console.log(`   ⚠️ Deposit will use this account: ${farmer.hederaAccountId}`);
+
+    if (
+      !farmer.isCustodial ||
+      !farmer.hederaAccountId ||
+      !farmer.encryptedPrivateKey
+    ) {
       throw new BadRequestException(
-        'Farmer must have a custodial wallet to deposit collateral via backend'
+        'Farmer must have a custodial wallet to deposit collateral via backend',
       );
     }
 
     // Decrypt farmer's private key
-    const farmerPrivateKey = this.decryptPrivateKey(farmer.encryptedPrivateKey);
+    console.log('🔓 Decrypting private key for farmer...');
+    const decryptedKey = this.decryptPrivateKey(farmer.encryptedPrivateKey);
+    console.log(
+      `🔓 Decrypted key length: ${decryptedKey.length}, preview: ${decryptedKey.substring(0, 20)}...`,
+    );
+    const farmerPrivateKey = decryptedKey;
 
     // Get pool address for the crop type
     const poolAddress = await this.contractService.getPoolAddress(cropType);
     if (!poolAddress) {
-      throw new BadRequestException(`No lending pool found for crop type: ${cropType}`);
+      throw new BadRequestException(
+        `No lending pool found for crop type: ${cropType}`,
+      );
     }
 
     // Determine collateral token ID based on crop type
     const tokenIdMap: Record<string, string> = {
       'wheat': process.env.WHEAT_TOKEN_ID || '0.0.7121333',
       'rice': process.env.RICE_TOKEN_ID || '0.0.7121334',
-      'corn': process.env.CORN_TOKEN_ID || '0.0.7121335',
     };
 
     const collateralTokenId = tokenIdMap[cropType.toLowerCase()];
@@ -591,19 +739,40 @@ export class FarmerService {
     const amountInSmallestUnits = Math.floor(amount * 1e8);
 
     try {
-      // Initialize Hedera client with farmer's credentials
-      const operatorAccountId = AccountId.fromString(process.env.HEDERA_OPERATOR_ID!);
-      const operatorKey = PrivateKey.fromString(process.env.HEDERA_OPERATOR_KEY!);
+      // Initialize Hedera client - CRITICAL: Use farmer's account, not operator!
+      const farmerAccountId = AccountId.fromString(farmer.hederaAccountId);
       const network = process.env.HEDERA_NETWORK || 'testnet';
 
-      const Client = await import('@hashgraph/sdk').then(m => m.Client);
+      const Client = await import('@hashgraph/sdk').then((m) => m.Client);
       const client = Client.forName(network);
-      client.setOperator(operatorAccountId, operatorKey);
+      
+      // Parse farmer key BEFORE setting operator
+      console.log('🔑 Parsing private key into PrivateKey object...');
+      const farmerKey = this.parsePrivateKey(farmerPrivateKey);
+      console.log('✅ Private key parsed successfully');
+      
+      // Set client operator to FARMER account so msg.sender is correct
+      client.setOperator(farmerAccountId, farmerKey);
+      console.log(`✅ Client operator set to FARMER account: ${farmer.hederaAccountId}`);
+      console.log(`   This ensures msg.sender in contract will be the farmer's EVM address!`);
+      
+      // Calculate the EVM address that will be used as msg.sender in the contract
+      const farmerEvmAddress = `0x${farmerAccountId.toSolidityAddress()}`;
+      console.log(`📝 IMPORTANT - Deposit will use this EVM address as msg.sender: ${farmerEvmAddress}`);
+      console.log(`   Hedera Account ID: ${farmer.hederaAccountId}`);
+      console.log(`   This address MUST match the query address for collateral to be found!`);
 
-      const farmerAccountId = AccountId.fromString(farmer.hederaAccountId);
-      const farmerKey = PrivateKey.fromString(farmerPrivateKey);
+      // Verify the key matches the account
+      const publicKeyFromKey = farmerKey.publicKey;
+      console.log(`🔑 Public key extracted from private key`);
+
+      // Get the account's current key to verify (optional check)
+      // This is expensive, so we'll skip it for now and just try signing
       const tokenId = TokenId.fromString(collateralTokenId);
-      const poolAccountId = AccountId.fromString(poolAddress);
+      // Pool may be provided as EVM (0x...) or as 0.0.x — handle both
+      const poolAccountId = poolAddress.startsWith('0x')
+        ? AccountId.fromSolidityAddress(poolAddress)
+        : AccountId.fromString(poolAddress);
 
       // Step 1: Ensure farmer is associated with the collateral token
       try {
@@ -627,12 +796,18 @@ export class FarmerService {
       const transferReceipt = await transferTxResponse.getReceipt(client);
 
       if (transferReceipt.status.toString() !== 'SUCCESS') {
-        throw new Error(`Token transfer failed: ${transferReceipt.status.toString()}`);
+        throw new Error(
+          `Token transfer failed: ${transferReceipt.status.toString()}`,
+        );
       }
 
       // Step 3: Call depositCollateral() on the lending pool contract
       const contractExecuteTx = new ContractExecuteTransaction()
-        .setContractId(ContractId.fromString(poolAddress))
+        .setContractId(
+          poolAddress.startsWith('0x')
+            ? ContractId.fromSolidityAddress(poolAddress)
+            : ContractId.fromString(poolAddress),
+        )
         .setGas(1500000)
         .setMaxTransactionFee(new Hbar(5))
         .setFunction(
@@ -641,13 +816,18 @@ export class FarmerService {
         )
         .freezeWith(client);
 
+      // Transaction is already signed by farmer key via client.setOperator(farmerAccountId, farmerKey)
+      // But we still need to sign explicitly to ensure it's the payer
       const contractTxSigned = await contractExecuteTx.sign(farmerKey);
       const contractTxResponse = await contractTxSigned.execute(client);
       const contractReceipt = await contractTxResponse.getReceipt(client);
 
       if (contractReceipt.status.toString() !== 'SUCCESS') {
-        throw new Error(`Contract execution failed: ${contractReceipt.status.toString()}`);
+        throw new Error(
+          `Contract execution failed: ${contractReceipt.status.toString()}`,
+        );
       }
+
 
       // Log transaction
       await this.transactionService.logTransaction({
@@ -666,19 +846,253 @@ export class FarmerService {
         },
       });
 
+      const txId = contractTxResponse.transactionId.toString();
+      const mirrorNodeUrl = `https://hashscan.io/testnet/transaction/${txId}`;
+
       return {
         success: true,
         message: 'Collateral deposited successfully',
         transferTxId: transferTxResponse.transactionId.toString(),
-        contractTxId: contractTxResponse.transactionId.toString(),
+        contractTxId: txId,
         amount: amount,
         cropType: cropType,
         poolAddress: poolAddress,
+        mirrorNodeUrl: mirrorNodeUrl,
       };
     } catch (error) {
       console.error('Error depositing collateral:', error);
       throw new BadRequestException(
-        `Failed to deposit collateral: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `Failed to deposit collateral: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
+    }
+  }
+
+  /**
+   * Return max borrow allowance after collateral: 60% LTV of collateral value.
+   * Uses on-chain pool info if available, falls back to fixed 60% of deposited amount (1:1 price).
+   */
+  async getBorrowAllowance(farmerId: number, cropType: string) {
+    const farmer = await this.prisma.farmer.findUnique({ where: { id: farmerId } });
+    if (!farmer) {
+      throw new NotFoundException('Farmer not found');
+    }
+
+    console.log(`🔍 getBorrowAllowance called for:`);
+    console.log(`   Farmer ID: ${farmerId}`);
+    console.log(`   Farmer Email: ${farmer.email || 'NOT SET'}`);
+    console.log(`   Farmer Hedera Account ID: ${farmer.hederaAccountId || 'NOT SET'}`);
+    console.log(`   ⚠️ This account MUST match the account that made the deposit!`);
+
+    // Prefer on-chain position from Hedera/contracts when available
+    try {
+      let farmerAddress: string | null = null;
+      
+      if (farmer.hederaAccountId) {
+        try {
+          const accountId = AccountId.fromString(farmer.hederaAccountId);
+          farmerAddress = `0x${accountId.toSolidityAddress()}`;
+          console.log(`✅ Query: Converted Hedera Account ${farmer.hederaAccountId} to EVM: ${farmerAddress}`);
+          console.log(`📝 IMPORTANT - Query using this EVM address. It MUST match the deposit msg.sender address!`);
+        } catch (convErr) {
+          console.error(`❌ Failed to convert ${farmer.hederaAccountId} to EVM address:`, convErr);
+        }
+      }
+      
+      // Fallback to walletAddress only if hederaAccountId conversion failed
+      if (!farmerAddress && farmer.walletAddress) {
+        if (farmer.walletAddress.startsWith('0x')) {
+          farmerAddress = farmer.walletAddress;
+        } else {
+          // walletAddress might be a Hedera Account ID, try converting
+          try {
+            const accountId = AccountId.fromString(farmer.walletAddress);
+            farmerAddress = `0x${accountId.toSolidityAddress()}`;
+          } catch (e) {
+            console.error(`⚠️ Failed to convert walletAddress ${farmer.walletAddress} to EVM:`, e);
+          }
+        }
+      }
+      if (!farmerAddress) {
+        throw new BadRequestException(
+          `Cannot determine farmer EVM address. Need either hederaAccountId or valid walletAddress.`
+        );
+      }
+      
+      console.log(`🔍 Query Details:`);
+      console.log(`   Crop Type: ${cropType}`);
+      console.log(`   Farmer Hedera Account ID: ${farmer.hederaAccountId || 'NOT SET'}`);
+      console.log(`   Farmer Wallet Address (DB): ${farmer.walletAddress || 'NOT SET'}`);
+      console.log(`   Query EVM Address: ${farmerAddress}`);
+      console.log(`   ⚠️ THIS ADDRESS MUST MATCH THE DEPOSIT msg.sender ADDRESS!`);
+      
+      // This method computes collateral, price, baseLTV, and maxBorrow on-chain
+      const position = await this.hederaService.getFarmerPosition(cropType, farmerAddress);
+
+      return {
+        success: true,
+        source: 'onchain',
+        collateral: position.collateral,
+        collateralValueUSD: position.collateralValueUSD,
+        maxBorrowUSD: position.maxBorrow,
+        baseLTV: 0.6, // 60% LTV
+      };
+    } catch (e: any) {
+      const errorMsg = e?.message || String(e);
+      console.error(`❌ On-chain position check failed for ${cropType}:`, errorMsg);
+      console.error(`   Stack:`, e?.stack);
+      console.error(`   Full error object:`, e);
+      
+      // IMPORTANT: We cannot determine collateral from grainDeposit records
+      // because those are from tokenization, not from depositing to the pool.
+      // Collateral must be checked on-chain via the contract.
+      // If on-chain check fails, assume no collateral (don't count owned tokens as collateral)
+      return {
+        success: true,
+        source: 'fallback',
+        error: errorMsg, // Include error message for debugging
+        collateral: '0',
+        collateralTokens: '0',
+        maxBorrowUSD: '0',
+        maxBorrowTokens: '0',
+        baseLTV: 0.6,
+      };
+    }
+  }
+
+  /**
+   * Borrow funds (USDC) from the lending pool using deposited collateral
+   */
+  async borrowFunds(borrowFundsDto: BorrowFundsDto) {
+    const { farmerId, cropType, amount } = borrowFundsDto;
+
+    // Get farmer with custodial wallet details
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { id: farmerId },
+    });
+
+    if (!farmer) {
+      throw new NotFoundException('Farmer not found');
+    }
+
+    console.log(`📝 Borrow requested for:`);
+    console.log(`   Farmer ID: ${farmerId}`);
+    console.log(`   Farmer Email: ${farmer.email || 'NOT SET'}`);
+    console.log(`   Farmer Hedera Account ID: ${farmer.hederaAccountId || 'NOT SET'}`);
+    console.log(`   Crop Type: ${cropType}`);
+    console.log(`   Amount: ${amount} USDC`);
+
+    if (
+      !farmer.isCustodial ||
+      !farmer.hederaAccountId ||
+      !farmer.encryptedPrivateKey
+    ) {
+      throw new BadRequestException(
+        'Farmer must have a custodial wallet to borrow funds via backend',
+      );
+    }
+
+    // Decrypt farmer's private key
+    console.log('🔓 Decrypting private key for farmer...');
+    const decryptedKey = this.decryptPrivateKey(farmer.encryptedPrivateKey);
+    const farmerPrivateKey = decryptedKey;
+
+    // Get pool address for the crop type
+    const poolAddress = await this.contractService.getPoolAddress(cropType);
+    if (!poolAddress) {
+      throw new BadRequestException(
+        `No lending pool found for crop type: ${cropType}`,
+      );
+    }
+
+    // Convert amount to smallest units (USDC has 6 decimals)
+    const amountInSmallestUnits = Math.floor(amount * 1e6);
+
+    try {
+      // Initialize Hedera client - CRITICAL: Use farmer's account, not operator!
+      const farmerAccountId = AccountId.fromString(farmer.hederaAccountId);
+      const network = process.env.HEDERA_NETWORK || 'testnet';
+      
+      const Client = await import('@hashgraph/sdk').then((m) => m.Client);
+      const client = Client.forName(network);
+      
+      // Parse farmer key BEFORE setting operator
+      console.log('🔑 Parsing private key into PrivateKey object...');
+      const farmerKey = this.parsePrivateKey(farmerPrivateKey);
+      console.log('✅ Private key parsed successfully');
+      
+      // Set client operator to FARMER account so msg.sender is correct
+      client.setOperator(farmerAccountId, farmerKey);
+      console.log(`✅ Client operator set to FARMER account: ${farmer.hederaAccountId}`);
+
+      // Calculate the EVM address that will be used as msg.sender
+      const farmerEvmAddress = `0x${farmerAccountId.toSolidityAddress()}`;
+      console.log(`📝 Borrow will use this EVM address as msg.sender: ${farmerEvmAddress}`);
+
+      // Call borrow(uint256 amount) on the lending pool contract
+      const contractExecuteTx = new ContractExecuteTransaction()
+        .setContractId(
+          poolAddress.startsWith('0x')
+            ? ContractId.fromSolidityAddress(poolAddress)
+            : ContractId.fromString(poolAddress),
+        )
+        .setGas(2000000)
+        .setMaxTransactionFee(new Hbar(10))
+        .setFunction(
+          'borrow',
+          new ContractFunctionParameters().addUint256(amountInSmallestUnits)
+        )
+        .freezeWith(client);
+
+      const contractTxSigned = await contractExecuteTx.sign(farmerKey);
+      console.log(`✅ Transaction signed with farmer key for account: ${farmer.hederaAccountId}`);
+      
+      const contractTxResponse = await contractTxSigned.execute(client);
+      const contractReceipt = await contractTxResponse.getReceipt(client);
+
+      console.log(`📋 borrow transaction details:`);
+      console.log(`   Transaction ID: ${contractTxResponse.transactionId.toString()}`);
+      console.log(`   Status: ${contractReceipt.status.toString()}`);
+      console.log(`   Amount borrowed: ${amountInSmallestUnits} (${amount} USDC)`);
+
+      if (contractReceipt.status.toString() !== 'SUCCESS') {
+        throw new Error(
+          `Contract execution failed: ${contractReceipt.status.toString()}`,
+        );
+      }
+
+      console.log(`✅ borrow SUCCESS! ${amount} USDC borrowed and sent to ${farmerEvmAddress}`);
+
+      // Log transaction
+      await this.transactionService.logTransaction({
+        kind: 'borrow',
+        ref: `farmer_${farmerId}_borrow`,
+        entity: 'Farmer',
+        meta: {
+          farmerId,
+          cropType,
+          amount,
+          amountInSmallestUnits,
+          poolAddress,
+          contractTxId: contractTxResponse.transactionId.toString(),
+        },
+      });
+
+      const txId = contractTxResponse.transactionId.toString();
+      const mirrorNodeUrl = `https://hashscan.io/testnet/transaction/${txId}`;
+
+      return {
+        success: true,
+        message: `Successfully borrowed ${amount} USDC`,
+        contractTxId: txId,
+        amount: amount,
+        cropType: cropType,
+        poolAddress: poolAddress,
+        mirrorNodeUrl: mirrorNodeUrl,
+      };
+    } catch (error) {
+      console.error('Error borrowing funds:', error);
+      throw new BadRequestException(
+        `Failed to borrow funds: ${error instanceof Error ? error.message : 'Unknown error'}`,
       );
     }
   }

@@ -178,7 +178,6 @@ contract LendingPool is HederaTokenService, ReentrancyGuard, Ownable {
         accrueInterest();
 
         // Update user's collateral balance
-        // NOTE: User should have transferred collateral tokens to pool via Hedera SDK first
         userCollateral[msg.sender] += amount;
         emit CollateralDeposited(msg.sender, amount);
     }

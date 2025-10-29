@@ -85,6 +85,7 @@ import RegisterCrop from "./RegisterCrop";
 import FindWarehouse from "./FindWarehouse";
 import ActivityFeed from "./ActivityFeed";
 import UserProfile from "./UserProfile";
+import { toast } from "sonner";
 
 interface FarmerDashboardProps {
   farmerName: string;
@@ -102,6 +103,15 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [deliveryWorkflow, setDeliveryWorkflow] = useState<"findWarehouse" | "registerCrop" | null>(null);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
+  const [selectedPoolForDeposit, setSelectedPoolForDeposit] = useState<{ id: number; grainType: string } | null>(null);
+  const [depositAmount, setDepositAmount] = useState<string>("");
+  const [isDepositing, setIsDepositing] = useState(false);
+  const [isRefreshingForDeposit, setIsRefreshingForDeposit] = useState(false);
+  
+  // Borrow form state
+  const [selectedPoolForBorrow, setSelectedPoolForBorrow] = useState<{ id: number; grainType: string; maxBorrow?: string } | null>(null);
+  const [borrowAmount, setBorrowAmount] = useState<string>("");
+  const [isBorrowing, setIsBorrowing] = useState(false);
 
   // Live token balances
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
@@ -160,6 +170,39 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
     fetchBalances();
   }, [hederaAccountId]);
 
+  const refreshBalances = async (account: string) => {
+    try {
+      setIsRefreshingForDeposit(true);
+      console.log('🔄 Refreshing balances for deposit form, account:', account);
+      
+      const [wheatRes, riceRes] = await Promise.all([
+        fetch(`/api/faucet/balance/${account}?tokenType=wheat`, { cache: 'no-store' }),
+        fetch(`/api/faucet/balance/${account}?tokenType=rice`, { cache: 'no-store' }),
+      ]);
+      
+      const [wheatJson, riceJson] = await Promise.all([wheatRes.json(), riceRes.json()]);
+      
+      console.log('🌾 Refresh - Wheat balance response:', wheatJson);
+      console.log('🌾 Refresh - Rice balance response:', riceJson);
+      
+      if (wheatRes.ok) {
+        setWheatBalance(wheatJson.balance || '0');
+        setWheatAssociated(wheatJson.isAssociated);
+        console.log('✅ Refresh - Wheat balance set to:', wheatJson.balance);
+      }
+      
+      if (riceRes.ok) {
+        setRiceBalance(riceJson.balance || '0');
+        setRiceAssociated(riceJson.isAssociated);
+        console.log('✅ Refresh - Rice balance set to:', riceJson.balance);
+      }
+    } catch (e) {
+      console.log('❌ Error refreshing balances:', e);
+    } finally {
+      setIsRefreshingForDeposit(false);
+    }
+  };
+
   // Mock data (non-balance items)
   const farmerStats = {
     totalTokenizedCrops: 12,
@@ -175,42 +218,6 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
     isCustodial: true,
     memberNumber: `MBR-${Date.now().toString().slice(-8)}`
   };
-
-  const cropPools = [
-    {
-      id: "rice-pool",
-      name: "RICE Pool",
-      cropType: "Rice",
-      totalLiquidity: 150000,
-      apy: 8.5,
-      utilization: 65,
-      available: 52500,
-      icon: "🌾",
-      color: "green"
-    },
-    {
-      id: "corn-pool",
-      name: "CORN Pool", 
-      cropType: "Corn",
-      totalLiquidity: 200000,
-      apy: 7.2,
-      utilization: 78,
-      available: 44000,
-      icon: "🌽",
-      color: "yellow"
-    },
-    {
-      id: "wheat-pool",
-      name: "WHEAT Pool",
-      cropType: "Wheat", 
-      totalLiquidity: 120000,
-      apy: 9.1,
-      utilization: 45,
-      available: 66000,
-      icon: "🌾",
-      color: "amber"
-    }
-  ];
 
   const recentTransactions = [
     {
@@ -766,65 +773,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
     );
   };
 
-  const renderCropPools = () => (
-    <div className="space-y-6">
-      <div className="text-center py-6">
-        <h2 className="text-3xl font-bold text-foreground mb-2">Crop Pools</h2>
-        <p className="text-lg text-muted-foreground">
-          Discover available liquidity pools for your crop tokens
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {cropPools.map((pool) => (
-          <Card key={pool.id} className="hover:shadow-lg transition-all duration-200">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-3">
-                  <div className="text-2xl">{pool.icon}</div>
-                  <div>
-                    <CardTitle className="text-lg">{pool.name}</CardTitle>
-                    <p className="text-sm text-muted-foreground">{pool.cropType} Pool</p>
-                  </div>
-                </div>
-                <Badge variant="outline" className="text-green-600 border-green-200">
-                  {pool.apy}% APY
-                </Badge>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Total Liquidity</span>
-                  <span className="font-medium">${pool.totalLiquidity.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Available</span>
-                  <span className="font-medium text-green-600">${pool.available.toLocaleString()}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Utilization</span>
-                  <span className="font-medium">{pool.utilization}%</span>
-                </div>
-              </div>
-              
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-green-500 to-blue-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${pool.utilization}%` }}
-                />
-              </div>
-              
-              <Button className="w-full" onClick={() => handleDefiStep("deposit-collateral")}>
-                <Lock className="h-4 w-4 mr-2" />
-                Deposit Collateral
-              </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-    </div>
-  );
+  // removed mock crop pools section
 
   const renderMobileMenu = () => (
     <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
@@ -1105,26 +1054,468 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
               {!defiStep || defiStep === "crop-pools" ? (
                 <div className="space-y-6">
                   <CropPools
-                    onDeposit={(poolId) => {
-                      console.log("Deposit to pool:", poolId);
-                      setDefiStep("deposit-collateral");
+                    onDeposit={async (poolId) => {
+                      try {
+                        // Fetch pool details to get grainType
+                        const response = await fetch('/api/pools/list');
+                        const data = await response.json();
+                        const pools = data.success ? data.data : [];
+                        const pool = pools.find((p: any) => p.id.toString() === poolId.toString()) || 
+                                    { id: parseInt(poolId), grainType: 'WHEAT' }; // fallback
+                        setSelectedPoolForDeposit({ id: pool.id, grainType: String(pool.grainType).toUpperCase() });
+                        
+                        // Ensure balances are fresh when entering deposit step - use same logic as useEffect
+                        const acct = hederaAccountId || (typeof window !== 'undefined' ? localStorage.getItem('farmerAccountId') || '' : '');
+                        console.log('🔍 Deposit form - Using account:', acct);
+                        if (acct) {
+                          await refreshBalances(acct);
+                        }
+                        
+                        setDefiStep("deposit-collateral");
+                      } catch (error) {
+                        console.error("Failed to fetch pool:", error);
+                        // Use fallback
+                        setSelectedPoolForDeposit({ id: parseInt(poolId), grainType: 'WHEAT' });
+                        setDefiStep("deposit-collateral");
+                      }
                     }}
                     onViewDetails={(poolId) => console.log("View details for pool:", poolId)}
-                    onBorrow={(poolId) => {
-                      console.log("Borrow from pool:", poolId);
-                      setDefiStep("borrow-funds");
+                    onBorrow={async (poolId) => {
+                      try {
+                        const response = await fetch('/api/pools/list');
+                        const data = await response.json();
+                        const pools = data.success ? data.data : [];
+                        const pool = pools.find((p: any) => p.id.toString() === poolId.toString()) ||
+                                    { id: parseInt(poolId), grainType: 'WHEAT' };
+                        
+                        // Fetch max borrow allowance
+                        const token = localStorage.getItem('farmerToken');
+                        if (token) {
+                          const allowanceRes = await fetch(`/api/farmers/borrow/allowance/${pool.grainType.toLowerCase()}`, {
+                            headers: { 'Authorization': `Bearer ${token}` },
+                            cache: 'no-store',
+                          });
+                          const allowanceJson = await allowanceRes.json();
+                          const maxBorrow = allowanceJson.maxBorrowUSD || '0';
+                          setSelectedPoolForBorrow({ 
+                            id: pool.id, 
+                            grainType: pool.grainType.toUpperCase(),
+                            maxBorrow: maxBorrow
+                          });
+                        } else {
+                          setSelectedPoolForBorrow({ 
+                            id: pool.id, 
+                            grainType: pool.grainType.toUpperCase()
+                          });
+                        }
+                        setDefiStep("borrow-funds");
+                      } catch (error) {
+                        console.error("Failed to fetch pool:", error);
+                        setSelectedPoolForBorrow({ id: parseInt(poolId), grainType: 'WHEAT' });
+                        setDefiStep("borrow-funds");
+                      }
                     }}
                   />
                 </div>
               ) : defiStep === "deposit-collateral" ? (
-                <div className="p-8 text-center">
-                  <h3 className="text-lg font-semibold mb-2">Deposit Collateral</h3>
-                  <p className="text-gray-600">Deposit collateral form coming soon...</p>
+                <div className="p-8 max-w-2xl mx-auto">
+                  {/* Back Button */}
+                  <div className="mb-6">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setDefiStep("crop-pools");
+                        setSelectedPoolForDeposit(null);
+                        setDepositAmount("");
+                      }}
+                      className="mb-4"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Pools
+                    </Button>
+                  </div>
+
+                  {/* Deposit Form */}
+                  <Card className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900/20 dark:to-gray-900/20 border-slate-200 dark:border-slate-700">
+                    <CardHeader>
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-3 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full">
+                          <Lock className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-2xl text-slate-900 dark:text-slate-100">Deposit Collateral</CardTitle>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                            Deposit {selectedPoolForDeposit?.grainType || 'crop'} tokens as collateral to borrow funds
+                          </p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Current Balance */}
+                      <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-lg p-4">
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            <p className="text-sm text-green-700 dark:text-green-300">Your {selectedPoolForDeposit?.grainType || 'crop'} Balance</p>
+                            {isLoadingBalances || isRefreshingForDeposit ? (
+                              <div className="flex items-center space-x-2 text-green-700 dark:text-green-300 mt-1">
+                                <RefreshCw className="h-4 w-4 animate-spin" />
+                                <span>Loading balance...</span>
+                              </div>
+                            ) : (
+                              <>
+                                <p className="text-2xl font-bold text-green-900 dark:text-green-100 mt-1">
+                                  {(selectedPoolForDeposit?.grainType || '').toUpperCase() === 'WHEAT' ? wheatBalance : 
+                                   (selectedPoolForDeposit?.grainType || '').toUpperCase() === 'RICE' ? riceBalance : '0'}
+                                </p>
+                                <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                  (Same as shown in "My Crops" section)
+                                </p>
+                              </>
+                            )}
+                            <p className="text-sm text-green-600 dark:text-green-400 mt-1">
+                              {selectedPoolForDeposit?.grainType || 'CROP'} Tokens
+                            </p>
+                            {/* Manual refresh button */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="mt-2 h-7 text-xs"
+                              onClick={async () => {
+                                const acct = hederaAccountId || (typeof window !== 'undefined' ? localStorage.getItem('farmerAccountId') || '' : '');
+                                console.log('🔄 Manual refresh - Using account:', acct);
+                                if (acct) {
+                                  await refreshBalances(acct);
+                                  toast.success('Balance refreshed');
+                                } else {
+                                  toast.error('No account ID found');
+                                }
+                              }}
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Refresh Balance
+                            </Button>
+                            {/* Debug info */}
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2 break-all">
+                              Account: {hederaAccountId || localStorage.getItem('farmerAccountId') || 'Not set'}
+                            </p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                              State - Wheat: {wheatBalance} | Rice: {riceBalance}
+                            </p>
+                          </div>
+                          <Wallet className="h-10 w-10 text-green-600 dark:text-green-400 ml-4" />
+                        </div>
+                      </div>
+
+                      {/* Amount Input */}
+                      <div className="space-y-2">
+                        <Label htmlFor="deposit-amount" className="text-slate-900 dark:text-slate-100">
+                          Amount to Deposit
+                        </Label>
+                        <Input
+                          id="deposit-amount"
+                          type="number"
+                          placeholder="Enter amount"
+                          value={depositAmount}
+                          onChange={(e) => setDepositAmount(e.target.value)}
+                          className="text-lg h-12"
+                          min="0"
+                          step="0.01"
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Maximum: {(selectedPoolForDeposit?.grainType || '').toUpperCase() === 'WHEAT' ? wheatBalance : 
+                                     (selectedPoolForDeposit?.grainType || '').toUpperCase() === 'RICE' ? riceBalance : '0'} tokens
+                        </p>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="bg-blue-50 dark:bg-blue-500/10 border border-blue-200 dark:border-blue-500/15 rounded-lg p-4">
+                        <div className="flex items-start space-x-2">
+                          <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5" />
+                          <div className="text-blue-800 dark:text-blue-200 text-sm">
+                            <p className="font-medium mb-1">How It Works</p>
+                            <ul className="list-disc list-inside space-y-1 text-xs">
+                              <li>Your {selectedPoolForDeposit?.grainType || 'crop'} tokens will be transferred to the lending pool</li>
+                              <li>You can then borrow USDC against this collateral</li>
+                              <li>You can withdraw your collateral after repaying any loans</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Submit Button */}
+                      <Button
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-700 dark:to-emerald-700 dark:hover:from-green-800 dark:hover:to-emerald-800 h-12 text-base"
+                        onClick={async () => {
+                          if (!selectedPoolForDeposit) {
+                            toast.error("No pool selected");
+                            return;
+                          }
+                          const amount = parseFloat(depositAmount);
+                          if (!amount || amount <= 0) {
+                            toast.error("Please enter a valid amount");
+                            return;
+                          }
+                          
+                          const selectedType = (selectedPoolForDeposit.grainType || '').toUpperCase();
+                          const maxBalance = selectedType === 'WHEAT' 
+                            ? parseFloat(wheatBalance) 
+                            : selectedType === 'RICE'
+                            ? parseFloat(riceBalance)
+                            : 0;
+
+                          if (amount > maxBalance) {
+                            toast.error(`Insufficient balance. Maximum: ${maxBalance} tokens`);
+                            return;
+                          }
+
+                          setIsDepositing(true);
+                          try {
+                            const token = localStorage.getItem('farmerToken');
+                            if (!token) {
+                              toast.error("Please log in again");
+                              return;
+                            }
+
+                            const response = await fetch('/api/farmers/collateral/deposit', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                grainType: (selectedPoolForDeposit.grainType || '').toLowerCase(),
+                                amount: amount,
+                              }),
+                            });
+
+                            const result = await response.json();
+
+                            if (!response.ok) {
+                              toast.error(result.error || result.message || "Failed to deposit collateral");
+                              return;
+                            }
+
+                            toast.success(`Successfully deposited ${amount} ${selectedPoolForDeposit.grainType} tokens as collateral!`, {
+                              duration: 5000,
+                              action: result.mirrorNodeUrl ? {
+                                label: 'View on HashScan',
+                                onClick: () => window.open(result.mirrorNodeUrl, '_blank')
+                              } : undefined,
+                            });
+                            
+                            // Reset form and go back to pools
+                            setDepositAmount("");
+                            setDefiStep("crop-pools");
+                            setSelectedPoolForDeposit(null);
+                            
+                            // Refresh balances
+                            if (hederaAccountId) {
+                              const [wheatRes, riceRes] = await Promise.all([
+                                fetch(`/api/faucet/balance/${hederaAccountId}?tokenType=wheat`, { cache: 'no-store' }),
+                                fetch(`/api/faucet/balance/${hederaAccountId}?tokenType=rice`, { cache: 'no-store' }),
+                              ]);
+                              const [wheatJson, riceJson] = await Promise.all([wheatRes.json(), riceRes.json()]);
+                              if (wheatRes.ok) setWheatBalance(wheatJson.balance || '0');
+                              if (riceRes.ok) setRiceBalance(riceJson.balance || '0');
+                            }
+                          } catch (error) {
+                            console.error("Deposit error:", error);
+                            toast.error("Failed to deposit collateral. Please try again.");
+                          } finally {
+                            setIsDepositing(false);
+                          }
+                        }}
+                        disabled={isDepositing || !depositAmount || parseFloat(depositAmount) <= 0}
+                      >
+                        {isDepositing ? (
+                          <>
+                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                            Depositing...
+                          </>
+                        ) : (
+                          <>
+                            <Lock className="h-5 w-5 mr-2" />
+                            Deposit Collateral
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : defiStep === "borrow-funds" ? (
-                <div className="p-8 text-center">
-                  <h3 className="text-lg font-semibold mb-2">Borrow Funds</h3>
-                  <p className="text-gray-600">Borrow funds form coming soon...</p>
+                <div className="p-8 max-w-2xl mx-auto">
+                  {/* Back Button */}
+                  <div className="mb-6">
+                    <Button
+                      variant="ghost"
+                      onClick={() => {
+                        setDefiStep("crop-pools");
+                        setSelectedPoolForBorrow(null);
+                        setBorrowAmount("");
+                      }}
+                      className="mb-4"
+                    >
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Pools
+                    </Button>
+                  </div>
+
+                  {/* Borrow Form */}
+                  <Card className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900/20 dark:to-gray-900/20 border-slate-200 dark:border-slate-700">
+                    <CardHeader>
+                      <div className="flex items-center space-x-3 mb-2">
+                        <div className="p-3 bg-gradient-to-r from-green-500 to-emerald-500 rounded-full">
+                          <DollarSign className="h-6 w-6 text-white" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-2xl text-slate-900 dark:text-slate-100">Borrow Funds</CardTitle>
+                          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
+                            Borrow USDC against your {selectedPoolForBorrow?.grainType || 'crop'} collateral
+                          </p>
+                        </div>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-6">
+                      {/* Max Borrow Info */}
+                      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+                        <div className="flex justify-between items-center">
+                          <div className="flex-1">
+                            <p className="text-sm text-blue-700 dark:text-blue-300">Maximum Borrowable Amount</p>
+                            <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
+                              ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                            </p>
+                            <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                              Based on your collateral (60% LTV)
+                            </p>
+                          </div>
+                          <Coins className="h-10 w-10 text-blue-600 dark:text-blue-400 ml-4" />
+                        </div>
+                      </div>
+
+                      {/* Amount Input */}
+                      <div className="space-y-2">
+                        <Label htmlFor="borrow-amount" className="text-slate-900 dark:text-slate-100">
+                          Amount to Borrow (USDC)
+                        </Label>
+                        <Input
+                          id="borrow-amount"
+                          type="number"
+                          placeholder="Enter amount"
+                          value={borrowAmount}
+                          onChange={(e) => setBorrowAmount(e.target.value)}
+                          className="text-lg h-12"
+                          min="0"
+                          step="0.01"
+                        />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                          Maximum: ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                        </p>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="bg-yellow-50 dark:bg-yellow-500/10 border border-yellow-200 dark:border-yellow-500/15 rounded-lg p-4">
+                        <div className="flex items-start space-x-2">
+                          <AlertTriangle className="h-4 w-4 text-yellow-600 dark:text-yellow-400 mt-0.5" />
+                          <div className="text-yellow-800 dark:text-yellow-200 text-sm">
+                            <p className="font-medium mb-1">Important Reminders</p>
+                            <ul className="list-disc list-inside space-y-1 text-xs">
+                              <li>You must repay this loan before withdrawing your collateral</li>
+                              <li>Interest will accrue over time based on the pool's APR</li>
+                              <li>Liquidation risk exists if collateral value drops significantly</li>
+                            </ul>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Submit Button */}
+                      <Button
+                        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-700 dark:to-emerald-700 dark:hover:from-green-800 dark:hover:to-emerald-800 h-12 text-base"
+                        onClick={async () => {
+                          if (!selectedPoolForBorrow) {
+                            toast.error("No pool selected");
+                            return;
+                          }
+                          const amount = parseFloat(borrowAmount);
+                          if (!amount || amount <= 0) {
+                            toast.error("Please enter a valid amount");
+                            return;
+                          }
+
+                          const maxBorrowNum = selectedPoolForBorrow.maxBorrow 
+                            ? parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6 
+                            : 0;
+
+                          if (amount > maxBorrowNum) {
+                            toast.error(`Amount exceeds maximum. Maximum: $${maxBorrowNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`);
+                            return;
+                          }
+
+                          setIsBorrowing(true);
+                          try {
+                            const token = localStorage.getItem('farmerToken');
+                            if (!token) {
+                              toast.error("Please log in again");
+                              return;
+                            }
+
+                            const response = await fetch('/api/farmers/borrow/funds', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                'Authorization': `Bearer ${token}`,
+                              },
+                              body: JSON.stringify({
+                                grainType: selectedPoolForBorrow.grainType.toLowerCase(),
+                                amount: amount,
+                              }),
+                            });
+
+                            const result = await response.json();
+
+                            if (!response.ok) {
+                              toast.error(result.error || result.message || "Failed to borrow funds");
+                              return;
+                            }
+
+                            toast.success(`Successfully borrowed ${amount} USDC!`, {
+                              duration: 5000,
+                              action: result.mirrorNodeUrl ? {
+                                label: 'View on HashScan',
+                                onClick: () => window.open(result.mirrorNodeUrl, '_blank')
+                              } : undefined,
+                            });
+
+                            setBorrowAmount("");
+                            setDefiStep("crop-pools");
+                            setSelectedPoolForBorrow(null);
+
+                            // Refresh balances and allowance
+                            if (hederaAccountId) {
+                              await refreshBalances(hederaAccountId);
+                            }
+                          } catch (error) {
+                            console.error("Borrow error:", error);
+                            toast.error("Failed to borrow funds. Please try again.");
+                          } finally {
+                            setIsBorrowing(false);
+                          }
+                        }}
+                        disabled={isBorrowing || !borrowAmount || parseFloat(borrowAmount) <= 0}
+                      >
+                        {isBorrowing ? (
+                          <>
+                            <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                            Borrowing...
+                          </>
+                        ) : (
+                          <>
+                            <DollarSign className="h-5 w-5 mr-2" />
+                            Borrow USDC
+                          </>
+                        )}
+                      </Button>
+                    </CardContent>
+                  </Card>
                 </div>
               ) : defiStep === "loan-status" ? (
                 <div className="p-8 text-center">
@@ -1187,8 +1578,8 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                             className="w-full px-3 py-3 border border-gray-300 rounded-md text-base"
                           >
                             <option>Select bank account</option>
-                            <option>Bank BCA - ****1234</option>
-                            <option>Bank Mandiri - ****5678</option>
+                            <option>Bank A - ****1234</option>
+                            <option>Bank B - ****5678</option>
                           </select>
                         </div>
 

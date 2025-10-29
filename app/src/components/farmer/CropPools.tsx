@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { MOCK_POOLS } from "@/lib/contracts";
 import { 
   BarChart3, 
   TrendingUp, 
@@ -24,7 +23,8 @@ import {
   Clock,
   Zap,
   Target,
-  PieChart
+  PieChart,
+  RefreshCw
 } from "lucide-react";
 
 interface CropPool {
@@ -52,8 +52,10 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
   const [searchTerm, setSearchTerm] = useState("");
   const [sortBy, setSortBy] = useState<"apy" | "liquidity" | "utilization">("apy");
   const [filterRisk, setFilterRisk] = useState<"all" | "low" | "medium" | "high">("all");
+  const [collateralByGrain, setCollateralByGrain] = useState<Record<string, { hasCollateral: boolean; maxBorrow?: string }>>({});
+  const [checkingCollateral, setCheckingCollateral] = useState(false);
 
-  // Fetch pools data on component mount
+  // Fetch pools data on component mount (live only)
   useEffect(() => {
     const fetchPools = async () => {
       try {
@@ -62,15 +64,13 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
         const data = await response.json();
         
         if (data.success) {
-          setPools(data.data);
+          setPools(data.data || []);
         } else {
-          // Fallback to mock data
-          setPools(MOCK_POOLS);
+          setPools([]);
         }
       } catch (error) {
         console.error('Failed to fetch pools:', error);
-        // Fallback to mock data
-        setPools(MOCK_POOLS);
+        setPools([]);
       } finally {
         setLoading(false);
       }
@@ -79,12 +79,64 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
     fetchPools();
   }, []);
 
-  // Mock data for farmer's collateral deposits (for borrowing)
-  // In a real app, this would come from the user's wallet/account
-  const farmerCollateral = {
-    "wheat": { hasCollateral: false, amount: 0, depositedAt: null },
-    "rice": { hasCollateral: false, amount: 0, depositedAt: null },
-  };
+  // Fetch per-pool collateral status (has collateral -> show Borrow)
+  useEffect(() => {
+    const fetchCollateralStatus = async () => {
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('farmerToken') : null;
+        if (!token || pools.length === 0) {
+          setCheckingCollateral(false);
+          return;
+        }
+        
+        setCheckingCollateral(true);
+        console.log('🔍 Checking collateral status for pools:', pools.map(p => p.grainType));
+        
+        const results = await Promise.all(
+          pools.map(async (p) => {
+            try {
+              const grainType = p.grainType.toLowerCase();
+              console.log(`🔍 Fetching allowance for ${grainType}...`);
+              const res = await fetch(`/api/farmers/borrow/allowance/${encodeURIComponent(grainType)}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+                cache: 'no-store',
+              });
+              const json = await res.json();
+              
+              console.log(`📊 Allowance response for ${grainType}:`, json);
+              
+              if (!res.ok) {
+                console.log(`❌ Allowance API failed for ${grainType}:`, json);
+                return [p.grainType.toUpperCase(), { hasCollateral: false }] as const;
+              }
+              
+              // Determine present collateral from onchain or fallback response
+              const collateralOnChain = json.collateral ? Number(json.collateral) : 0;
+              const collateralTokens = json.collateralTokens ? parseFloat(json.collateralTokens) : 0;
+              const collateralPresent = collateralOnChain > 0 || collateralTokens > 0;
+              
+              console.log(`✅ ${grainType} - OnChain: ${collateralOnChain}, Tokens: ${collateralTokens}, HasCollateral: ${collateralPresent}`);
+              
+              const maxBorrow = json.maxBorrowUSD || json.maxBorrowTokens || undefined;
+              return [p.grainType.toUpperCase(), { hasCollateral: collateralPresent, maxBorrow: maxBorrow }] as const;
+            } catch (err) {
+              console.error(`❌ Error checking collateral for ${p.grainType}:`, err);
+              return [p.grainType.toUpperCase(), { hasCollateral: false }] as const;
+            }
+          })
+        );
+        const map: Record<string, { hasCollateral: boolean; maxBorrow?: string }> = {};
+        for (const [gt, val] of results) map[gt] = val;
+        console.log('📊 Final collateral map:', map);
+        setCollateralByGrain(map);
+      } catch (e) {
+        console.error('❌ Error fetching collateral status:', e);
+      } finally {
+        setCheckingCollateral(false);
+      }
+    };
+    fetchCollateralStatus();
+  }, [pools]);
 
   // Helper function to get risk level based on utilization
   const getRiskLevel = (utilization: number): "low" | "medium" | "high" => {
@@ -250,7 +302,7 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPools.map((pool) => {
           const riskLevel = getRiskLevel(pool.utilizationRate);
-          const hasCollateral = farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.hasCollateral;
+          const hasCollateral = collateralByGrain[pool.grainType.toUpperCase()]?.hasCollateral;
           
           return (
             <Card key={pool.id} className="hover:shadow-lg transition-all duration-200 group">
@@ -315,21 +367,18 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                 </div>
               </div>
 
-              {/* Your Collateral Info */}
+              {/* Collateral status from live allowance (no mock) */}
               {hasCollateral && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3">
-                  <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-2">
                       <Lock className="h-4 w-4 text-green-600" />
-                      <span className="text-sm font-medium text-green-800">Your Collateral</span>
-                    </div>
-                    <span className="text-sm font-bold text-green-800">
-                      ${farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.amount.toLocaleString()}
-                    </span>
+                    <span className="text-sm font-medium text-green-800">Collateral detected</span>
                   </div>
-                  <p className="text-xs text-green-600 mt-1">
-                    Added on {farmerCollateral[pool.grainType.toLowerCase() as keyof typeof farmerCollateral]?.depositedAt}
+                  {collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow && (
+                    <p className="text-xs text-green-700 mt-1">
+                      Max borrow: ${(parseFloat(collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow || '0') / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
                   </p>
+                  )}
                 </div>
               )}
               
@@ -365,9 +414,17 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                 </div>
               </div>
               
-              {/* Action Buttons */}
+              {/* Action Buttons - Only show after collateral check is done */}
               <div className="flex gap-2">
-                {hasCollateral ? (
+                {checkingCollateral ? (
+                  <Button 
+                    className="flex-1" 
+                    disabled
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Checking Collateral...
+                  </Button>
+                ) : hasCollateral ? (
                   <>
                     <Button 
                       className="flex-1 bg-green-600 hover:bg-green-700" 
