@@ -2,15 +2,10 @@ import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } 
 import { FarmerService } from './farmer.service';
 import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
-import { OtpService } from '../lib/otp.service';
-import { IsString } from 'class-validator';
-
-class RequestOtpBody { @IsString() memberNumber: string }
-class VerifyOtpBody { @IsString() memberNumber: string; @IsString() otpCode: string }
 
 @Controller('farmers')
 export class FarmerController {
-  constructor(private readonly farmerService: FarmerService, private otpService: OtpService) {}
+  constructor(private readonly farmerService: FarmerService) {}
 
   @Post('register')
   async registerFarmer(@Body() registerFarmerDto: RegisterFarmerDto) {
@@ -48,46 +43,55 @@ export class FarmerController {
     return this.farmerService.getFarmerLoans(req.user.sub);
   }
 
+  @Post('create-hedera-wallet')
+  @UseGuards(JwtAuthGuard)
+  async createHederaWallet(@Request() req) {
+    console.log('🔧 Request to create Hedera wallet for farmer ID:', req.user.sub);
+    try {
+      const result = await this.farmerService.createHederaWalletForFarmer(req.user.sub);
+      console.log('✅ Wallet creation result:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to create wallet:', error);
+      throw error;
+    }
+  }
+
+  @Post('fix-wallet-by-email')
+  async fixWalletByEmail(@Body() body: { email: string }) {
+    console.log('🔧 Admin request to fix wallet for email:', body.email);
+    try {
+      const farmer = await this.farmerService.getFarmerByEmail(body.email);
+      
+      if (farmer.hederaAccountId) {
+        return {
+          success: true,
+          message: 'Farmer already has Hedera account',
+          hederaAccountId: farmer.hederaAccountId,
+        };
+      }
+      
+      const result = await this.farmerService.createHederaWalletForFarmer(farmer.id);
+      console.log('✅ Wallet fixed for farmer:', body.email, result);
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to fix wallet:', error);
+      return { success: false, error: error.message || 'Unknown error' };
+    }
+  }
+
   @Get(':id')
   async getFarmerById(@Param('id', ParseIntPipe) id: number) {
-    return this.farmerService.getFarmerProfile(id);
-  }
-
-  @Post('request-otp')
-  @UseGuards(JwtAuthGuard)
-  async requestOtp(@Body() body: RequestOtpBody) {
-    const farmer = await this.farmerService.getFarmerByMemberNumber(body.memberNumber);
-    return this.otpService.requestOtpForFarmer(farmer.id, farmer.phoneNumber);
-  }
-
-  @Post('verify-otp')
-  @UseGuards(JwtAuthGuard)
-  async verifyOtp(@Body() body: VerifyOtpBody) {
-    const farmer = await this.farmerService.getFarmerByMemberNumber(body.memberNumber);
-    return this.otpService.verifyOtpForFarmer(farmer.id, body.otpCode);
+    
   }
 
   @Post('register-with-auth')
-  async registerWithAuth(@Body() farmerRegisterDto: FarmerRegisterDto) {
-    return this.farmerService.registerFarmerWithAuth(farmerRegisterDto);
+  async registerWithAuth(@Body() registerDto: FarmerRegisterDto) {
+    return this.farmerService.registerFarmerWithAuth(registerDto);
   }
 
   @Post('login')
-  async login(@Body() farmerLoginDto: FarmerLoginDto) {
-    return this.farmerService.loginFarmer(farmerLoginDto);
-  }
-
-  @Post('deposits/:id/verify-and-mint')
-  async verifyAndMintTokens(
-    @Param('id', ParseIntPipe) depositId: number,
-    @Body() body: { warehouseSignature: string }
-  ) {
-    return this.farmerService.verifyAndMintTokens(depositId, body.warehouseSignature);
-  }
-
-  @Post('collateral/deposit')
-  @UseGuards(JwtAuthGuard)
-  async depositCollateral(@Body() depositCollateralDto: DepositCollateralDto) {
-    return this.farmerService.depositCollateral(depositCollateralDto);
+  async login(@Body() loginDto: FarmerLoginDto) {
+    return this.farmerService.loginFarmer(loginDto);
   }
 }

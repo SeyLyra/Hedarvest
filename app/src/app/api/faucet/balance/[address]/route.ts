@@ -16,10 +16,13 @@ export async function GET(
       );
     }
 
-    console.log('🔍 Fetching USDT balance for:', address);
+    const { searchParams } = new URL(request.url);
+    const tokenType = searchParams.get('tokenType') || 'usdc';
+
+    console.log('🔍 Fetching balance for:', { address, tokenType });
 
     // Call backend faucet balance API
-    const response = await fetch(`${BACKEND_URL}/faucet/balance/${address}`, {
+    const response = await fetch(`${BACKEND_URL}/faucet/balance/${address}?tokenType=${encodeURIComponent(tokenType)}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -37,7 +40,7 @@ export async function GET(
       );
     }
 
-    console.log('✅ USDT balance fetched:', result);
+    console.log('✅ Balance fetched:', { tokenType: tokenType, balance: result.balance });
 
     return NextResponse.json({
       success: true,
@@ -45,7 +48,8 @@ export async function GET(
       tokenId: result.tokenId,
       address: result.address,
       isAssociated: result.isAssociated,
-      hbarBalance: result.hbarBalance
+      hbarBalance: result.hbarBalance,
+      tokenType: tokenType,
     }, { status: 200 });
 
   } catch (error) {

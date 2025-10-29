@@ -549,8 +549,30 @@ export default function AgentPage() {
     }
   };
 
+  // Show loading state while checking authentication
+  if (agentLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50/30 via-teal-50/30 to-green-50/30">
+        <div className="text-center">
+          <div className="relative mb-6">
+            {/* Outer spinning ring */}
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-emerald-400/20 border-t-emerald-400 mx-auto"></div>
+            {/* Inner building icon */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Building2 className="h-6 w-6 text-emerald-400 animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-emerald-600">Checking Authentication</p>
+            <p className="text-sm text-muted-foreground">Please wait while we verify your credentials...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // If not authenticated, show login/register forms
-  if (!isAuthenticated && !agentLoading) {
+  if (!isAuthenticated) {
     return (
       <div className="min-h-screen relative overflow-hidden">
         {/* Ultra Fancy Animated Background */}

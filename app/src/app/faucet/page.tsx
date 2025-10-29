@@ -6,24 +6,29 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Droplets, 
   CheckCircle,
   Loader2,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Wheat,
+  CircleDot
 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function FaucetRoute() {
   const [address, setAddress] = useState("");
   const [amount, setAmount] = useState("1000");
+  const [tokenType, setTokenType] = useState("usdc");
   const [isMinting, setIsMinting] = useState(false);
   const [lastMintTime, setLastMintTime] = useState<Date | null>(null);
   const [mintHistory, setMintHistory] = useState<Array<{
     id: string;
     address: string;
     amount: number;
+    tokenType: string;
     timestamp: Date;
     txHash: string;
   }>>([]);
@@ -65,6 +70,7 @@ export default function FaucetRoute() {
         body: JSON.stringify({
           address: address,
           amount: mintAmount,
+          tokenType: tokenType,
         }),
       });
 
@@ -82,12 +88,14 @@ export default function FaucetRoute() {
         id: Date.now().toString(),
         address: address,
         amount: mintAmount,
+        tokenType: tokenType,
         timestamp: new Date(),
         txHash: result.transactionHash || result.transferTransactionId || 'pending'
       };
       setMintHistory(prev => [newMint, ...prev.slice(0, 9)]); // Keep last 10
       
-      toast.success(`Successfully minted ${mintAmount} USDC to ${address}!`, {
+      const tokenSymbol = tokenType.toUpperCase();
+      toast.success(`Successfully minted ${mintAmount} ${tokenSymbol} to ${address}!`, {
         description: `Transaction: ${result.transactionHash?.substring(0, 20)}...`
       });
       
@@ -145,17 +153,28 @@ export default function FaucetRoute() {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
+                  {tokenType === 'wheat' ? (
+                    <Wheat className="w-6 h-6 text-amber-500 dark:text-amber-400" />
+                  ) : tokenType === 'rice' ? (
+                    <CircleDot className="w-6 h-6 text-green-500 dark:text-green-400" />
+                  ) : (
                   <Droplets className="w-6 h-6 text-emerald-500 dark:text-emerald-400" />
+                  )}
                   <div>
-                    <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200">USDC Test Token</h3>
-                    <p className="text-sm text-emerald-600/80 dark:text-emerald-300/80">Token ID: 0.0.7115536</p>
+                    <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200">
+                      {tokenType === 'wheat' ? 'Wheat Token' : tokenType === 'rice' ? 'Rice Token' : 'USDC Test Token'}
+                    </h3>
+                    <p className="text-sm text-emerald-600/80 dark:text-emerald-300/80">
+                      Token ID: {tokenType === 'wheat' ? '0.0.7121333' : tokenType === 'rice' ? '0.0.7121334' : '0.0.7115536'}
+                    </p>
                   </div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    navigator.clipboard.writeText('0.0.7115536');
+                    const tokenId = tokenType === 'wheat' ? '0.0.7121333' : tokenType === 'rice' ? '0.0.7121334' : '0.0.7115536';
+                    navigator.clipboard.writeText(tokenId);
                     toast.success('Token ID copied to clipboard!');
                   }}
                   className="text-emerald-600 border-emerald-200 hover:bg-emerald-50"
@@ -171,12 +190,52 @@ export default function FaucetRoute() {
           <Card className="bg-white/95 dark:bg-[#121a16]/90 backdrop-blur-sm border-emerald-200 dark:border-emerald-500/15 shadow-lg">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200">
+                {tokenType === 'wheat' ? (
+                  <Wheat className="w-6 h-6 text-amber-500" />
+                ) : tokenType === 'rice' ? (
+                  <CircleDot className="w-6 h-6 text-green-500" />
+                ) : (
                 <Droplets className="w-6 h-6" />
-                Mint Test USDC Tokens
+                )}
+                Mint Test {tokenType.toUpperCase()} Tokens
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div>
+                  <Label className="block text-sm font-medium text-emerald-700 mb-2">
+                    Token Type
+                  </Label>
+                  <Select value={tokenType} onValueChange={setTokenType}>
+                    <SelectTrigger className="text-lg">
+                      <SelectValue placeholder="Select token type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="usdc">
+                        <div className="flex items-center gap-2">
+                          <Droplets className="w-4 h-4 text-emerald-500" />
+                          USDC
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="wheat">
+                        <div className="flex items-center gap-2">
+                          <Wheat className="w-4 h-4 text-amber-500" />
+                          Wheat
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="rice">
+                        <div className="flex items-center gap-2">
+                          <CircleDot className="w-4 h-4 text-green-500" />
+                          Rice
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Choose the token type to mint
+                  </p>
+                </div>
+                
                 <div>
                   <Label className="block text-sm font-medium text-emerald-700 mb-2">
                     Hedera Address
@@ -207,7 +266,7 @@ export default function FaucetRoute() {
                     className="text-lg"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Maximum: 10,000 USDC per transaction
+                    Maximum: 10,000 tokens per transaction
                   </p>
                 </div>
               </div>
@@ -257,8 +316,14 @@ export default function FaucetRoute() {
                   </>
                 ) : (
                   <>
-                    <Droplets className="w-5 h-5 mr-2" />
-                    Mint {formatCurrency(parseFloat(amount) || 0)} USDC
+                    {tokenType === 'wheat' ? (
+                      <Wheat className="w-5 h-5 mr-2" />
+                    ) : tokenType === 'rice' ? (
+                      <CircleDot className="w-5 h-5 mr-2" />
+                    ) : (
+                      <Droplets className="w-5 h-5 mr-2" />
+                    )}
+                    Mint {parseFloat(amount) || 0} {tokenType.toUpperCase()}
                   </>
                 )}
               </Button>
@@ -270,10 +335,10 @@ export default function FaucetRoute() {
                   <div className="text-sm text-blue-800 dark:text-blue-200">
                     <p className="font-medium">Test Token Information:</p>
                     <ul className="mt-1 space-y-1 text-xs text-blue-700 dark:text-blue-300">
-                      <li>• Real Hedera testnet USDC tokens (Token ID: 0.0.7115536)</li>
+                      <li>• Real Hedera testnet {tokenType.toUpperCase()} tokens (Token ID: {tokenType === 'wheat' ? '0.0.7121333' : tokenType === 'rice' ? '0.0.7121334' : '0.0.7115536'})</li>
                       <li>• Uses Hedera SDK for minting & transfer</li>
                       <li>• 5-minute cooldown between mints</li>
-                      <li>• Maximum 10,000 USDC per transaction</li>
+                      <li>• Maximum 10,000 tokens per transaction</li>
                       <li>• Free testnet tokens - no real value</li>
                     </ul>
                   </div>
@@ -301,7 +366,7 @@ export default function FaucetRoute() {
                         </div>
                         <div>
                           <p className="font-medium text-emerald-800 dark:text-emerald-200">
-                            {formatCurrency(mint.amount)} USDC
+                            {mint.amount} {mint.tokenType.toUpperCase()}
                           </p>
                           <p className="text-xs text-emerald-600 dark:text-emerald-400 font-mono">
                             {mint.address}

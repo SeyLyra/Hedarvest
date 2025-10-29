@@ -8,6 +8,7 @@ import {
   Query,
   ParseIntPipe,
   UseGuards,
+  Request,
 } from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import {
@@ -17,11 +18,42 @@ import {
   VerifyDeliveryDto,
 } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { JwtService } from '@nestjs/jwt';
 import { WAREHOUSES } from './warehouses.constant';
 
 @Controller('warehouse')
 export class WarehouseController {
-  constructor(private readonly warehouseService: WarehouseService) {}
+  constructor(
+    private readonly warehouseService: WarehouseService,
+    private readonly jwtService: JwtService,
+  ) {}
+
+  /**
+   * Warehouse operator login
+   */
+  @Post('login')
+  async warehouseLogin(@Body() body: { email: string; password: string }) {
+    const warehouseData = await this.warehouseService.warehouseLogin(body.email, body.password);
+    
+    // Create a JWT token with warehouse information
+    const payload = { 
+      sub: 'warehouse_operator',
+      email: warehouseData.warehouse.email,
+      warehouseId: warehouseData.warehouse.id,
+      role: 'warehouse_operator',
+    };
+    
+    const token = this.jwtService.sign(payload);
+    
+    return {
+      accessToken: token,
+      warehouse: {
+        id: warehouseData.warehouse.id,
+        name: warehouseData.warehouse.name,
+        operator: warehouseData.warehouse.manager || 'Warehouse Operator',
+      },
+    };
+  }
 
   /**
    * Get all available warehouses
@@ -45,10 +77,13 @@ export class WarehouseController {
    * Get all delivery requests for a warehouse
    */
   @Get('delivery-requests')
+  @UseGuards(JwtAuthGuard)
   async getDeliveryRequests(
-    @Query('warehouseId') warehouseId: string,
+    @Request() req,
     @Query('status') status?: string,
   ) {
+    // Extract warehouse ID from JWT token
+    const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getDeliveryRequests(warehouseId, status);
   }
 
@@ -95,10 +130,13 @@ export class WarehouseController {
    * Get all incoming deliveries for warehouse
    */
   @Get('incoming-deliveries')
+  @UseGuards(JwtAuthGuard)
   async getIncomingDeliveries(
-    @Query('warehouseId') warehouseId: string,
+    @Request() req,
     @Query('status') status?: string,
   ) {
+    // Extract warehouse ID from JWT token
+    const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getIncomingDeliveries(warehouseId, status);
   }
 
@@ -137,6 +175,20 @@ export class WarehouseController {
     @Body() body: { reason: string },
   ) {
     return this.warehouseService.rejectDelivery(id, body.reason);
+  }
+
+  /**
+   * Get issued receipts (grain deposits) for warehouse
+   */
+  @Get('issued-receipts')
+  @UseGuards(JwtAuthGuard)
+  async getIssuedReceipts(
+    @Request() req,
+    @Query('status') status?: string,
+  ) {
+    // Extract warehouse ID from JWT token
+    const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
+    return this.warehouseService.getIssuedReceipts(warehouseId, status);
   }
 
   /**

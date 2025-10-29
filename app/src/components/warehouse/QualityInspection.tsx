@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -183,6 +183,42 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const numericIncomingId = Number(String(deliveryId).replace(/^[^0-9]*/, ""));
+
+  // Update form data when deliveryData changes
+  useEffect(() => {
+    console.log('QualityInspection received deliveryData:', deliveryData);
+    if (deliveryData) {
+      setInspectionData(prev => ({
+        ...prev,
+        moisture: deliveryData.moisture || prev.moisture,
+        temperature: deliveryData.temperature || prev.temperature,
+        qualityGrade: deliveryData.grade || prev.qualityGrade,
+        notes: deliveryData.notes || prev.notes,
+        measurements: {
+          ...prev.measurements,
+          weight: deliveryData.weight || prev.measurements?.weight || 0,
+          volume: prev.measurements?.volume || 0,
+          density: prev.measurements?.density || 0,
+          color: prev.measurements?.color || "",
+          texture: prev.measurements?.texture || ""
+        }
+      }));
+      console.log('Updated inspectionData with deliveryData');
+    }
+  }, [deliveryData]);
+
+  // When starting inspection, mark delivery as "inspecting" if possible
+  useEffect(() => {
+    if (!numericIncomingId || Number.isNaN(numericIncomingId)) return;
+    // Fire-and-forget; ignore result for UX smoothness
+    fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericIncomingId}/status`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'inspecting', notes: 'Inspection started' })
+    }).catch(() => {});
+  }, [numericIncomingId]);
 
   const steps = [
     { id: 1, title: "Basic Measurements", description: "Weight, moisture, temperature" },
@@ -244,9 +280,39 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
     }
   };
 
-  const handleSubmit = () => {
-    console.log("Submitting inspection:", inspectionData);
-    onComplete(inspectionData as InspectionData);
+  const handleSubmit = async () => {
+    if (!numericIncomingId || Number.isNaN(numericIncomingId)) {
+      alert('Invalid delivery ID');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        finalWeight: inspectionData.measurements?.weight || 0,
+        finalGrade: inspectionData.qualityGrade || 'grade-a',
+        moisturePercent: inspectionData.moisture || 0,
+        notes: inspectionData.notes || '',
+      };
+
+      const res = await fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericIncomingId}/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.message || 'Verification failed');
+      }
+
+      const result = await res.json();
+      onComplete({ ...(inspectionData as InspectionData) });
+    } catch (e: any) {
+      alert(e?.message || 'Failed to verify and mint');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -515,7 +581,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
                 
                 <div className="space-y-2">
                   {inspectionData.testResults?.map((test, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                    <div key={index} className="flex items-center justify-between p-2 bg-muted/50 rounded-lg">
                       <span className="text-sm">{test}</span>
                       <Button
                         size="sm"
@@ -565,7 +631,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
 
             <div className="space-y-4">
               <h4 className="text-lg font-medium text-foreground">Inspection Photos</h4>
-              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
+              <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
                 <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-lg font-medium text-foreground mb-2">Upload inspection photos</p>
                 <p className="text-sm text-muted-foreground mb-4">
@@ -699,7 +765,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
       case "yellow": return "text-yellow-600 bg-yellow-100";
       case "orange": return "text-orange-600 bg-orange-100";
       case "red": return "text-red-600 bg-red-100";
-      default: return "text-gray-600 bg-gray-100";
+      default: return "text-muted-foreground bg-muted";
     }
   };
 
@@ -713,7 +779,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
               <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
                 currentStep >= step.id 
                   ? 'bg-green-600 border-green-600 text-white' 
-                  : 'border-gray-300 text-gray-400'
+                  : 'border-border text-muted-foreground'
               }`}>
                 {currentStep > step.id ? (
                   <CheckCircle className="h-5 w-5" />
@@ -727,7 +793,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
               </div>
               {index < steps.length - 1 && (
                 <div className={`w-16 h-0.5 mx-4 ${
-                  currentStep > step.id ? 'bg-green-600' : 'bg-gray-300'
+                  currentStep > step.id ? 'bg-green-600' : 'bg-muted'
                 }`} />
               )}
             </div>
@@ -761,8 +827,8 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
           <ArrowLeft className="h-4 w-4 mr-2" />
           {currentStep === 1 ? 'Back to Deliveries' : 'Previous'}
         </Button>
-        <Button onClick={handleNext}>
-          {currentStep === 5 ? 'Submit Inspection' : 'Next'}
+        <Button onClick={handleNext} disabled={submitting}>
+          {currentStep === 5 ? (submitting ? 'Submitting…' : 'Submit Inspection') : 'Next'}
           <ArrowRight className="h-4 w-4 ml-2" />
         </Button>
       </div>

@@ -1,6 +1,84 @@
 import { PrismaClient } from '@prisma/client';
+import {
+  Client,
+  AccountCreateTransaction,
+  PrivateKey,
+  Hbar,
+} from '@hashgraph/sdk';
+import * as crypto from 'crypto';
 
 const prisma = new PrismaClient();
+
+// Encryption setup (same as farmer.service.ts)
+const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'default-insecure-key-please-change-in-production';
+const ENCRYPTION_ALGORITHM = 'aes-256-gcm';
+const encryptionKey = crypto.scryptSync(ENCRYPTION_KEY, 'salt', 32);
+
+function encryptPrivateKey(privateKey: string): string {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ENCRYPTION_ALGORITHM, encryptionKey, iv);
+
+  let encrypted = cipher.update(privateKey, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+
+  const authTag = cipher.getAuthTag();
+
+  // Return iv:authTag:encryptedData
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`;
+}
+
+async function createCustodialWallet(email: string) {
+  try {
+    // Initialize Hedera client
+    const operatorId = process.env.HEDERA_OPERATOR_ID;
+    const operatorKey = process.env.HEDERA_OPERATOR_KEY;
+    const network = process.env.HEDERA_NETWORK || 'testnet';
+
+    if (!operatorId || !operatorKey) {
+      console.warn('⚠️  Hedera credentials not found, using placeholder wallet');
+      return {
+        accountId: `0.0.${Math.floor(Math.random() * 10000000)}`,
+        evmAddress: `0x${Math.random().toString(16).substring(2)}`,
+        privateKey: 'PLACEHOLDER_KEY',
+      };
+    }
+
+    const client = Client.forName(network);
+    client.setOperator(operatorId, operatorKey);
+
+    // Generate a new private key for the farmer's account
+    const newAccountPrivateKey = PrivateKey.generateED25519();
+    const newAccountPublicKey = newAccountPrivateKey.publicKey;
+
+    // Create the account with auto-association enabled
+    const newAccountTx = new AccountCreateTransaction()
+      .setKey(newAccountPublicKey)
+      .setInitialBalance(new Hbar(1)) // 1 HBAR to cover transaction fees
+      .setMaxAutomaticTokenAssociations(100); // Auto-associate up to 100 tokens
+
+    const txResponse = await newAccountTx.execute(client);
+    const receipt = await txResponse.getReceipt(client);
+    const newAccountId = receipt.accountId;
+
+    if (!newAccountId) {
+      throw new Error('Failed to get account ID from receipt');
+    }
+
+    // Convert to EVM address format
+    const evmAddress = `0x${newAccountId.toSolidityAddress()}`;
+
+    console.log(`✅ Created custodial wallet for ${email}: ${newAccountId.toString()}`);
+
+    return {
+      accountId: newAccountId.toString(),
+      evmAddress,
+      privateKey: newAccountPrivateKey.toStringRaw(),
+    };
+  } catch (error) {
+    console.error(`❌ Failed to create wallet for ${email}:`, error);
+    throw error;
+  }
+}
 
 async function main() {
   console.log('🌾 Seeding realistic data...');
@@ -35,58 +113,71 @@ async function main() {
 
   const warehouse1Id = warehouse.warehouseId;
 
-  // 2. Create Farmers
-  console.log('Creating farmers...');
-  const farmers = await Promise.all([
-    prisma.farmer.upsert({
-      where: { memberNumber: 'FMR001' },
-      update: {},
-      create: {
-        memberNumber: 'FMR001',
-        phoneNumber: '+254701234567',
-        walletAddress: '0.0.7097158',
-        hederaAccountId: '0.0.7097158',
-        encryptedPrivateKey:
-          '87007248d3e44e7d880b88ed1b0f1a5a:ac748d98876344348cab9237375b13e0:02fb783ddb8166c7bfc32b965ff73548a5c97a4f7980647c38bf873642449b00880844cf5e1e36e15b5c079e9b921e0c924eb88c31340d0d6d12f138cc17f407',
-        email: 'john.kamau@farm.ke',
-        password:
-          '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi', // hashed "password123"
-        isCustodial: true, // Platform manages wallet with auto-association
-      },
-    }),
-    prisma.farmer.upsert({
-      where: { memberNumber: 'FMR002' },
-      update: {},
-      create: {
-        memberNumber: 'FMR002',
-        phoneNumber: '+254702345678',
-        walletAddress: '0.0.7097159',
-        hederaAccountId: '0.0.7097159',
-        encryptedPrivateKey:
-          'a3284e48bcd1461292b5588488c41704:f5723b27230a2cd392d6d4f4988454ed:a8e036f5e5b76a12bcb9d0a03d90b37b5e0e54bfa43c45f63f8f8858ca07da0fc6f471821250c61dedafcbc6dd5619c3b8397d123b90516390b0f28a71910574',
-        email: 'mary.wanjiku@farm.ke',
-        password:
-          '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi', // hashed "password123"
-        isCustodial: true, // Platform manages wallet with auto-association
-      },
-    }),
-    prisma.farmer.upsert({
-      where: { memberNumber: 'FMR003' },
-      update: {},
-      create: {
-        memberNumber: 'FMR003',
-        phoneNumber: '+254703456789',
-        walletAddress: '0.0.7097160',
-        hederaAccountId: '0.0.7097160',
-        encryptedPrivateKey:
-          'f7b6bb465974b58a7fcdb50219e9ef6b:916eccf6a4b542a1a0b134554a3796b3:734e9d469d76dd8a3cc5ccc9f8fdd9b35f9a7159262bb6820f3911f971df36add4f04f91c1abe44e5b0565261ba4ae5e6ee28756c1ba6d717a8218d76b24032a',
-        email: 'peter.omondi@farm.ke',
-        password:
-          '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi', // hashed "password123"
-        isCustodial: true, // Platform manages wallet with auto-association
-      },
-    }),
-  ]);
+  // 2. Create Farmers with Real Hedera Wallets
+  console.log('🔧 Creating Hedera wallets for farmers...');
+  
+  const farmerData = [
+    {
+      memberNumber: 'FMR001',
+      phoneNumber: '+254701234567',
+      email: 'john.kamau@farm.ke',
+      password: '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi', // hashed "password123"
+    },
+    {
+      memberNumber: 'FMR002',
+      phoneNumber: '+254702345678',
+      email: 'mary.wanjiku@farm.ke',
+      password: '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi',
+    },
+    {
+      memberNumber: 'FMR003',
+      phoneNumber: '+254703456789',
+      email: 'peter.omondi@farm.ke',
+      password: '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi',
+    },
+  ];
+
+  // Create wallets first
+  const wallets = await Promise.all(
+    farmerData.map(async (farmer) => {
+      console.log(`  Creating wallet for ${farmer.email}...`);
+      const wallet = await createCustodialWallet(farmer.email);
+      return {
+        ...farmer,
+        ...wallet,
+        encryptedPrivateKey: encryptPrivateKey(wallet.privateKey),
+      };
+    })
+  );
+
+  console.log('✅ All wallets created!');
+  console.log('📝 Creating farmer records...');
+
+  // Now create farmers with real wallet data
+  const farmers = await Promise.all(
+    wallets.map((walletData) =>
+      prisma.farmer.upsert({
+        where: { memberNumber: walletData.memberNumber },
+        update: {
+          // Update existing farmers with real wallets if they exist
+          hederaAccountId: walletData.accountId,
+          walletAddress: walletData.evmAddress,
+          encryptedPrivateKey: walletData.encryptedPrivateKey,
+          isCustodial: true,
+        },
+        create: {
+          memberNumber: walletData.memberNumber,
+          phoneNumber: walletData.phoneNumber,
+          walletAddress: walletData.evmAddress,
+          hederaAccountId: walletData.accountId,
+          encryptedPrivateKey: walletData.encryptedPrivateKey,
+          email: walletData.email,
+          password: walletData.password,
+          isCustodial: true,
+        },
+      })
+    )
+  );
 
   console.log(`✅ Created ${farmers.length} farmers`);
 
@@ -255,16 +346,23 @@ async function main() {
   console.log(`  - Incoming Deliveries: ${incomingDeliveries.length}`);
   console.log(`  - Grain Deposits: ${deposits.length}`);
   console.log(`\n👤 Test Logins:`);
-  console.log(`\n  Farmer 1 (FMR001):`);
+  console.log(`\n  Farmer 1 (FMR001) - john.kamau@farm.ke:`);
   console.log(`    - Email: john.kamau@farm.ke`);
   console.log(`    - Password: password123`);
   console.log(`    - Member Number: FMR001`);
   console.log(`    - Phone: +254701234567`);
-  console.log(`    - Wallet: 0.0.7097158`);
-  console.log(`\n  Farmer 2 (FMR002):`);
+  console.log(`    - Hedera Account: ${farmers[0].hederaAccountId || 'NOT SET'}`);
+  console.log(`    - Wallet Address: ${farmers[0].walletAddress || 'NOT SET'}`);
+  console.log(`\n  Farmer 2 (FMR002) - mary.wanjiku@farm.ke:`);
   console.log(`    - Email: mary.wanjiku@farm.ke`);
   console.log(`    - Password: password123`);
   console.log(`    - Member Number: FMR002`);
+  console.log(`    - Hedera Account: ${farmers[1].hederaAccountId || 'NOT SET'}`);
+  console.log(`\n  Farmer 3 (FMR003) - peter.omondi@farm.ke:`);
+  console.log(`    - Email: peter.omondi@farm.ke`);
+  console.log(`    - Password: password123`);
+  console.log(`    - Member Number: FMR003`);
+  console.log(`    - Hedera Account: ${farmers[2].hederaAccountId || 'NOT SET'}`);
   console.log(`\n  Warehouse:`);
   console.log(`    - Email: operator@warehouse.com`);
   console.log(`    - Password: password`);

@@ -6,10 +6,42 @@ import {
   TokenId,
   PrivateKey,
   AccountBalanceQuery,
+  TokenMintTransaction,
 } from '@hashgraph/sdk';
 
-// Hedera Token ID for USDC (from deployed contracts)
+// Hedera Token IDs for different tokens
 const USDC_TOKEN_ID = process.env.USDC_TOKEN_ID || '0.0.7115536';
+const WHEAT_TOKEN_ID = process.env.WHEAT_TOKEN_ID || '0.0.7121333';
+const RICE_TOKEN_ID = process.env.RICE_TOKEN_ID || '0.0.7121334';
+const CORN_TOKEN_ID = process.env.CORN_TOKEN_ID || '0.0.7121335';
+
+// Token configuration
+const TOKEN_CONFIG = {
+  usdc: {
+    id: USDC_TOKEN_ID,
+    decimals: 6,
+    name: 'USDC',
+    symbol: 'USDC',
+  },
+  wheat: {
+    id: WHEAT_TOKEN_ID,
+    decimals: 8,
+    name: 'Wheat Token',
+    symbol: 'WHEAT',
+  },
+  rice: {
+    id: RICE_TOKEN_ID,
+    decimals: 8,
+    name: 'Rice Token',
+    symbol: 'RICE',
+  },
+  corn: {
+    id: CORN_TOKEN_ID,
+    decimals: 8,
+    name: 'Corn Token',
+    symbol: 'CORN',
+  },
+};
 
 @Injectable()
 export class FaucetService {
@@ -53,8 +85,23 @@ export class FaucetService {
     }
   }
 
-  async mintTokens(address: string, amount: string) {
-    this.logger.log(`Minting ${amount} USDC to ${address}`);
+  async mintTokens(
+    address: string,
+    amount: string,
+    tokenType: string = 'usdc',
+  ) {
+    this.logger.log(
+      `Minting ${amount} ${tokenType.toUpperCase()} to ${address}`,
+    );
+
+    // Validate token type
+    if (!TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG]) {
+      throw new Error(
+        `Invalid token type: ${tokenType}. Supported types: usdc, wheat, rice, corn`,
+      );
+    }
+
+    const tokenConfig = TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG];
 
     // Check if Hedera client is initialized
     if (!this.hederaClient) {
@@ -64,11 +111,13 @@ export class FaucetService {
       );
     }
 
-    // Transfer existing tokens from faucet account
-    this.logger.log(`Attempting to transfer ${amount} USDC to ${address}`);
+    // Mint new tokens and transfer to recipient
+    this.logger.log(
+      `Attempting to mint ${amount} ${tokenConfig.symbol} to ${address}`,
+    );
 
     try {
-      return await this.transferUSDC(address, amount);
+      return await this.transferTokens(address, amount, tokenType);
     } catch (error: any) {
       // If minting fails due to association, return instructions
       if (
@@ -78,13 +127,13 @@ export class FaucetService {
         error.message.includes('TOKEN_NOT_ASSOCIATED_TO_ACCOUNT')
       ) {
         this.logger.warn(
-          `Token not associated for ${address} - returning association instructions`,
+          `${tokenConfig.symbol} token not associated for ${address} - returning association instructions`,
         );
         return {
           success: false,
           needsAssociation: true,
-          message: `Please associate USDC token (${USDC_TOKEN_ID}) with your account first using HashPack wallet. Go to the token page and click "Associate Token".`,
-          tokenId: USDC_TOKEN_ID,
+          message: `Please associate ${tokenConfig.symbol} token (${tokenConfig.id}) with your account first using HashPack wallet. Go to the token page and click "Associate Token".`,
+          tokenId: tokenConfig.id,
           address: address,
         };
       }
@@ -123,15 +172,20 @@ export class FaucetService {
     }
   }
 
-  async getTokenBalance(address: string): Promise<{
+  async getTokenBalance(
+    address: string,
+    tokenType: string = 'usdc',
+  ): Promise<{
     balance: string;
     tokenId: string;
     hbarBalance?: string;
     isAssociated?: boolean;
   }> {
     try {
+      const tokenConfig = TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG];
+
       this.logger.log(
-        `Getting token balance for ${address}, USDC_TOKEN_ID: ${USDC_TOKEN_ID}`,
+        `Getting ${tokenConfig.symbol} balance for ${address}, Token ID: ${tokenConfig.id}`,
       );
 
       if (!this.hederaClient) {
@@ -143,7 +197,7 @@ export class FaucetService {
         );
       }
 
-      const tokenId = TokenId.fromString(USDC_TOKEN_ID);
+      const tokenId = TokenId.fromString(tokenConfig.id);
       const accountId = AccountId.fromString(address);
 
       this.logger.log(`Fetching balance for ${address}`);
@@ -175,11 +229,13 @@ export class FaucetService {
         };
       }
 
-      // Convert from smallest unit (6 decimals for USDC)
-      const balance = (Number(tokenBalance.toString()) / 1000000).toFixed(2);
+      // Convert from smallest unit based on token decimals
+      const balance = (
+        Number(tokenBalance.toString()) / Math.pow(10, tokenConfig.decimals)
+      ).toFixed(2);
 
       this.logger.log(
-        `✅ Balance for ${address} - HBAR: ${hbarBalance}, USDC: ${balance}, Associated: YES`,
+        `✅ Balance for ${address} - HBAR: ${hbarBalance}, ${tokenConfig.symbol}: ${balance}, Associated: YES`,
       );
 
       return {
@@ -190,7 +246,7 @@ export class FaucetService {
       };
     } catch (error: any) {
       this.logger.error(
-        `Failed to get token balance for ${address}:`,
+        `Failed to get ${tokenType} balance for ${address}:`,
         // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
         error.message || error,
       );
@@ -217,37 +273,45 @@ export class FaucetService {
     };
   }
 
-  private async transferUSDC(address: string, amount: string) {
+  private async transferTokens(
+    address: string,
+    amount: string,
+    tokenType: string,
+  ) {
     try {
-      const tokenId = TokenId.fromString(USDC_TOKEN_ID);
+      const tokenConfig = TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG];
+      const tokenId = TokenId.fromString(tokenConfig.id);
       const recipientAccountId = AccountId.fromString(address);
 
-      this.logger.log(`Attempting to transfer ${amount} USDC to ${address}`);
+      this.logger.log(
+        `Attempting to mint and transfer ${amount} ${tokenConfig.symbol} to ${address}`,
+      );
       this.logger.log(
         `Token ID: ${tokenId.toString()}, Recipient: ${recipientAccountId.toString()}`,
       );
 
-      const transferAmount = parseInt(amount) * 1000000; // 6 decimals for USDC
+      const mintAmount = parseInt(amount) * Math.pow(10, tokenConfig.decimals);
 
-      // Check faucet account balance first
-      const faucetBalance = await this.getTokenBalance(
-        this.hederaAccountId.toString(),
+      // Step 1: Mint new tokens to the faucet account
+      this.logger.log(`Minting ${mintAmount} ${tokenConfig.symbol} tokens...`);
+      const mintTx = new TokenMintTransaction()
+        .setTokenId(tokenId)
+        .setAmount(mintAmount);
+
+      const mintResponse = await mintTx.execute(this.hederaClient);
+      await mintResponse.getReceipt(this.hederaClient);
+
+      this.logger.log(
+        `✅ Mint transaction successful: ${mintResponse.transactionId.toString()}`,
       );
-      const faucetBalanceAmount = parseFloat(faucetBalance.balance) * 1000000; // Convert to smallest units
 
-      if (faucetBalanceAmount < transferAmount) {
-        this.logger.error(
-          `⚠️ Faucet account has insufficient balance. Available: ${faucetBalance.balance}, Required: ${amount}`,
-        );
-        throw new Error(
-          `Faucet account has insufficient USDC balance. Available: ${faucetBalance.balance}, Required: ${amount}`,
-        );
-      }
-
-      // Transfer existing tokens from faucet account to recipient
+      // Step 2: Transfer the newly minted tokens to the recipient
+      this.logger.log(
+        `Transferring ${mintAmount} ${tokenConfig.symbol} to ${address}...`,
+      );
       const transferTx = new TransferTransaction()
-        .addTokenTransfer(tokenId, this.hederaAccountId, -transferAmount) // From faucet account
-        .addTokenTransfer(tokenId, recipientAccountId, transferAmount); // To recipient
+        .addTokenTransfer(tokenId, this.hederaAccountId, -mintAmount) // From faucet account
+        .addTokenTransfer(tokenId, recipientAccountId, mintAmount); // To recipient
 
       const transferResponse = await transferTx.execute(this.hederaClient);
       await transferResponse.getReceipt(this.hederaClient);
@@ -258,12 +322,18 @@ export class FaucetService {
 
       return {
         transactionHash: transferResponse.transactionId.toString(),
+        mintTransactionId: mintResponse.transactionId.toString(),
         transferTransactionId: transferResponse.transactionId.toString(),
         amount: amount,
         address: address,
+        tokenType: tokenType,
+        tokenSymbol: tokenConfig.symbol,
       };
     } catch (error: any) {
-      this.logger.error('❌ Failed to transfer USDC:', error);
+      this.logger.error(
+        `❌ Failed to mint and transfer ${tokenType.toUpperCase()}:`,
+        error,
+      );
 
       // Check if it's a TOKEN_NOT_ASSOCIATED_TO_ACCOUNT error
       if (
@@ -275,8 +345,10 @@ export class FaucetService {
         this.logger.warn(
           '⚠️  Token not associated with account. User needs to associate token first.',
         );
+        const tokenConfig =
+          TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG];
         throw new Error(
-          `Please associate USDC token (${USDC_TOKEN_ID}) with your account first using HashPack wallet. Go to the token page and click "Associate Token".`,
+          `Please associate ${tokenConfig.symbol} token (${tokenConfig.id}) with your account first using HashPack wallet. Go to the token page and click "Associate Token".`,
         );
       }
 
@@ -286,18 +358,16 @@ export class FaucetService {
         this.logger.error(
           '⚠️  Token ID is invalid or token cannot be transferred',
         );
+        const tokenConfig =
+          TOKEN_CONFIG[tokenType as keyof typeof TOKEN_CONFIG];
         throw new Error(
-          `Invalid token ID: ${USDC_TOKEN_ID}. Please check the token configuration.`,
+          `Invalid token ID: ${tokenConfig.id}. Please check the token configuration.`,
         );
       }
 
       // Re-throw the original error instead of returning mock response
-      this.logger.error(
-        '❌ Transfer failed with error:',
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
-        error.message || error,
-      );
-      throw error;
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+      throw new Error(`Token minting and transfer failed: ${error.message}`);
     }
   }
 }

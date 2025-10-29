@@ -202,17 +202,27 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const [showTokenizeReceipts, setShowTokenizeReceipts] = useState(false);
   const [recentDeliveries, setRecentDeliveries] = useState<Delivery[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [issuedReceipts, setIssuedReceipts] = useState<any[]>([]);
+  const [isLoadingReceipts, setIsLoadingReceipts] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: ToastType } | null>(null);
 
   // Fetch delivery requests and incoming deliveries from API
   useEffect(() => {
     setIsLoading(true);
     fetchDeliveriesData();
-  }, [warehouseId]);
+  }, [warehouseId, refreshKey]);
+
+  // Fetch issued receipts when switching to that section
+  useEffect(() => {
+    if (currentSection === "issued-receipts") {
+      fetchIssuedReceipts();
+    }
+  }, [currentSection, warehouseId]);
 
   // Calculate stats from real data
   const warehouseStats = {
-    totalTokensIssued: 1247, // TODO: Get from backend
+    totalTokensIssued: issuedReceipts.reduce((sum, r) => sum + (r.tokensMinted || 0), 0),
     pendingDeliveries: recentDeliveries.filter(d => d.status === "pending").length,
     verifiedToday: recentDeliveries.filter(d => d.status === "verified").length,
     totalValue: recentDeliveries.reduce((sum, d) => sum + d.estimatedValue, 0),
@@ -261,6 +271,34 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     setIsMobileMenuOpen(false);
   };
 
+  const fetchIssuedReceipts = async () => {
+    setIsLoadingReceipts(true);
+    try {
+      // Get warehouse token from localStorage
+      const token = localStorage.getItem('warehouseToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
+      const response = await fetch(`http://localhost:3001/warehouse/issued-receipts`, { headers });
+      if (response.ok) {
+        const receipts = await response.json();
+        setIssuedReceipts(receipts);
+      } else {
+        setIssuedReceipts([]);
+      }
+    } catch (error) {
+      console.error('Error fetching issued receipts:', error);
+      setIssuedReceipts([]);
+    } finally {
+      setIsLoadingReceipts(false);
+    }
+  };
+
   const showToast = (message: string, type: ToastType = "info") => {
     setToast({ message, type });
   };
@@ -273,11 +311,20 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const receiveDeliveryRequest = async (deliveryId: string, delivery: Delivery) => {
     try {
       const numericId = parseInt(deliveryId.replace('req', ''));
+      
+      // Get warehouse token from localStorage
+      const token = localStorage.getItem('warehouseToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`http://localhost:3001/warehouse/delivery-requests/${numericId}/receive`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({
           actualWeight: delivery.weight,
           unit: delivery.unit,
@@ -310,18 +357,28 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   // Extract fetchDeliveries logic into a separate function for reuse
   const fetchDeliveriesData = async () => {
     try {
+      // Get warehouse token from localStorage
+      const token = localStorage.getItem('warehouseToken');
+      const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+      };
+      
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       // Fetch both delivery requests and incoming deliveries
       const [deliveryRequestsRes, incomingDeliveriesRes] = await Promise.all([
-        fetch(`http://localhost:3001/warehouse/delivery-requests?warehouseId=${warehouseId}`),
-        fetch(`http://localhost:3001/warehouse/incoming-deliveries?warehouseId=${warehouseId}`)
+        fetch(`http://localhost:3001/warehouse/delivery-requests`, { headers }),
+        fetch(`http://localhost:3001/warehouse/incoming-deliveries`, { headers })
       ]);
 
       const allDeliveries: Delivery[] = [];
 
       // Process delivery requests (pending deliveries)
       if (deliveryRequestsRes.ok) {
-        const deliveryRequests = await deliveryRequestsRes.json();
-        const transformedRequests: Delivery[] = deliveryRequests
+      const deliveryRequests = await deliveryRequestsRes.json();
+      const transformedRequests: Delivery[] = deliveryRequests
           .filter((item: any) => {
             // Only show delivery requests that haven't been received yet
             // AND aren't already completed
@@ -331,15 +388,21 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
           })
           .map((item: any) => {
             // Extract farmer name from email (john.kamau@farm.ke -> John Kamau)
-            let farmerName = item.farmer?.memberNumber || `Farmer ${item.farmerId}`;
+            let farmerName: string;
+
             if (item.farmer?.email) {
               const emailName = item.farmer.email.split('@')[0];
               // Convert john.kamau to John Kamau
-              farmerName = emailName.split('.').map((part: string) =>
-                part.charAt(0).toUpperCase() + part.slice(1)
-              ).join(' ');
+              farmerName = emailName
+                .split('.')
+                .map((part: string) => part.charAt(0).toUpperCase() + part.slice(1))
+                .join(' ');
+            } else if (item.farmer?.memberNumber) {
+              farmerName = item.farmer.memberNumber;
+            } else {
+              farmerName = `Farmer ${item.farmerId}`;
             }
-
+            
             return {
               id: `req${item.id}`,
               farmerName: farmerName,
@@ -370,15 +433,20 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             return item.status === 'pending' || item.status === 'inspecting';
           })
           .map((item: any) => {
-            // Extract farmer name from email if available
-            let farmerName = item.farmerName || item.farmer?.memberNumber || `Farmer ${item.farmerId}`;
+            // Extract farmer name from email if available, fallback to memberNumber
+            let farmerName = `Farmer ${item.farmerId}`;
             if (item.farmer?.email) {
               const emailName = item.farmer.email.split('@')[0];
               // Convert john.kamau to John Kamau
               farmerName = emailName.split('.').map((part: string) =>
                 part.charAt(0).toUpperCase() + part.slice(1)
               ).join(' ');
+            } else if (item.farmer?.memberNumber) {
+              farmerName = item.farmer.memberNumber;
             }
+
+            // Use grade from incoming delivery, fallback to delivery request's estimated grade
+            const grade = item.grade || item.deliveryRequest?.estimatedGrade || "Pending";
 
             return {
               id: `del${item.id}`,
@@ -387,7 +455,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               cropType: item.cropType,
               weight: parseFloat(item.weight),
               unit: item.unit,
-              grade: item.grade || "Unknown",
+              grade: grade,
               arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
               status: item.status as "pending" | "inspecting" | "verified" | "rejected",
               priority: item.priority as "low" | "medium" | "high",
@@ -476,10 +544,21 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     }
   };
 
+  const getGradeColor = (grade: string) => {
+    const gradeLower = grade.toLowerCase();
+    if (gradeLower.includes('premium')) return "text-green-600 dark:text-green-400 bg-green-100 dark:bg-green-900/20";
+    if (gradeLower.includes('grade-a') || gradeLower.includes('grade a')) return "text-blue-600 dark:text-blue-400 bg-blue-100 dark:bg-blue-900/20";
+    if (gradeLower.includes('grade-b') || gradeLower.includes('grade b')) return "text-yellow-600 dark:text-yellow-400 bg-yellow-100 dark:bg-yellow-900/20";
+    if (gradeLower.includes('grade-c') || gradeLower.includes('grade c')) return "text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-900/20";
+    if (gradeLower.includes('rejected')) return "text-red-600 dark:text-red-400 bg-red-100 dark:bg-red-900/20";
+    if (gradeLower.includes('pending')) return "text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/20";
+    return "text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-800/20";
+  };
+
   const renderOverview = () => (
     <div className="space-y-8">
       {/* Welcome Section */}
-      <div className="text-center py-8 bg-gradient-to-r from-green-50 to-amber-50 rounded-2xl">
+      <div className="text-center py-8 bg-gradient-to-r from-green-50 to-amber-50 dark:from-green-950/20 dark:to-amber-950/20 rounded-2xl border">
         <div className="flex items-center justify-center mb-4">
           <div className="p-4 bg-gradient-to-r from-green-600 to-amber-600 rounded-full">
             <Warehouse className="h-8 w-8 text-white" />
@@ -501,13 +580,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Total Tokens Issued</p>
                 <p className="text-2xl font-bold text-foreground">{warehouseStats.totalTokensIssued.toLocaleString()}</p>
-                <p className="text-xs text-green-600 flex items-center mt-1">
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +12 this week
                 </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Coins className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-green-100 dark:bg-green-900/20 rounded-lg">
+                <Coins className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </CardContent>
@@ -519,13 +598,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Pending Deliveries</p>
                 <p className="text-2xl font-bold text-foreground">{warehouseStats.pendingDeliveries}</p>
-                <p className="text-xs text-orange-600 flex items-center mt-1">
+                <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center mt-1">
                   <Clock className="h-3 w-3 mr-1" />
                   Requires attention
                 </p>
               </div>
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <Truck className="h-6 w-6 text-orange-600" />
+              <div className="p-3 bg-orange-100 dark:bg-orange-900/20 rounded-lg">
+                <Truck className="h-6 w-6 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
           </CardContent>
@@ -537,13 +616,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Verified Today</p>
                 <p className="text-2xl font-bold text-foreground">{warehouseStats.verifiedToday}</p>
-                <p className="text-xs text-blue-600 flex items-center mt-1">
+                <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center mt-1">
                   <CheckCircle className="h-3 w-3 mr-1" />
                   Quality assured
                 </p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <FlaskConical className="h-6 w-6 text-blue-600" />
+              <div className="p-3 bg-blue-100 dark:bg-blue-900/20 rounded-lg">
+                <FlaskConical className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </CardContent>
@@ -755,26 +834,25 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
           ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
-              <thead className="bg-gray-50">
+              <thead className="bg-muted/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Farmer</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Crop</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Location</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Arrival</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Notes</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Farmer</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Crop</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Weight</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Grade</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Location</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Arrival</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Notes</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">Actions</th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-border">
                 {recentDeliveries.map((delivery) => (
-                  <tr key={delivery.id} className="hover:bg-gray-50">
+                  <tr key={delivery.id} className="hover:bg-muted/50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div>
                         <div className="text-sm font-medium text-foreground">{delivery.farmerName}</div>
-                        <div className="text-sm text-muted-foreground">{delivery.farmerId}</div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -784,7 +862,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                       <div className="text-sm text-foreground">{delivery.weight} {delivery.unit}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <Badge className={getPriorityColor(delivery.priority)}>
+                      <Badge className={getGradeColor(delivery.grade)}>
                         {delivery.grade}
                       </Badge>
                     </td>
@@ -864,6 +942,294 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             </table>
           </div>
           )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderIssuedReceipts = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-foreground">Issued Receipts</h2>
+          <p className="text-muted-foreground">View all tokenized warehouse receipts</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button onClick={() => fetchIssuedReceipts()}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        </div>
+      </div>
+
+      {/* Receipts Table */}
+      <Card>
+        <CardContent className="p-0">
+          {isLoadingReceipts ? (
+            <div className="text-center py-12">
+              <RefreshCw className="h-8 w-8 text-muted-foreground mx-auto mb-4 animate-spin" />
+              <p className="text-muted-foreground">Loading receipts...</p>
+            </div>
+          ) : issuedReceipts.length === 0 ? (
+            <div className="text-center py-12">
+              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-foreground mb-2">No receipts issued yet</h3>
+              <p className="text-muted-foreground">
+                Issued receipts will appear here after verification and tokenization
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Farmer</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Crop</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Grade</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tokens</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {issuedReceipts.map((receipt) => {
+                    // Extract farmer name
+                    let farmerName = `Farmer ${receipt.farmerId}`;
+                    if (receipt.farmer?.email) {
+                      const emailName = receipt.farmer.email.split('@')[0];
+                      farmerName = emailName.split('.').map((part: string) =>
+                        part.charAt(0).toUpperCase() + part.slice(1)
+                      ).join(' ');
+                    } else if (receipt.farmer?.memberNumber) {
+                      farmerName = receipt.farmer.memberNumber;
+                    }
+
+                    return (
+                      <tr key={receipt.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div>
+                            <div className="text-sm font-medium text-foreground">{farmerName}</div>
+                            <div className="text-sm text-muted-foreground">{receipt.farmer?.walletAddress?.slice(0, 10)}...</div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-foreground">{receipt.grainType}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm text-foreground">{receipt.weightKg} kg</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge className={getStatusColor(receipt.qualityGrade)}>
+                            {receipt.qualityGrade}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-foreground">{receipt.tokensMinted}</div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
+                          {new Date(receipt.depositedAt).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <Badge className={receipt.hederaTxId ? "text-green-600 bg-green-100" : "text-yellow-600 bg-yellow-100"}>
+                            {receipt.hederaTxId ? 'Minted' : 'Pending'}
+                          </Badge>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <div className="flex space-x-2">
+                            <Button size="sm" variant="outline">
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            {receipt.hederaTxId && (
+                              <Button size="sm" variant="outline">
+                                <ExternalLink className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderInventoryStock = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-foreground">Inventory & Stock</h2>
+          <p className="text-muted-foreground">Current warehouse inventory and stock levels</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Export Report
+          </Button>
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Stock
+          </Button>
+        </div>
+      </div>
+
+      {/* Inventory Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Stock</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {issuedReceipts.reduce((sum, r) => sum + (r.weightKg || 0), 0)} kg
+                </p>
+              </div>
+              <Package className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Active Deposits</p>
+                <p className="text-2xl font-bold text-foreground">{issuedReceipts.length}</p>
+              </div>
+              <FileText className="h-8 w-8 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Crop Types</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {new Set(issuedReceipts.map(r => r.grainType)).size}
+                </p>
+              </div>
+              <Sprout className="h-8 w-8 text-purple-500" />
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Total Value</p>
+                <p className="text-2xl font-bold text-foreground">
+                  ${issuedReceipts.reduce((sum, r) => sum + (r.weightKg * 5 || 0), 0).toLocaleString()}
+                </p>
+              </div>
+              <DollarSign className="h-8 w-8 text-orange-500" />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Stock by Crop Type */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Stock by Crop Type</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {Object.entries(
+              issuedReceipts.reduce((acc, receipt) => {
+                const crop = receipt.grainType;
+                if (!acc[crop]) acc[crop] = { total: 0, count: 0 };
+                acc[crop].total += receipt.weightKg || 0;
+                acc[crop].count += 1;
+                return acc;
+              }, {} as Record<string, { total: number; count: number }>)
+            ).map(([crop, data]) => {
+              const typedData = data as { total: number; count: number };
+              return (
+              <div key={crop} className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">{crop}</h4>
+                  <p className="text-sm text-muted-foreground">{typedData.count} deposits</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-medium">{typedData.total} kg</p>
+                  <p className="text-sm text-muted-foreground">${(typedData.total * 5).toLocaleString()}</p>
+                </div>
+              </div>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+
+  const renderAuditTrail = () => (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-foreground">Audit Trail</h2>
+          <p className="text-muted-foreground">Complete log of warehouse operations and transactions</p>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Export Log
+          </Button>
+          <Button variant="outline">
+            <Filter className="h-4 w-4 mr-2" />
+            Filter
+          </Button>
+        </div>
+      </div>
+
+      {/* Recent Activity */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {issuedReceipts.slice(0, 10).map((receipt, index) => (
+              <div key={receipt.id} className="flex items-center space-x-4 p-4 border rounded-lg">
+                <div className="p-2 bg-green-100 rounded-full">
+                  <CheckCircle className="h-4 w-4 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium">
+                    Delivery verified and tokens minted for {receipt.grainType}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {receipt.weightKg} kg • {receipt.tokensMinted} tokens • {new Date(receipt.depositedAt).toLocaleString()}
+                  </p>
+                </div>
+                <Badge variant="outline">
+                  {receipt.hederaTxId ? 'Completed' : 'Pending'}
+                </Badge>
+              </div>
+            ))}
+            {issuedReceipts.length === 0 && (
+              <div className="text-center py-8">
+                <Activity className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-semibold text-foreground mb-2">No activity yet</h3>
+                <p className="text-muted-foreground">
+                  Warehouse operations will appear here
+                </p>
+              </div>
+            )}
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -1010,11 +1376,23 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             showQualityInspection ? (
               <QualityInspection 
                 deliveryId={selectedDelivery?.id || "del001"} 
+                deliveryData={selectedDelivery ? {
+                  farmerName: selectedDelivery.farmerName,
+                  cropType: selectedDelivery.cropType,
+                  weight: selectedDelivery.weight,
+                  unit: selectedDelivery.unit,
+                  grade: selectedDelivery.grade,
+                  moisture: selectedDelivery.moisture,
+                  temperature: selectedDelivery.temperature,
+                  notes: selectedDelivery.notes
+                } : undefined}
                 onBack={() => setShowQualityInspection(false)} 
                 onComplete={(data) => {
-                  console.log("Inspection completed:", data);
                   setShowQualityInspection(false);
-                  setCurrentSection("tokenize-receipts");
+                  // After verification + mint, refresh incoming lists
+                  setRefreshKey((k: number) => k + 1);
+                  showToast('Delivery verified and tokens minted', 'success');
+                  setCurrentSection("incoming-deliveries");
                 }} 
               />
             ) : (
@@ -1039,10 +1417,10 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               }} 
             />
           )}
-          {currentSection === "issued-receipts" && <div>Issued Receipts Table</div>}
-          {currentSection === "inventory-stock" && <div>Inventory & Stock View</div>}
+          {currentSection === "issued-receipts" && renderIssuedReceipts()}
+          {currentSection === "inventory-stock" && renderInventoryStock()}
           {currentSection === "staff-permissions" && <div>Staff & Permissions</div>}
-          {currentSection === "audit-trail" && <div>Audit Trail</div>}
+          {currentSection === "audit-trail" && renderAuditTrail()}
         </div>
       </div>
 

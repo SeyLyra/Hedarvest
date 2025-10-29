@@ -143,18 +143,46 @@ export default function WarehousePage() {
   const [warehouseId, setWarehouseId] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   // Restore session from localStorage on mount
   useEffect(() => {
-    const token = localStorage.getItem('warehouseToken');
-    const savedOperatorName = localStorage.getItem('warehouseOperatorName');
-    const savedWarehouseId = localStorage.getItem('warehouseId');
+    const checkAuth = async () => {
+      const token = localStorage.getItem('warehouseToken');
+      const savedOperatorName = localStorage.getItem('warehouseOperatorName');
+      const savedWarehouseId = localStorage.getItem('warehouseId');
 
-    if (token && savedOperatorName && savedWarehouseId) {
-      setOperatorName(savedOperatorName);
-      setWarehouseId(savedWarehouseId);
-      setIsLoggedIn(true);
-    }
+      if (token && savedOperatorName && savedWarehouseId) {
+        // Verify token is still valid by making a test request
+        try {
+          const response = await fetch('http://localhost:3001/warehouse/profile', {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+            },
+          });
+
+          if (response.ok) {
+            setOperatorName(savedOperatorName);
+            setWarehouseId(savedWarehouseId);
+            setIsLoggedIn(true);
+          } else {
+            // Token is invalid, clear it
+            localStorage.removeItem('warehouseToken');
+            localStorage.removeItem('warehouseOperatorName');
+            localStorage.removeItem('warehouseId');
+          }
+        } catch (error) {
+          // Network error, just trust the token
+          setOperatorName(savedOperatorName);
+          setWarehouseId(savedWarehouseId);
+          setIsLoggedIn(true);
+        }
+      }
+
+      setIsCheckingAuth(false);
+    };
+
+    checkAuth();
   }, []);
 
   const handleLogin = async (email: string, password: string) => {
@@ -162,24 +190,30 @@ export default function WarehousePage() {
     setError("");
 
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      const response = await fetch('http://localhost:3001/warehouse/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-      // Mock successful login
-      if (email === "operator@warehouse.com" && password === "password") {
-        const operator = "Jane Operator";
-        const whId = "WH001";
+      if (response.ok) {
+        const data = await response.json();
+        const operator = data.warehouse.operator;
+        const whId = data.warehouse.id;
 
         setOperatorName(operator);
         setWarehouseId(whId);
         setIsLoggedIn(true);
 
         // Persist to localStorage
-        localStorage.setItem('warehouseToken', 'mock-token');
+        localStorage.setItem('warehouseToken', data.accessToken);
         localStorage.setItem('warehouseOperatorName', operator);
         localStorage.setItem('warehouseId', whId);
       } else {
-        setError("Invalid email or password");
+        const errorData = await response.json();
+        setError(errorData.message || "Invalid email or password");
       }
     } catch (err) {
       setError("Login failed. Please try again.");
@@ -199,6 +233,28 @@ export default function WarehousePage() {
     localStorage.removeItem('warehouseOperatorName');
     localStorage.removeItem('warehouseId');
   };
+
+  // Show loading state while checking authentication
+  if (isCheckingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50/30 via-amber-50/30 to-green-50/30">
+        <div className="text-center">
+          <div className="relative mb-6">
+            {/* Outer spinning ring */}
+            <div className="animate-spin rounded-full h-16 w-16 border-4 border-green-400/20 border-t-green-400 mx-auto"></div>
+            {/* Inner warehouse icon */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Warehouse className="h-6 w-6 text-green-400 animate-pulse" />
+            </div>
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-green-600">Checking Authentication</p>
+            <p className="text-sm text-muted-foreground">Please wait while we verify your credentials...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Show login form if not logged in
   if (!isLoggedIn) {

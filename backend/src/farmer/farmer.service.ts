@@ -185,9 +185,9 @@ export class FarmerService {
 
     // Determine which token to mint based on grain type
     const tokenIdMap: Record<string, string> = {
-      'wheat': process.env.WHEAT_TOKEN_ID || '0.0.7121333',
-      'rice': process.env.RICE_TOKEN_ID || '0.0.7121334',
-      'corn': process.env.CORN_TOKEN_ID || '0.0.7121335',
+      wheat: process.env.WHEAT_TOKEN_ID || '0.0.7121333',
+      rice: process.env.RICE_TOKEN_ID || '0.0.7121334',
+      corn: process.env.CORN_TOKEN_ID || '0.0.7121335',
     };
 
     const tokenId = tokenIdMap[deposit.grainType.toLowerCase()];
@@ -195,17 +195,26 @@ export class FarmerService {
       throw new BadRequestException(`Unsupported grain type: ${deposit.grainType}`);
     }
 
-    // Mint tokens to farmer's custodial wallet
-    const mintResult = await this.hederaService.mintToken(
+    // Convert human units (kg) to smallest token units using decimals (WHEAT/RICE/CORN use 8)
+    const decimalsMap: Record<string, number> = {
+      wheat: 8,
+      rice: 8,
+      corn: 8,
+    };
+    const decimals = decimalsMap[deposit.grainType.toLowerCase()] ?? 8;
+    const smallestUnits = Math.floor(deposit.tokensMinted.toNumber() * Math.pow(10, decimals));
+
+    // Mint tokens to treasury (operator) first in smallest units
+    await this.hederaService.mintToken(
       tokenId,
-      deposit.tokensMinted.toNumber()
+      smallestUnits,
     );
 
     // Transfer minted tokens to farmer's account
     const transferResult = await this.hederaService.transferTokenToAccount(
       tokenId,
       deposit.farmer.hederaAccountId,
-      deposit.tokensMinted.toNumber()
+      smallestUnits,
     );
 
     // Update deposit record with transaction ID
@@ -401,6 +410,79 @@ export class FarmerService {
     };
   }
 
+  async createHederaWalletForFarmer(farmerId: number) {
+    console.log(`🔧 Creating Hedera wallet for farmer ID: ${farmerId}`);
+    
+    // Find farmer
+    const farmer = await this.prisma.farmer.findUnique({
+      where: { id: farmerId }
+    });
+
+    if (!farmer) {
+      console.error(`❌ Farmer not found with ID: ${farmerId}`);
+      throw new NotFoundException('Farmer not found');
+    }
+
+    console.log(`✅ Found farmer: ${farmer.email}`);
+    console.log(`   Current hederaAccountId: ${farmer.hederaAccountId || 'NOT SET'}`);
+    console.log(`   Current walletAddress: ${farmer.walletAddress}`);
+    console.log(`   Is custodial: ${farmer.isCustodial}`);
+
+    if (farmer.hederaAccountId) {
+      console.log(`✅ Farmer already has Hedera account: ${farmer.hederaAccountId}`);
+      return {
+        success: true,
+        message: 'Farmer already has Hedera account',
+        hederaAccountId: farmer.hederaAccountId,
+      };
+    }
+
+    if (!farmer.email) {
+      console.error(`❌ Farmer ${farmerId} does not have an email`);
+      throw new BadRequestException('Farmer must have an email to create custodial wallet');
+    }
+
+    try {
+      console.log(`🔧 Creating custodial wallet for ${farmer.email}...`);
+      // Create custodial wallet
+      const custodialAccount = await this.hederaService.createCustodialAccount(farmer.email);
+      
+      console.log(`✅ Created custodial account:`);
+      console.log(`   Account ID: ${custodialAccount.accountId}`);
+      console.log(`   EVM Address: ${custodialAccount.evmAddress}`);
+
+      // Encrypt private key
+      const encryptedPrivateKey = this.encryptPrivateKey(custodialAccount.privateKey);
+
+      // Update farmer
+      console.log(`🔧 Updating farmer record...`);
+      const updatedFarmer = await this.prisma.farmer.update({
+        where: { id: farmerId },
+        data: {
+          hederaAccountId: custodialAccount.accountId,
+          walletAddress: custodialAccount.evmAddress,
+          encryptedPrivateKey,
+          isCustodial: true,
+        }
+      });
+
+      console.log(`✅ Successfully updated farmer with Hedera account!`);
+      console.log(`   New hederaAccountId: ${updatedFarmer.hederaAccountId}`);
+      console.log(`   New walletAddress: ${updatedFarmer.walletAddress}`);
+
+      return {
+        success: true,
+        message: 'Hedera wallet created successfully',
+        hederaAccountId: updatedFarmer.hederaAccountId,
+        walletAddress: updatedFarmer.walletAddress,
+      };
+    } catch (error) {
+      console.error('❌ Failed to create custodial wallet:', error);
+      console.error('❌ Error details:', JSON.stringify(error, null, 2));
+      throw new BadRequestException(`Failed to create Hedera wallet: ${error.message || 'Unknown error'}`);
+    }
+  }
+
   async loginFarmer(farmerLoginDto: FarmerLoginDto) {
     const { email, password } = farmerLoginDto;
 
@@ -444,6 +526,7 @@ export class FarmerService {
         id: farmer.id,
         email: farmer.email,
         walletAddress: farmer.walletAddress,
+        hederaAccountId: farmer.hederaAccountId,
         memberNumber: farmer.memberNumber,
         phoneNumber: farmer.phoneNumber,
       },

@@ -5,7 +5,7 @@ const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:300
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { address, amount } = body;
+    const { address, amount, tokenType = 'usdc' } = body;
 
     // Validate input
     if (!address || !amount) {
@@ -22,6 +22,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Validate token type
+    const validTokenTypes = ['usdc', 'wheat', 'rice', 'corn'];
+    if (!validTokenTypes.includes(tokenType)) {
+      return NextResponse.json(
+        { error: `Invalid token type. Must be one of: ${validTokenTypes.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
     // Validate Hedera address format (0.0.xxxxx)
     const hederaAddressRegex = /^\d+\.\d+\.\d+$/;
     if (!hederaAddressRegex.test(address)) {
@@ -31,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🪙 Faucet mint request:', { address, amount });
+    console.log('🪙 Faucet mint request:', { address, amount, tokenType });
 
     // Call backend faucet API
     const response = await fetch(`${BACKEND_URL}/faucet/mint`, {
@@ -42,6 +51,7 @@ export async function POST(request: NextRequest) {
       body: JSON.stringify({
         address,
         amount: parseFloat(amount),
+        tokenType,
       }),
     });
 
@@ -67,7 +77,9 @@ export async function POST(request: NextRequest) {
       transferTransactionId: result.transferTransactionId,
       amount: result.amount,
       address: result.address,
-      message: `Successfully minted ${amount} USDT to ${address}`
+      tokenType: result.tokenType || tokenType,
+      tokenSymbol: result.tokenSymbol || tokenType.toUpperCase(),
+      message: `Successfully minted ${amount} ${tokenType.toUpperCase()} to ${address}`
     }, { status: 200 });
 
   } catch (error) {

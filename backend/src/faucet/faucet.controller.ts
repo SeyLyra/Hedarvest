@@ -1,4 +1,12 @@
-import { Controller, Post, Body, Logger, Get, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Logger,
+  Get,
+  Param,
+  Query,
+} from '@nestjs/common';
 import { FaucetService } from './faucet.service';
 import { MintTokensDto } from './dto/mint-tokens.dto';
 
@@ -11,13 +19,14 @@ export class FaucetController {
   @Post('mint')
   async mintTokens(@Body() mintRequest: MintTokensDto) {
     this.logger.log(
-      `Minting ${mintRequest.amount} USDT to ${mintRequest.address}`,
+      `Minting ${mintRequest.amount} ${mintRequest.tokenType?.toUpperCase() || 'USDC'} to ${mintRequest.address}`,
     );
 
     try {
       const result = await this.faucetService.mintTokens(
         mintRequest.address,
         mintRequest.amount.toString(),
+        mintRequest.tokenType || 'usdc',
       );
 
       return {
@@ -30,6 +39,11 @@ export class FaucetController {
               : 'pending',
         amount: mintRequest.amount,
         address: mintRequest.address,
+        tokenType: mintRequest.tokenType || 'usdc',
+        tokenSymbol:
+          'tokenSymbol' in result
+            ? result.tokenSymbol
+            : mintRequest.tokenType?.toUpperCase() || 'USDC',
       };
     } catch (error) {
       this.logger.error('Failed to mint tokens:', error);
@@ -38,11 +52,17 @@ export class FaucetController {
   }
 
   @Get('balance/:address')
-  async getBalance(@Param('address') address: string) {
-    this.logger.log(`Getting balance for ${address}`);
+  async getBalance(
+    @Param('address') address: string,
+    @Query('tokenType') tokenType?: string,
+  ) {
+    this.logger.log(`Getting ${tokenType || 'USDC'} balance for ${address}`);
 
     try {
-      const result = await this.faucetService.getTokenBalance(address);
+      const result = await this.faucetService.getTokenBalance(
+        address,
+        tokenType || 'usdc',
+      );
 
       return {
         success: true,
@@ -51,6 +71,7 @@ export class FaucetController {
         hbarBalance: result.hbarBalance,
         isAssociated: result.isAssociated,
         address: address,
+        tokenType: tokenType || 'usdc',
       };
     } catch (error) {
       this.logger.error('Failed to get balance:', error);
@@ -60,6 +81,7 @@ export class FaucetController {
         tokenId: process.env.USDC_MOCK_TOKEN_ID || '0.0.7115536',
         isAssociated: false,
         address: address,
+        tokenType: tokenType || 'usdc',
       };
     }
   }

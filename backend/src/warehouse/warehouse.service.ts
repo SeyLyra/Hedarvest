@@ -1,13 +1,14 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, Logger, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../lib/prisma';
 import {
   CreateDeliveryDto,
   UpdateDeliveryStatusDto,
   ReceiveDeliveryDto,
-  VerifyDeliveryDto
+  VerifyDeliveryDto,
 } from './dto';
 import { TransactionService } from '../transaction/transaction.service';
 import { HederaService } from '../lib/hedera.service';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class WarehouseService {
@@ -18,6 +19,39 @@ export class WarehouseService {
     private transactionService: TransactionService,
     private hederaService: HederaService,
   ) {}
+
+  /**
+   * Warehouse operator login
+   */
+  async warehouseLogin(email: string, password: string) {
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { email },
+    });
+
+    if (!warehouse) {
+      throw new BadRequestException('Invalid credentials');
+    }
+
+    // Compare password using bcrypt
+    const isPasswordValid = await bcrypt.compare(password, warehouse.password);
+    
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (warehouse.status !== 'active') {
+      throw new UnauthorizedException('Warehouse account is not active');
+    }
+
+    return {
+      warehouse: {
+        id: warehouse.warehouseId,
+        name: warehouse.name,
+        email: warehouse.email,
+        manager: warehouse.manager,
+      },
+    };
+  }
 
   /**
    * Create a new delivery request from farmer
@@ -80,7 +114,7 @@ export class WarehouseService {
       where.status = status;
     }
 
-    return this.prisma.deliveryRequest.findMany({
+    const result = await this.prisma.deliveryRequest.findMany({
       where,
       include: {
         farmer: {
@@ -98,6 +132,36 @@ export class WarehouseService {
         scheduledDate: 'asc',
       },
     });
+
+    // Check if farmer data is missing and fetch it separately
+    const resultWithFarmerData = await Promise.all(
+      result.map(async (delivery) => {
+        if (!delivery.farmer) {
+          this.logger.log(`Fetching farmer data for farmerId: ${delivery.farmerId}`);
+          const farmer = await this.prisma.farmer.findUnique({
+            where: { id: delivery.farmerId },
+            select: {
+              id: true,
+              memberNumber: true,
+              phoneNumber: true,
+              walletAddress: true,
+              email: true,
+            },
+          });
+          this.logger.log(`Farmer data: ${JSON.stringify(farmer)}`);
+          return { ...delivery, farmer };
+        }
+        this.logger.log(`Farmer data already included: ${JSON.stringify(delivery.farmer)}`);
+        return delivery;
+      })
+    );
+
+    this.logger.log(`Found ${resultWithFarmerData.length} delivery requests for warehouse ${warehouseId}`);
+    if (resultWithFarmerData.length > 0) {
+      this.logger.log('Sample delivery request (first item):', JSON.stringify(resultWithFarmerData[0], null, 2));
+    }
+    
+    return resultWithFarmerData;
   }
 
   /**
@@ -404,6 +468,41 @@ export class WarehouseService {
       grainDeposit,
       message: 'Delivery verified and tokens minted successfully',
     };
+  }
+
+  /**
+   * Get issued receipts (grain deposits) for warehouse
+   */
+  async getIssuedReceipts(warehouseId: string, status?: string) {
+    // Get grain deposits that were created from warehouse verifications
+    // For now, return all grain deposits - you can add warehouse filtering later
+    const where: any = {};
+
+    if (status) {
+      // Filter by hederaTxId presence
+      if (status === 'minted') {
+        where.hederaTxId = { not: null };
+      } else if (status === 'pending') {
+        where.hederaTxId = null;
+      }
+    }
+
+    return this.prisma.grainDeposit.findMany({
+      where,
+      include: {
+        farmer: {
+          select: {
+            id: true,
+            memberNumber: true,
+            walletAddress: true,
+            email: true,
+          },
+        },
+      },
+      orderBy: {
+        depositedAt: 'desc',
+      },
+    });
   }
 
   /**

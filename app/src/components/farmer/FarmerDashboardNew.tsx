@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,36 +77,90 @@ import {
   Monitor,
   Tablet,
   Menu,
-  MessageCircle
+  MessageCircle,
+  Copy
 } from "lucide-react";
 import CropPools from "./CropPools";
 import RegisterCrop from "./RegisterCrop";
 import FindWarehouse from "./FindWarehouse";
 import ActivityFeed from "./ActivityFeed";
 import UserProfile from "./UserProfile";
-// import DepositCollateral from "./DepositCollateral";
-// import BorrowFunds from "./BorrowFunds";
-// import LoanStatus from "./LoanStatus";
-// import RepayLoan from "./RepayLoan";
-// import CropTokensList from "./CropTokensList";
 
 interface FarmerDashboardProps {
   farmerName: string;
   farmerId: number;
   onLogout: () => void;
+  hederaAccountId?: string;
 }
 
 type DashboardSection = "overview" | "my-crops" | "borrow-loans" | "activity";
 type DefiStep = "crop-pools" | "deposit-collateral" | "borrow-funds" | "loan-status" | "repay-loan" | "withdraw-to-bank";
 
-export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: FarmerDashboardProps) {
+export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hederaAccountId }: FarmerDashboardProps) {
   const [currentSection, setCurrentSection] = useState<DashboardSection>("overview");
   const [defiStep, setDefiStep] = useState<DefiStep | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [deliveryWorkflow, setDeliveryWorkflow] = useState<"findWarehouse" | "registerCrop" | null>(null);
   const [selectedWarehouseId, setSelectedWarehouseId] = useState<string | null>(null);
 
-  // Mock data
+  // Live token balances
+  const [isLoadingBalances, setIsLoadingBalances] = useState(false);
+  const [wheatBalance, setWheatBalance] = useState<string>("0");
+  const [riceBalance, setRiceBalance] = useState<string>("0");
+  const [wheatAssociated, setWheatAssociated] = useState<boolean | undefined>(undefined);
+  const [riceAssociated, setRiceAssociated] = useState<boolean | undefined>(undefined);
+
+  useEffect(() => {
+    const acct = hederaAccountId || (typeof window !== 'undefined' ? localStorage.getItem('farmerAccountId') || '' : '');
+    console.log('🔍 Farmer Dashboard - Hedera Account ID:', acct);
+    
+    if (!acct) {
+      console.log('⚠️ No Hedera Account ID found for farmer');
+      return;
+    }
+
+    const fetchBalances = async () => {
+      try {
+        setIsLoadingBalances(true);
+        console.log('🔄 Fetching balances for account:', acct);
+        
+        const [wheatRes, riceRes] = await Promise.all([
+          fetch(`/api/faucet/balance/${acct}?tokenType=wheat`, { cache: 'no-store' }),
+          fetch(`/api/faucet/balance/${acct}?tokenType=rice`, { cache: 'no-store' }),
+        ]);
+        
+        const [wheatJson, riceJson] = await Promise.all([wheatRes.json(), riceRes.json()]);
+        
+        console.log('🌾 Wheat balance response:', wheatJson);
+        console.log('🌾 Rice balance response:', riceJson);
+        
+        if (wheatRes.ok) {
+          setWheatBalance(wheatJson.balance || '0');
+          setWheatAssociated(wheatJson.isAssociated);
+          console.log('✅ Wheat balance set to:', wheatJson.balance);
+        } else {
+          console.log('❌ Wheat balance fetch failed:', wheatJson);
+        }
+        
+        if (riceRes.ok) {
+          setRiceBalance(riceJson.balance || '0');
+          setRiceAssociated(riceJson.isAssociated);
+          console.log('✅ Rice balance set to:', riceJson.balance);
+        } else {
+          console.log('❌ Rice balance fetch failed:', riceJson);
+        }
+      } catch (e) {
+        console.log('❌ Error fetching balances:', e);
+        // Keep defaults on error
+      } finally {
+        setIsLoadingBalances(false);
+      }
+    };
+
+    fetchBalances();
+  }, [hederaAccountId]);
+
+  // Mock data (non-balance items)
   const farmerStats = {
     totalTokenizedCrops: 12,
     totalValue: 25000,
@@ -115,7 +169,11 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
     nextRepayment: "2024-02-15",
     totalEarnings: 15000,
     kycStatus: "verified",
-    accountNumber: `MBR-${Date.now().toString().slice(-8)}` // Member account number instead of wallet address
+    accountNumber: `MBR-${Date.now().toString().slice(-8)}`,
+    walletAddress: hederaAccountId || "",
+    hederaAccountId: hederaAccountId || "",
+    isCustodial: true,
+    memberNumber: `MBR-${Date.now().toString().slice(-8)}`
   };
 
   const cropPools = [
@@ -218,73 +276,73 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
 
       {/* Key Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Card className="hover:shadow-lg transition-all duration-200">
+        <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Tokenized Crops</p>
-                <p className="text-2xl font-bold text-foreground">{farmerStats.totalTokenizedCrops}</p>
-                <p className="text-xs text-green-600 flex items-center mt-1">
+                <p className="text-sm font-medium text-green-700 dark:text-green-300">Tokenized Crops</p>
+                <p className="text-2xl font-bold text-green-900 dark:text-green-100">{farmerStats.totalTokenizedCrops}</p>
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +2 this week
                 </p>
               </div>
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Package className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                <Package className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-all duration-200">
+        <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Value</p>
-                <p className="text-2xl font-bold text-foreground">${farmerStats.totalValue.toLocaleString()}</p>
-                <p className="text-xs text-green-600 flex items-center mt-1">
+                <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Total Value</p>
+                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">${farmerStats.totalValue.toLocaleString()}</p>
+                <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +12.5% this month
                 </p>
               </div>
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <DollarSign className="h-6 w-6 text-blue-600" />
+              <div className="p-3 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                <DollarSign className="h-6 w-6 text-blue-600 dark:text-blue-400" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-all duration-200">
+        <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Available Credit</p>
-                <p className="text-2xl font-bold text-foreground">${farmerStats.availableCredit.toLocaleString()}</p>
-                <p className="text-xs text-blue-600 flex items-center mt-1">
+                <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Available Credit</p>
+                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">${farmerStats.availableCredit.toLocaleString()}</p>
+                <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center mt-1">
                   <CreditCard className="h-3 w-3 mr-1" />
                   Ready to borrow
                 </p>
               </div>
-              <div className="p-3 bg-purple-100 rounded-lg">
-                <CreditCard className="h-6 w-6 text-purple-600" />
+              <div className="p-3 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                <CreditCard className="h-6 w-6 text-purple-600 dark:text-purple-400" />
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="hover:shadow-lg transition-all duration-200">
+        <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 border-orange-200 dark:border-orange-700">
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Active Loans</p>
-                <p className="text-2xl font-bold text-foreground">{farmerStats.activeLoans}</p>
-                <p className="text-xs text-orange-600 flex items-center mt-1">
+                <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Active Loans</p>
+                <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{farmerStats.activeLoans}</p>
+                <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center mt-1">
                   <Clock className="h-3 w-3 mr-1" />
                   Next due: {farmerStats.nextRepayment}
                 </p>
               </div>
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <FileText className="h-6 w-6 text-orange-600" />
+              <div className="p-3 bg-orange-100 dark:bg-orange-800/30 rounded-lg">
+                <FileText className="h-6 w-6 text-orange-600 dark:text-orange-400" />
               </div>
             </div>
           </CardContent>
@@ -292,21 +350,21 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
       </div>
 
       {/* Quick Start Banner */}
-      <Card className="mb-8 bg-gradient-to-r from-green-50 to-blue-50 border-green-200">
+      <Card className="mb-8 bg-gradient-to-r from-green-50 to-blue-50 dark:from-green-900/20 dark:to-blue-900/20 border-green-200 dark:border-green-700">
         <CardContent className="p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <Wheat className="h-6 w-6 text-green-600" />
+              <div className="p-3 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                <Wheat className="h-6 w-6 text-green-600 dark:text-green-400" />
               </div>
               <div>
-                <h3 className="text-lg font-semibold text-foreground">Get Started</h3>
-                <p className="text-sm text-muted-foreground">View your crop tokens and start borrowing against them</p>
+                <h3 className="text-lg font-semibold text-green-900 dark:text-green-100">Get Started</h3>
+                <p className="text-sm text-green-700 dark:text-green-300">View your crop tokens and start borrowing against them</p>
               </div>
             </div>
             <Button
               onClick={() => handleSectionChange("my-crops")}
-              className="bg-green-600 hover:bg-green-700"
+              className="bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800"
             >
               <Wheat className="h-4 w-4 mr-2" />
               View My Crops
@@ -318,28 +376,28 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
       {/* Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* My Crops */}
-        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => handleSectionChange("my-crops")}>
+        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700" onClick={() => handleSectionChange("my-crops")}>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <Wheat className="h-5 w-5 text-green-600" />
+            <CardTitle className="flex items-center space-x-2 text-green-900 dark:text-green-100">
+              <Wheat className="h-5 w-5 text-green-600 dark:text-green-400" />
               <span>My Crops</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-green-700 dark:text-green-300 mb-4">
               View your stored crops and their current values
             </p>
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="p-3 bg-green-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Wheat Credits</p>
-                <p className="text-2xl font-bold text-green-600">1,250</p>
+              <div className="p-3 bg-green-100 dark:bg-green-800/30 rounded-lg">
+                <p className="text-sm text-green-700 dark:text-green-300">Wheat Credits</p>
+                <p className="text-2xl font-bold text-green-800 dark:text-green-200">{isLoadingBalances ? 'Loading…' : `${wheatBalance} WHEAT`}</p>
               </div>
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Rice Credits</p>
-                <p className="text-2xl font-bold text-blue-600">800</p>
+              <div className="p-3 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">Rice Credits</p>
+                <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">{isLoadingBalances ? 'Loading…' : `${riceBalance} RICE`}</p>
               </div>
             </div>
-            <Button className="w-full" onClick={(e) => { e.stopPropagation(); handleSectionChange("my-crops"); }}>
+            <Button className="w-full bg-green-600 hover:bg-green-700 dark:bg-green-700 dark:hover:bg-green-800" onClick={(e) => { e.stopPropagation(); handleSectionChange("my-crops"); }}>
               <Wheat className="h-4 w-4 mr-2" />
               View My Crops
             </Button>
@@ -347,28 +405,28 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
         </Card>
 
         {/* Borrow & Loans */}
-        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer" onClick={() => handleSectionChange("borrow-loans")}>
+        <Card className="hover:shadow-lg transition-all duration-200 cursor-pointer bg-gradient-to-br from-blue-50 to-cyan-50 dark:from-blue-900/20 dark:to-cyan-900/20 border-blue-200 dark:border-blue-700" onClick={() => handleSectionChange("borrow-loans")}>
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <DollarSign className="h-5 w-5 text-blue-600" />
+            <CardTitle className="flex items-center space-x-2 text-blue-900 dark:text-blue-100">
+              <DollarSign className="h-5 w-5 text-blue-600 dark:text-blue-400" />
               <span>Borrow & Loans</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground mb-4">
+            <p className="text-blue-700 dark:text-blue-300 mb-4">
               Use your crop tokens as collateral to borrow funds
             </p>
             <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="p-3 bg-blue-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Available Credit</p>
-                <p className="text-2xl font-bold text-blue-600">${farmerStats.availableCredit.toLocaleString()}</p>
+              <div className="p-3 bg-blue-100 dark:bg-blue-800/30 rounded-lg">
+                <p className="text-sm text-blue-700 dark:text-blue-300">Available Credit</p>
+                <p className="text-2xl font-bold text-blue-800 dark:text-blue-200">${farmerStats.availableCredit.toLocaleString()}</p>
               </div>
-              <div className="p-3 bg-orange-50 rounded-lg">
-                <p className="text-sm text-muted-foreground">Active Loans</p>
-                <p className="text-2xl font-bold text-orange-600">{farmerStats.activeLoans}</p>
+              <div className="p-3 bg-orange-100 dark:bg-orange-800/30 rounded-lg">
+                <p className="text-sm text-orange-700 dark:text-orange-300">Active Loans</p>
+                <p className="text-2xl font-bold text-orange-800 dark:text-orange-200">{farmerStats.activeLoans}</p>
               </div>
             </div>
-            <Button className="w-full" onClick={(e) => { e.stopPropagation(); handleSectionChange("borrow-loans"); }}>
+            <Button className="w-full bg-blue-600 hover:bg-blue-700 dark:bg-blue-700 dark:hover:bg-blue-800" onClick={(e) => { e.stopPropagation(); handleSectionChange("borrow-loans"); }}>
               <DollarSign className="h-4 w-4 mr-2" />
               Borrow Funds
             </Button>
@@ -376,11 +434,108 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
         </Card>
       </div>
 
-      {/* Recent Activity */}
-      <Card>
+      {/* Wallet Information */}
+      <Card className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900/20 dark:to-gray-900/20 border-slate-200 dark:border-slate-700">
         <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Activity className="h-5 w-5 text-purple-600" />
+          <CardTitle className="flex items-center space-x-2 text-slate-900 dark:text-slate-100">
+            <Wallet className="h-5 w-5 text-slate-600 dark:text-slate-400" />
+            <span>Wallet Information</span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Hedera Account ID</Label>
+                <div className="flex items-center space-x-2 mt-1">
+                  <code className="text-sm font-mono bg-slate-100 dark:bg-slate-800 px-3 py-2 rounded border text-slate-800 dark:text-slate-200">
+                    {farmerStats.hederaAccountId || 'Not set'}
+                  </code>
+                  {farmerStats.hederaAccountId && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        navigator.clipboard.writeText(farmerStats.hederaAccountId);
+                      }}
+                      className="text-slate-600 dark:text-slate-400"
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {!farmerStats.hederaAccountId && (
+                  <Button
+                    size="sm"
+                    variant="default"
+                    onClick={async () => {
+                      console.log('🔧 Requesting Hedera wallet creation...');
+                      try {
+                        const token = localStorage.getItem('farmerToken');
+                        if (!token) {
+                          console.error('❌ No farmer token found');
+                          return;
+                        }
+                        const response = await fetch('/api/farmers/create-wallet', {
+                          method: 'POST',
+                          headers: {
+                            'Authorization': `Bearer ${token}`,
+                          },
+                        });
+                        const data = await response.json();
+                        if (response.ok) {
+                          console.log('✅ Wallet created:', data);
+                          window.location.reload();
+                        } else {
+                          console.error('❌ Failed to create wallet:', data);
+                          alert(`Failed to create wallet: ${data.error || 'Unknown error'}`);
+                        }
+                      } catch (error) {
+                        console.error('❌ Error creating wallet:', error);
+                        alert('Error creating wallet. Please try again.');
+                      }
+                    }}
+                    className="mt-2 bg-blue-600 hover:bg-blue-700"
+                  >
+                    <Wallet className="h-4 w-4 mr-2" />
+                    Create Hedera Wallet
+                  </Button>
+                )}
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Member Number</Label>
+                <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">{farmerStats.memberNumber}</p>
+              </div>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">Wallet Type</Label>
+                <div className="flex items-center space-x-2 mt-1">
+                  <Badge variant={farmerStats.isCustodial ? "default" : "secondary"} className="text-xs">
+                    {farmerStats.isCustodial ? "Custodial" : "Self-Managed"}
+                  </Badge>
+                  <Shield className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-slate-700 dark:text-slate-300">KYC Status</Label>
+                <div className="flex items-center space-x-2 mt-1">
+                  <Badge variant="outline" className="text-xs text-green-600 border-green-200 dark:text-green-400 dark:border-green-700">
+                    {farmerStats.kycStatus}
+                  </Badge>
+                  <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Recent Activity */}
+      <Card className="bg-gradient-to-br from-purple-50 to-violet-50 dark:from-purple-900/20 dark:to-violet-900/20 border-purple-200 dark:border-purple-700">
+        <CardHeader>
+          <CardTitle className="flex items-center space-x-2 text-purple-900 dark:text-purple-100">
+            <Activity className="h-5 w-5 text-purple-600 dark:text-purple-400" />
             <span>Recent Activity</span>
           </CardTitle>
         </CardHeader>
@@ -389,21 +544,21 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
             {recentTransactions.map((tx) => {
               const Icon = tx.icon;
               return (
-                <div key={tx.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-gray-50">
-                  <div className="p-2 bg-gray-100 rounded-lg">
-                    <Icon className="h-4 w-4 text-gray-600" />
+                <div key={tx.id} className="flex items-center space-x-4 p-3 rounded-lg hover:bg-purple-100/50 dark:hover:bg-purple-800/20 transition-colors">
+                  <div className="p-2 bg-purple-100 dark:bg-purple-800/30 rounded-lg">
+                    <Icon className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   </div>
                   <div className="flex-1">
-                    <h4 className="font-medium text-foreground">{tx.description}</h4>
-                    <p className="text-sm text-muted-foreground">{tx.date}</p>
+                    <h4 className="font-medium text-purple-900 dark:text-purple-100">{tx.description}</h4>
+                    <p className="text-sm text-purple-700 dark:text-purple-300">{tx.date}</p>
                   </div>
                   <div className="text-right">
                     <p className={`font-medium ${
-                      tx.type === 'borrow' ? 'text-red-600' : 'text-green-600'
+                      tx.type === 'borrow' ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'
                     }`}>
                       {tx.amount}
                     </p>
-                    <Badge variant="outline" className="text-xs">
+                    <Badge variant="outline" className="text-xs border-purple-200 dark:border-purple-700 text-purple-700 dark:text-purple-300">
                       {tx.status}
                     </Badge>
                   </div>
@@ -673,7 +828,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
 
   const renderMobileMenu = () => (
     <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
-      <div className="fixed left-0 top-0 h-full w-80 bg-white shadow-xl">
+      <div className="fixed left-0 top-0 h-full w-80 bg-background shadow-xl">
         <div className="p-6">
           <div className="flex items-center justify-between mb-8">
             <div className="flex items-center space-x-2">
@@ -706,7 +861,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-left transition-colors ${
                     currentSection === item.id
                       ? 'bg-primary/10 text-primary'
-                      : 'hover:bg-gray-100'
+                      : 'hover:bg-muted'
                   }`}
                 >
                   <Icon className="h-5 w-5" />
@@ -723,7 +878,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-sm border-b">
+      <header className="sticky top-0 z-40 bg-background/80 backdrop-blur-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
@@ -841,64 +996,68 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
               {/* Crop Token Balances */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-4xl mx-auto">
                 {/* WHEAT Token */}
-                <Card className="hover:shadow-lg transition-all duration-200">
+                <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-amber-50 to-yellow-50 dark:from-amber-900/20 dark:to-yellow-900/20 border-amber-200 dark:border-amber-700">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="text-4xl">🌾</div>
                         <div>
-                          <CardTitle className="text-xl">Wheat Credits</CardTitle>
-                          <p className="text-sm text-muted-foreground">Stored Wheat Value</p>
+                          <CardTitle className="text-xl text-amber-900 dark:text-amber-100">Wheat Credits</CardTitle>
+                          <p className="text-sm text-amber-700 dark:text-amber-300">Stored Wheat Value</p>
                         </div>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">Balance</p>
-                      <p className="text-3xl font-bold text-foreground">1,250 WHEAT</p>
-                      <p className="text-sm text-green-600 mt-1">≈ $3,125 USD</p>
+                      <p className="text-sm text-amber-700 dark:text-amber-300 mb-1">Balance</p>
+                      <p className="text-3xl font-bold text-amber-900 dark:text-amber-100">{isLoadingBalances ? 'Loading…' : `${wheatBalance} WHEAT`}</p>
+                      {wheatAssociated === false && (
+                        <p className="text-xs text-red-600 mt-1">Token not associated. Please associate WHEAT in your wallet.</p>
+                      )}
                     </div>
-                    <div className="pt-4 border-t">
+                    <div className="pt-4 border-t border-amber-200 dark:border-amber-700">
                       <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Available</span>
-                        <span className="font-medium">750 WHEAT</span>
+                        <span className="text-amber-700 dark:text-amber-300">Available</span>
+                        <span className="font-medium text-amber-800 dark:text-amber-200">—</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Pledged as Security</span>
-                        <span className="font-medium">500 WHEAT</span>
+                        <span className="text-amber-700 dark:text-amber-300">Pledged as Security</span>
+                        <span className="font-medium text-amber-800 dark:text-amber-200">—</span>
                       </div>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* RICE Token */}
-                <Card className="hover:shadow-lg transition-all duration-200">
+                <Card className="hover:shadow-lg transition-all duration-200 bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border-green-200 dark:border-green-700">
                   <CardHeader>
                     <div className="flex items-center justify-between">
                       <div className="flex items-center space-x-3">
                         <div className="text-4xl">🌾</div>
                         <div>
-                          <CardTitle className="text-xl">Rice Credits</CardTitle>
-                          <p className="text-sm text-muted-foreground">Stored Rice Value</p>
+                          <CardTitle className="text-xl text-green-900 dark:text-green-100">Rice Credits</CardTitle>
+                          <p className="text-sm text-green-700 dark:text-green-300">Stored Rice Value</p>
                         </div>
                       </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <p className="text-sm text-muted-foreground mb-1">Balance</p>
-                      <p className="text-3xl font-bold text-foreground">800 RICE</p>
-                      <p className="text-sm text-green-600 mt-1">≈ $2,400 USD</p>
+                      <p className="text-sm text-green-700 dark:text-green-300 mb-1">Balance</p>
+                      <p className="text-3xl font-bold text-green-900 dark:text-green-100">{isLoadingBalances ? 'Loading…' : `${riceBalance} RICE`}</p>
+                      {riceAssociated === false && (
+                        <p className="text-xs text-red-600 mt-1">Token not associated. Please associate RICE in your wallet.</p>
+                      )}
                     </div>
-                    <div className="pt-4 border-t">
+                    <div className="pt-4 border-t border-green-200 dark:border-green-700">
                       <div className="flex justify-between text-sm mb-2">
-                        <span className="text-muted-foreground">Available</span>
-                        <span className="font-medium">300 RICE</span>
+                        <span className="text-green-700 dark:text-green-300">Available</span>
+                        <span className="font-medium text-green-800 dark:text-green-200">—</span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-muted-foreground">Pledged as Security</span>
-                        <span className="font-medium">500 RICE</span>
+                        <span className="text-green-700 dark:text-green-300">Pledged as Security</span>
+                        <span className="font-medium text-green-800 dark:text-green-200">—</span>
                       </div>
                     </div>
                   </CardContent>
@@ -907,21 +1066,21 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
 
               {/* Quick Actions */}
               <div className="max-w-4xl mx-auto">
-                <Card>
+                <Card className="bg-gradient-to-br from-slate-50 to-gray-50 dark:from-slate-900/20 dark:to-gray-900/20 border-slate-200 dark:border-slate-700">
                   <CardHeader>
-                    <CardTitle>Quick Actions</CardTitle>
+                    <CardTitle className="text-slate-900 dark:text-slate-100">Quick Actions</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <Button
-                        className="h-16 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                        className="h-16 text-base bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 dark:from-green-700 dark:to-emerald-700 dark:hover:from-green-800 dark:hover:to-emerald-800"
                         onClick={() => setDeliveryWorkflow("findWarehouse")}
                       >
                         <Truck className="h-5 w-5 mr-2" />
                         Request Delivery
                       </Button>
                       <Button
-                        className="h-16 text-base"
+                        className="h-16 text-base bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 dark:from-blue-700 dark:to-cyan-700 dark:hover:from-blue-800 dark:hover:to-cyan-800"
                         onClick={() => handleSectionChange("borrow-loans")}
                       >
                         <Lock className="h-5 w-5 mr-2" />
@@ -929,7 +1088,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout }: F
                       </Button>
                       <Button
                         variant="outline"
-                        className="h-16 text-base"
+                        className="h-16 text-base border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800"
                         onClick={() => handleSectionChange("activity")}
                       >
                         <History className="h-5 w-5 mr-2" />
