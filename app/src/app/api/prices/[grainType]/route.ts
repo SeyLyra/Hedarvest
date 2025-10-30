@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 const mockPrices: { [key: string]: number } = {
   'Rice': 200,
-  'Corn': 180,
   'Wheat': 220,
   'Soybean': 190,
 };

@@ -125,8 +125,19 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
   const [wheatBalance, setWheatBalance] = useState<string>("0");
   const [riceBalance, setRiceBalance] = useState<string>("0");
+  const [usdcBalance, setUsdcBalance] = useState<number>(0); // mock USDC balance
   const [wheatAssociated, setWheatAssociated] = useState<boolean | undefined>(undefined);
   const [riceAssociated, setRiceAssociated] = useState<boolean | undefined>(undefined);
+
+  // Load mock USDC balance from localStorage
+  useEffect(() => {
+    const acct = hederaAccountId || (typeof window !== 'undefined' ? localStorage.getItem('farmerAccountId') || '' : '');
+    if (!acct) return;
+    const key = `mockUsdcBalance:${acct}`;
+    const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null;
+    const val = raw ? parseFloat(raw) : 0;
+    if (!Number.isNaN(val)) setUsdcBalance(val);
+  }, [hederaAccountId]);
 
   useEffect(() => {
     const acct = hederaAccountId || (typeof window !== 'undefined' ? localStorage.getItem('farmerAccountId') || '' : '');
@@ -140,36 +151,31 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
     const fetchBalances = async () => {
       try {
         setIsLoadingBalances(true);
-        console.log('🔄 Fetching balances for account:', acct);
-        
-        const [wheatRes, riceRes] = await Promise.all([
+        // Fetch crop token balances and mock USDC balance
+        const [wheatRes, riceRes, usdcRes] = await Promise.all([
           fetch(`/api/faucet/balance/${acct}?tokenType=wheat`, { cache: 'no-store' }),
           fetch(`/api/faucet/balance/${acct}?tokenType=rice`, { cache: 'no-store' }),
+          fetch(`/api/faucet/balance/${acct}?tokenType=usdc`, { cache: 'no-store' }),
         ]);
-        
-        const [wheatJson, riceJson] = await Promise.all([wheatRes.json(), riceRes.json()]);
-        
-        console.log('🌾 Wheat balance response:', wheatJson);
-        console.log('🌾 Rice balance response:', riceJson);
-        
+        const [wheatJson, riceJson, usdcJson] = await Promise.all([
+          wheatRes.json(),
+          riceRes.json(),
+          usdcRes.json(),
+        ]);
         if (wheatRes.ok) {
           setWheatBalance(wheatJson.balance || '0');
           setWheatAssociated(wheatJson.isAssociated);
-          console.log('✅ Wheat balance set to:', wheatJson.balance);
-        } else {
-          console.log('❌ Wheat balance fetch failed:', wheatJson);
         }
-        
         if (riceRes.ok) {
           setRiceBalance(riceJson.balance || '0');
           setRiceAssociated(riceJson.isAssociated);
-          console.log('✅ Rice balance set to:', riceJson.balance);
-        } else {
-          console.log('❌ Rice balance fetch failed:', riceJson);
         }
-      } catch (e) {
-        console.log('❌ Error fetching balances:', e);
-        // Keep defaults on error
+        if (usdcRes.ok) {
+          const bal = typeof usdcJson.balance === 'string' ? parseFloat(usdcJson.balance) : Number(usdcJson.balance || 0);
+          setUsdcBalance(isFinite(bal) ? bal : 0);
+        }
+      } catch (_) {
+        // keep defaults
       } finally {
         setIsLoadingBalances(false);
       }
@@ -281,31 +287,26 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
   const refreshBalances = async (account: string) => {
     try {
       setIsRefreshingForDeposit(true);
-      console.log('🔄 Refreshing balances for deposit form, account:', account);
-      
-      const [wheatRes, riceRes] = await Promise.all([
+      const [wheatRes, riceRes, usdcRes] = await Promise.all([
         fetch(`/api/faucet/balance/${account}?tokenType=wheat`, { cache: 'no-store' }),
         fetch(`/api/faucet/balance/${account}?tokenType=rice`, { cache: 'no-store' }),
+        fetch(`/api/faucet/balance/${account}?tokenType=usdc`, { cache: 'no-store' }),
       ]);
-      
-      const [wheatJson, riceJson] = await Promise.all([wheatRes.json(), riceRes.json()]);
-      
-      console.log('🌾 Refresh - Wheat balance response:', wheatJson);
-      console.log('🌾 Refresh - Rice balance response:', riceJson);
-      
+      const [wheatJson, riceJson, usdcJson] = await Promise.all([wheatRes.json(), riceRes.json(), usdcRes.json()]);
       if (wheatRes.ok) {
         setWheatBalance(wheatJson.balance || '0');
         setWheatAssociated(wheatJson.isAssociated);
-        console.log('✅ Refresh - Wheat balance set to:', wheatJson.balance);
       }
-      
       if (riceRes.ok) {
         setRiceBalance(riceJson.balance || '0');
         setRiceAssociated(riceJson.isAssociated);
-        console.log('✅ Refresh - Rice balance set to:', riceJson.balance);
       }
-    } catch (e) {
-      console.log('❌ Error refreshing balances:', e);
+      if (usdcRes.ok) {
+        const bal = typeof usdcJson.balance === 'string' ? parseFloat(usdcJson.balance) : Number(usdcJson.balance || 0);
+        setUsdcBalance(isFinite(bal) ? bal : 0);
+      }
+    } catch (_) {
+      // ignore
     } finally {
       setIsRefreshingForDeposit(false);
     }
@@ -784,10 +785,6 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                   <option value="">All Specialties</option>
                   <option value="rice">Rice</option>
                   <option value="wheat">Wheat</option>
-                  <option value="corn">Corn</option>
-                  <option value="soybeans">Soybeans</option>
-                  <option value="cotton">Cotton</option>
-                  <option value="storage">Storage</option>
                 </select>
               </div>
             </div>
@@ -1179,10 +1176,14 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
             <div>
               {!defiStep || defiStep === "crop-pools" ? (
                 <div className="space-y-6">
-                  <div className="flex justify-end">
+                  <div className="flex justify-end gap-2">
                     <Button variant="outline" onClick={() => setDefiStep('loan-status')}>
                       <BarChart3 className="h-4 w-4 mr-2" />
                       View Loan Position
+                    </Button>
+                    <Button variant="outline" onClick={() => setDefiStep('withdraw-to-bank')}>
+                      <Banknote className="h-4 w-4 mr-2" />
+                      Withdraw to Bank
                     </Button>
                   </div>
                   <CropPools
@@ -1617,6 +1618,9 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                               } : undefined,
                             });
 
+                            // Update mock USDC balance locally (or re-fetch)
+                            setUsdcBalance((prev) => prev + amount);
+
                             setBorrowAmount("");
                             setDefiStep("crop-pools");
                             setSelectedPoolForBorrow(null);
@@ -1651,10 +1655,14 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                 </div>
               ) : defiStep === "loan-status" ? (
                 <div className="p-8 max-w-3xl mx-auto">
-                  <div className="mb-6">
+                  <div className="mb-6 flex justify-between items-center">
                     <Button variant="ghost" onClick={() => setDefiStep('crop-pools')} className="mb-4">
                       <ArrowLeft className="h-4 w-4 mr-2" />
                       Back to Pools
+                    </Button>
+                    <Button variant="outline" onClick={() => setDefiStep('withdraw-to-bank')}>
+                      <Banknote className="h-4 w-4 mr-2" />
+                      Withdraw to Bank
                     </Button>
                   </div>
 
@@ -1734,58 +1742,11 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                     </div>
                   </div>
 
-                  <Card className="max-w-md mx-auto">
-                    <CardContent className="p-6 space-y-4">
-                      <div className="text-left space-y-4">
-                        <div>
-                          <Label>Available USDC Balance</Label>
-                          <div className="text-2xl font-bold text-green-600">$5,000.00 USDC</div>
-                        </div>
-
-                        <div>
-                          <Label htmlFor="withdraw-amount">Withdrawal Amount</Label>
-                          <Input
-                            id="withdraw-amount"
-                            type="number"
-                            placeholder="Enter amount"
-                            className="text-lg h-12"
-                          />
-                        </div>
-
-                        <div>
-                          <Label htmlFor="bank-account">Bank Account</Label>
-                          <select
-                            id="bank-account"
-                            className="w-full px-3 py-3 border border-gray-300 rounded-md text-base"
-                          >
-                            <option>Select bank account</option>
-                            <option>Bank A - ****1234</option>
-                            <option>Bank B - ****5678</option>
-                          </select>
-                        </div>
-
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-left">
-                          <div className="flex items-start space-x-2">
-                            <Info className="h-4 w-4 text-blue-600 mt-0.5" />
-                            <div className="text-blue-800">
-                              <p className="font-medium mb-1">Conversion Rate</p>
-                              <p>1 USDC = 15,500 IDR (Indonesian Rupiah)</p>
-                              <p className="text-xs text-blue-600 mt-1">Processing time: 1-2 business days</p>
-                            </div>
-                          </div>
-                        </div>
-
-                        <Button className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 h-12 text-base">
-                          <Banknote className="h-5 w-5 mr-2" />
-                          Withdraw to Bank
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-
-                  <div className="mt-6 text-xs text-gray-500 text-center">
-                    {`Funds will be converted to your local currency and transferred to your bank account within 1-2 business days`}
-                  </div>
+                  <WithdrawMockForm usdcBalance={usdcBalance} onWithdraw={(amt) => {
+                    setUsdcBalance((prev) => prev - amt);
+                    toast.success(`Offramp initiated for $${amt.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC`);
+                    setDefiStep('crop-pools');
+                  }} />
                 </div>
               ) : null}
             </div>
@@ -1797,5 +1758,88 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
       {/* Mobile Menu */}
       {isMobileMenuOpen && renderMobileMenu()}
     </div>
+  );
+}
+
+function WithdrawMockForm({ usdcBalance, onWithdraw }: { usdcBalance: number; onWithdraw: (amount: number) => void }) {
+  const [amount, setAmount] = useState<string>("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  return (
+    <Card className="max-w-md mx-auto">
+      <CardContent className="p-6 space-y-4">
+        <div className="text-left space-y-4">
+          <div>
+            <Label>Available USDC Balance</Label>
+            <div className="text-2xl font-bold text-green-600">${usdcBalance.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC</div>
+          </div>
+          <div>
+            <Label htmlFor="withdraw-amount">Withdrawal Amount</Label>
+            <Input
+              id="withdraw-amount"
+              type="number"
+              placeholder="Enter amount"
+              className="text-lg h-12"
+              value={amount}
+              min="0"
+              step="0.01"
+              onChange={(e) => setAmount(e.target.value)}
+            />
+          </div>
+          <div>
+            <Label htmlFor="bank-account">Bank Account</Label>
+            <select
+              id="bank-account"
+              className="w-full px-3 py-3 border border-gray-300 rounded-md text-base"
+            >
+              <option>Select bank account</option>
+              <option>Bank A - ****1234</option>
+              <option>Bank B - ****5678</option>
+            </select>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-left">
+            <div className="flex items-start space-x-2">
+              <Info className="h-4 w-4 text-blue-600 mt-0.5" />
+              <div className="text-blue-800">
+                <p className="font-medium mb-1">Conversion Rate</p>
+                <p>1 USDC = 15,500 IDR (mock)</p>
+                <p className="text-xs text-blue-600 mt-1">Processing time: 1-2 business days</p>
+              </div>
+            </div>
+          </div>
+          <Button
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 h-12 text-base"
+            disabled={isSubmitting || !amount || parseFloat(amount) <= 0 || parseFloat(amount) > usdcBalance}
+            onClick={async () => {
+              const amt = parseFloat(amount);
+              if (!amt || amt <= 0) return;
+              if (amt > usdcBalance) {
+                toast.error('Insufficient USDC balance');
+                return;
+              }
+              setIsSubmitting(true);
+              try {
+                // Mock offramp action
+                await new Promise((res) => setTimeout(res, 800));
+                onWithdraw(amt);
+              } finally {
+                setIsSubmitting(false);
+              }
+            }}
+          >
+            {isSubmitting ? (
+              <>
+                <RefreshCw className="h-5 w-5 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              <>
+                <Banknote className="h-5 w-5 mr-2" />
+                Withdraw to Bank
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate token type
-    const validTokenTypes = ['usdc', 'wheat', 'rice', 'corn'];
+    const validTokenTypes = ['usdc', 'wheat', 'rice'];
     if (!validTokenTypes.includes(tokenType)) {
       return NextResponse.json(
         { error: `Invalid token type. Must be one of: ${validTokenTypes.join(', ')}` },

@@ -294,17 +294,6 @@ export default function InvestorDashboard() {
             blockNumber: 12345678
           },
           {
-            id: '2',
-            type: 'deposit',
-            grainType: 'Corn',
-            amount: 2000,
-            shares: 10.4,
-            timestamp: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-            status: 'completed',
-            transactionHash: '0xabcdef1234567890',
-            blockNumber: 12345675
-          },
-          {
             id: '3',
             type: 'withdraw',
             grainType: 'Wheat',

@@ -153,61 +153,11 @@ interface Loan {
   healthScore: number; // 0-100
 }
 
-const mockLoans: Loan[] = [
-  {
-    id: "loan001",
-    amount: 2500,
-    interestRate: 8.5,
-    collateralValue: 5500,
-    collateralRatio: 0.45,
-    loanTerm: 90,
-    borrowDate: "2024-01-15",
-    dueDate: "2024-04-15",
-    status: "active",
-    poolName: "RICE Pool",
-    remainingAmount: 2500,
-    interestAccrued: 45.20,
-    daysRemaining: 45,
-    healthScore: 85
-  },
-  {
-    id: "loan002",
-    amount: 1200,
-    interestRate: 7.2,
-    collateralValue: 2000,
-    collateralRatio: 0.60,
-    loanTerm: 60,
-    borrowDate: "2024-01-10",
-    dueDate: "2024-03-10",
-    status: "active",
-    poolName: "CORN Pool",
-    remainingAmount: 1200,
-    interestAccrued: 28.50,
-    daysRemaining: 15,
-    healthScore: 92
-  },
-  {
-    id: "loan003",
-    amount: 800,
-    interestRate: 9.1,
-    collateralValue: 1200,
-    collateralRatio: 0.67,
-    loanTerm: 30,
-    borrowDate: "2023-12-01",
-    dueDate: "2023-12-31",
-    status: "repaid",
-    poolName: "WHEAT Pool",
-    remainingAmount: 0,
-    interestAccrued: 0,
-    daysRemaining: 0,
-    healthScore: 100
-  }
-];
-
 export default function LoanStatus({ onBack, onRepay }: LoanStatusProps) {
   const [selectedLoan, setSelectedLoan] = useState<string | null>(null);
+  const [loans, setLoans] = useState<Loan[]>([]);
 
-  const activeLoans = mockLoans.filter(loan => loan.status === "active");
+  const activeLoans = loans.filter(loan => loan.status === "active");
   const totalBorrowed = activeLoans.reduce((sum, loan) => sum + loan.remainingAmount, 0);
   const totalInterest = activeLoans.reduce((sum, loan) => sum + loan.interestAccrued, 0);
   const avgHealthScore = activeLoans.length > 0 
@@ -389,6 +339,11 @@ export default function LoanStatus({ onBack, onRepay }: LoanStatusProps) {
                 ))}
               </tbody>
             </table>
+            {activeLoans.length === 0 && (
+              <div className="p-8 text-center text-muted-foreground">
+                No active loans found
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -415,7 +370,7 @@ export default function LoanStatus({ onBack, onRepay }: LoanStatusProps) {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {mockLoans.filter(loan => loan.status !== "active").map((loan) => (
+                {loans.filter(loan => loan.status !== "active").map((loan) => (
                   <tr key={loan.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-foreground">{loan.id}</div>
@@ -443,6 +398,11 @@ export default function LoanStatus({ onBack, onRepay }: LoanStatusProps) {
                 ))}
               </tbody>
             </table>
+            {loans.filter(loan => loan.status !== "active").length === 0 && (
+              <div className="p-8 text-center text-muted-foreground">
+                No loan history available
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

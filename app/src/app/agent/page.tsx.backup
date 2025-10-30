@@ -1719,10 +1719,6 @@ export default function AgentPage() {
                             <option value="">Select crop type</option>
                             <option value="Wheat">Wheat</option>
                             <option value="Rice">Rice</option>
-                            <option value="Corn">Corn</option>
-                            <option value="Soybean">Soybean</option>
-                            <option value="Cotton">Cotton</option>
-                            <option value="Sugarcane">Sugarcane</option>
                           </select>
                         </div>
                       </div>

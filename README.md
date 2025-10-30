@@ -111,7 +111,7 @@ Flow examples:
 
 Fill with your deployment values:
 - Lending Pool Contract IDs: `0.0.xxxxx`
-- Token IDs (HTS): Wheat `0.0.xxxxx`, Rice `0.0.xxxxx`, Corn `0.0.xxxxx`
+- Token IDs (HTS): Wheat `0.0.xxxxx`, Rice `0.0.xxxxx`
 - HCS Topic ID(s): `0.0.xxxxx`
 - Operator / Service Account IDs: `0.0.xxxxx`
 
@@ -456,7 +456,6 @@ Instead of minting separate LP and Debt tokens, our lending pools use an efficie
 
 ## 🔐 Security Features
 
-- **Multi-signature Wallets**: Enhanced security for large transactions
 - **Reentrancy Guards**: Protection against reentrancy attacks
 - **Access Controls**: Role-based permissions
 - **Input Validation**: Comprehensive data validation

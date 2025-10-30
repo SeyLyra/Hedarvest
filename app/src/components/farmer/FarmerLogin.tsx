@@ -179,10 +179,6 @@ export default function FarmerLogin({ onLogin, isLoading = false, error }: Farme
                       <option value="">All Crop Types</option>
                       <option value="rice">Rice</option>
                       <option value="wheat">Wheat</option>
-                      <option value="corn">Corn</option>
-                      <option value="soybeans">Soybeans</option>
-                      <option value="cotton">Cotton</option>
-                      <option value="sugar">Sugar</option>
                     </select>
                   </div>
                 </div>
