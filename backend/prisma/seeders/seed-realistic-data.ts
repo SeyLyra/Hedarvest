@@ -30,6 +30,7 @@ function encryptPrivateKey(privateKey: string): string {
 }
 
 async function createCustodialWallet(email: string) {
+  let client: Client | null = null;
   try {
     // Initialize Hedera client
     const operatorId = process.env.HEDERA_OPERATOR_ID;
@@ -44,7 +45,7 @@ async function createCustodialWallet(email: string) {
       };
     }
 
-    const client = Client.forName(network);
+    client = Client.forName(network);
     client.setOperator(operatorId, operatorKey);
 
     // Generate a new private key for the farmer's account
@@ -81,6 +82,15 @@ async function createCustodialWallet(email: string) {
   } catch (error) {
     console.error(`❌ Failed to create wallet for ${email}:`, error);
     throw error;
+  } finally {
+    // Close Hedera client connection to prevent hanging
+    if (client) {
+      try {
+        await client.close();
+      } catch (closeError) {
+        // Ignore close errors
+      }
+    }
   }
 }
 
@@ -440,12 +450,19 @@ async function main() {
   console.log(`    - Password: password`);
 }
 
-main()
-  .catch((e) => {
+(async () => {
+  try {
+    await main();
+    console.log('\n✅ Seed completed successfully');
+  } catch (e) {
     console.error('❌ Seeding failed:', e);
-    process.exit(1);
-  })
-  // eslint-disable-next-line @typescript-eslint/no-misused-promises
-  .finally(async () => {
+    process.exitCode = 1;
+  } finally {
+    // Close Prisma connection
     await prisma.$disconnect();
-  });
+    // Force exit after a short delay to ensure cleanup completes
+    setTimeout(() => {
+      process.exit(process.exitCode || 0);
+    }, 500);
+  }
+})();
