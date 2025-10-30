@@ -7,6 +7,7 @@ import {
   VerifyDeliveryDto,
 } from './dto';
 import { TransactionService } from '../transaction/transaction.service';
+import { HcsService } from '../hcs/hcs.service';
 import { HederaService } from '../lib/hedera.service';
 import * as bcrypt from 'bcryptjs';
 
@@ -18,6 +19,7 @@ export class WarehouseService {
     private prisma: PrismaService,
     private transactionService: TransactionService,
     private hederaService: HederaService,
+    private hcsService: HcsService,
   ) {}
 
   /**
@@ -54,7 +56,7 @@ export class WarehouseService {
   }
 
   /**
-   * Create a new delivery request from farmer
+   * Create a new delivery (farmer request)
    */
   async createDeliveryRequest(createDeliveryDto: CreateDeliveryDto) {
     const { farmerId, ...deliveryData } = createDeliveryDto;
@@ -68,8 +70,8 @@ export class WarehouseService {
       throw new NotFoundException('Farmer not found');
     }
 
-    // Create delivery request
-    const deliveryRequest = await this.prisma.deliveryRequest.create({
+    // Create delivery
+    const delivery = await this.prisma.delivery.create({
       data: {
         farmerId,
         warehouseId: deliveryData.warehouseId,
@@ -91,8 +93,8 @@ export class WarehouseService {
     // Log transaction
     await this.transactionService.logTransaction({
       kind: 'delivery_request',
-      ref: `delivery_${deliveryRequest.id}`,
-      entity: 'DeliveryRequest',
+      ref: `delivery_${delivery.id}`,
+      entity: 'Delivery',
       meta: {
         farmerId,
         warehouseId: deliveryData.warehouseId,
@@ -101,11 +103,11 @@ export class WarehouseService {
       },
     });
 
-    return deliveryRequest;
+    return delivery;
   }
 
   /**
-   * Get all delivery requests for a warehouse
+   * Get all deliveries for a warehouse
    */
   async getDeliveryRequests(warehouseId: string, status?: string) {
     const where: any = { warehouseId };
@@ -114,7 +116,7 @@ export class WarehouseService {
       where.status = status;
     }
 
-    const result = await this.prisma.deliveryRequest.findMany({
+    const result = await this.prisma.delivery.findMany({
       where,
       include: {
         farmer: {
@@ -126,7 +128,6 @@ export class WarehouseService {
             email: true, // Include email for name display
           },
         },
-        incomingDelivery: true,
       },
       orderBy: {
         scheduledDate: 'asc',
@@ -151,28 +152,27 @@ export class WarehouseService {
           this.logger.log(`Farmer data: ${JSON.stringify(farmer)}`);
           return { ...delivery, farmer };
         }
-        this.logger.log(`Farmer data already included: ${JSON.stringify(delivery.farmer)}`);
+        this.logger.log(
+          `Farmer data already included: ${JSON.stringify(delivery.farmer)}`,
+        );
         return delivery;
       })
     );
 
-    this.logger.log(`Found ${resultWithFarmerData.length} delivery requests for warehouse ${warehouseId}`);
+    this.logger.log(`Found ${resultWithFarmerData.length} deliveries for warehouse ${warehouseId}`);
     if (resultWithFarmerData.length > 0) {
-      this.logger.log('Sample delivery request (first item):', JSON.stringify(resultWithFarmerData[0], null, 2));
+      this.logger.log('Sample delivery (first item):', JSON.stringify(resultWithFarmerData[0], null, 2));
     }
     
     return resultWithFarmerData;
   }
 
   /**
-   * Get delivery requests for a specific farmer
+   * Get deliveries for a specific farmer
    */
   async getFarmerDeliveries(farmerId: number) {
-    return this.prisma.deliveryRequest.findMany({
+    return this.prisma.delivery.findMany({
       where: { farmerId },
-      include: {
-        incomingDelivery: true,
-      },
       orderBy: {
         createdAt: 'desc',
       },
@@ -180,31 +180,28 @@ export class WarehouseService {
   }
 
   /**
-   * Get a specific delivery request
+   * Get a specific delivery
    */
   async getDeliveryRequest(id: number) {
-    const delivery = await this.prisma.deliveryRequest.findUnique({
+    const delivery = await this.prisma.delivery.findUnique({
       where: { id },
-      include: {
-        farmer: true,
-        incomingDelivery: true,
-      },
+      include: { farmer: true },
     });
 
     if (!delivery) {
-      throw new NotFoundException('Delivery request not found');
+      throw new NotFoundException('Delivery not found');
     }
 
     return delivery;
   }
 
   /**
-   * Update delivery request status
+   * Update delivery status
    */
   async updateDeliveryStatus(id: number, updateDto: UpdateDeliveryStatusDto) {
     const delivery = await this.getDeliveryRequest(id);
 
-    const updated = await this.prisma.deliveryRequest.update({
+    const updated = await this.prisma.delivery.update({
       where: { id },
       data: {
         status: updateDto.status,
@@ -216,7 +213,7 @@ export class WarehouseService {
     await this.transactionService.logTransaction({
       kind: 'delivery_status_update',
       ref: `delivery_${id}`,
-      entity: 'DeliveryRequest',
+      entity: 'Delivery',
       meta: {
         newStatus: updateDto.status,
         notes: updateDto.notes,
@@ -227,10 +224,10 @@ export class WarehouseService {
   }
 
   /**
-   * Receive delivery at warehouse (create IncomingDelivery)
+   * Receive delivery at warehouse (update Delivery with arrival data)
    */
-  async receiveDelivery(deliveryRequestId: number, receiveDto: ReceiveDeliveryDto) {
-    const deliveryRequest = await this.getDeliveryRequest(deliveryRequestId);
+  async receiveDelivery(deliveryId: number, receiveDto: ReceiveDeliveryDto) {
+    const delivery = await this.getDeliveryRequest(deliveryId);
 
     // MVP: Skip status validation for demo purposes
     // if (deliveryRequest.status !== 'confirmed' && deliveryRequest.status !== 'in_transit') {
@@ -239,113 +236,34 @@ export class WarehouseService {
     //   );
     // }
 
-    // Check if already received
-    const existing = await this.prisma.incomingDelivery.findUnique({
-      where: { deliveryRequestId },
-    });
-
-    if (existing) {
+    // If already has arrivalDate, prevent duplicate receiving
+    if (delivery.arrivalDate) {
       throw new BadRequestException('Delivery already received');
     }
 
-    // Create incoming delivery record
-    const incomingDelivery = await this.prisma.incomingDelivery.create({
+    const updated = await this.prisma.delivery.update({
+      where: { id: deliveryId },
       data: {
-        deliveryRequestId,
-        farmerName: deliveryRequest.farmer.memberNumber, // Can be updated with full name
-        farmerId: deliveryRequest.farmerId,
-        cropType: deliveryRequest.cropType,
-        weight: receiveDto.actualWeight,
-        unit: receiveDto.unit || 'kg',
-        grade: receiveDto.grade,
         arrivalDate: receiveDto.arrivalDate ? new Date(receiveDto.arrivalDate) : new Date(),
-        status: 'pending',
+        actualWeight: receiveDto.actualWeight,
+        actualGrade: receiveDto.grade,
+        status: 'received',
         priority: receiveDto.priority,
         estimatedValue: receiveDto.estimatedValue,
         storageLocation: receiveDto.storageLocation,
-        notes: receiveDto.notes,
+        notes: receiveDto.notes || delivery.notes,
       },
-    });
-
-    // Update delivery request status
-    await this.prisma.deliveryRequest.update({
-      where: { id: deliveryRequestId },
-      data: { status: 'received' },
     });
 
     // Log transaction
     await this.transactionService.logTransaction({
       kind: 'delivery_received',
-      ref: `delivery_${deliveryRequestId}`,
-      entity: 'IncomingDelivery',
+      ref: `delivery_${deliveryId}`,
+      entity: 'Delivery',
       meta: {
-        incomingDeliveryId: incomingDelivery.id,
+        deliveryId,
         actualWeight: receiveDto.actualWeight,
         estimatedValue: receiveDto.estimatedValue,
-      },
-    });
-
-    return incomingDelivery;
-  }
-
-  /**
-   * Get all incoming deliveries for warehouse
-   */
-  async getIncomingDeliveries(warehouseId: string, status?: string) {
-    // First get delivery requests for this warehouse
-    const deliveryRequests = await this.prisma.deliveryRequest.findMany({
-      where: {
-        warehouseId,
-        incomingDelivery: status ? { status } : { isNot: null },
-      },
-      include: {
-        farmer: true,
-        incomingDelivery: true,
-      },
-    });
-
-    return deliveryRequests
-      .filter(dr => dr.incomingDelivery)
-      .map(dr => ({
-        ...dr.incomingDelivery,
-        farmer: dr.farmer,
-        deliveryRequest: {
-          id: dr.id,
-          scheduledDate: dr.scheduledDate,
-          estimatedWeight: dr.estimatedWeight,
-          estimatedGrade: dr.estimatedGrade,
-        },
-      }));
-  }
-
-  /**
-   * Update incoming delivery status
-   */
-  async updateIncomingDeliveryStatus(id: number, status: string, notes?: string) {
-    const delivery = await this.prisma.incomingDelivery.findUnique({
-      where: { id },
-    });
-
-    if (!delivery) {
-      throw new NotFoundException('Incoming delivery not found');
-    }
-
-    const updated = await this.prisma.incomingDelivery.update({
-      where: { id },
-      data: {
-        status,
-        notes: notes || delivery.notes,
-      },
-    });
-
-    // Log transaction
-    await this.transactionService.logTransaction({
-      kind: 'incoming_delivery_status_update',
-      ref: `incoming_delivery_${id}`,
-      entity: 'IncomingDelivery',
-      meta: {
-        newStatus: status,
-        notes,
       },
     });
 
@@ -353,36 +271,69 @@ export class WarehouseService {
   }
 
   /**
+   * Get received deliveries for warehouse
+   */
+  async getIncomingDeliveries(warehouseId: string, status?: string) {
+    const where: any = { warehouseId };
+    if (status) where.status = status;
+    // Consider deliveries that have arrived
+    const deliveries = await this.prisma.delivery.findMany({
+      where,
+      include: { farmer: true },
+      orderBy: { arrivalDate: 'desc' },
+    });
+    return deliveries.filter(d => d.arrivalDate);
+  }
+
+  /**
+   * Update delivery status (post-arrival)
+   */
+  async updateIncomingDeliveryStatus(id: number, status: string, notes?: string) {
+    const delivery = await this.prisma.delivery.findUnique({ where: { id } });
+    if (!delivery) {
+      throw new NotFoundException('Delivery not found');
+    }
+    const updated = await this.prisma.delivery.update({
+      where: { id },
+      data: { status, notes: notes || delivery.notes },
+    });
+    await this.transactionService.logTransaction({
+      kind: 'delivery_status_update',
+      ref: `delivery_${id}`,
+      entity: 'Delivery',
+      meta: { newStatus: status, notes },
+    });
+    return updated;
+  }
+
+  /**
    * Verify delivery and mint tokens
    */
-  async verifyAndMintTokens(incomingDeliveryId: number, verifyDto: VerifyDeliveryDto) {
-    const incomingDelivery = await this.prisma.incomingDelivery.findUnique({
-      where: { id: incomingDeliveryId },
-      include: {
-        deliveryRequest: {
-          include: {
-            farmer: true,
-          },
-        },
-      },
+  async verifyAndMintTokens(deliveryId: number, verifyDto: VerifyDeliveryDto) {
+    const delivery = await this.prisma.delivery.findUnique({
+      where: { id: deliveryId },
+      include: { farmer: true },
     });
 
-    if (!incomingDelivery) {
-      throw new NotFoundException('Incoming delivery not found');
+    if (!delivery) {
+      throw new NotFoundException('Delivery not found');
     }
 
-    if (incomingDelivery.status !== 'inspecting' && incomingDelivery.status !== 'pending') {
-      throw new BadRequestException('Delivery must be pending or inspecting before verification');
+    if (delivery.status !== 'inspecting' && delivery.status !== 'pending' && delivery.status !== 'received') {
+      throw new BadRequestException('Delivery must be pending, received, or inspecting before verification');
     }
 
-    const farmer = incomingDelivery.deliveryRequest.farmer;
+    const farmer = delivery.farmer;
+    const warehouse = await this.prisma.warehouse.findUnique({ where: { warehouseId: delivery.warehouseId } });
+    if (!warehouse) throw new NotFoundException('Warehouse not found for delivery');
 
     // Create grain deposit record with verified data
     const grainDeposit = await this.prisma.grainDeposit.create({
       data: {
         farmerId: farmer.id,
-        agentId: farmer.agentId, // Use farmer's agent if available
-        grainType: incomingDelivery.cropType,
+        agentId: farmer.agentId,
+        warehouseId: warehouse.id,
+        grainType: delivery.cropType,
         weightKg: verifyDto.finalWeight,
         qualityGrade: verifyDto.finalGrade,
         moisturePercent: verifyDto.moisturePercent,
@@ -391,22 +342,16 @@ export class WarehouseService {
       },
     });
 
-    // Update incoming delivery
-    await this.prisma.incomingDelivery.update({
-      where: { id: incomingDeliveryId },
+    // Update delivery with verification results
+    await this.prisma.delivery.update({
+      where: { id: deliveryId },
       data: {
         status: 'verified',
-        grade: verifyDto.finalGrade,
-        weight: verifyDto.finalWeight,
+        actualGrade: verifyDto.finalGrade,
+        actualWeight: verifyDto.finalWeight,
         grainDepositId: grainDeposit.id,
-        notes: verifyDto.notes || incomingDelivery.notes,
+        notes: verifyDto.notes || delivery.notes,
       },
-    });
-
-    // Update delivery request status
-    await this.prisma.deliveryRequest.update({
-      where: { id: incomingDelivery.deliveryRequestId },
-      data: { status: 'completed' },
     });
 
     // Mint crop tokens to farmer using Hedera Service
@@ -421,7 +366,7 @@ export class WarehouseService {
       }
 
       const mintResult = await this.hederaService.mintCropTokens(
-        incomingDelivery.cropType,
+        delivery.cropType,
         verifyDto.finalWeight,
         farmerWallet,
       );
@@ -439,17 +384,34 @@ export class WarehouseService {
         },
       });
 
-      this.logger.log(`Minted ${tokenAmount} ${incomingDelivery.cropType} tokens to farmer ${farmerWallet}`);
+      this.logger.log(`Minted ${tokenAmount} ${delivery.cropType} tokens to farmer ${farmerWallet}`);
     } catch (error) {
       this.logger.error('Failed to mint tokens:', error);
       // Continue even if minting fails, but mark it in the logs
       hederaTxId = `ERROR: ${error.message}`;
     }
 
+    // Publish HCS event for tokenization/issuance (mock-safe)
+    try {
+      await this.hcsService.publishEvent('GrainTokenized', {
+        farmerId: farmer.id,
+        farmerEmail: farmer.email,
+        cropType: delivery.cropType,
+        verifiedWeight: verifyDto.finalWeight,
+        grade: verifyDto.finalGrade,
+        hederaTxId,
+        deliveryId,
+        grainDepositId: grainDeposit.id,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (hcsErr) {
+      this.logger.warn('Failed to publish HCS event for tokenization:', hcsErr);
+    }
+
     // Log transaction
     await this.transactionService.logTransaction({
       kind: 'delivery_verified_and_minted',
-      ref: `incoming_delivery_${incomingDeliveryId}`,
+      ref: `delivery_${deliveryId}`,
       entity: 'GrainDeposit',
       meta: {
         grainDepositId: grainDeposit.id,
@@ -464,9 +426,14 @@ export class WarehouseService {
     });
 
     return {
-      incomingDelivery,
+      delivery,
       grainDeposit,
       message: 'Delivery verified and tokens minted successfully',
+      hederaTxId,
+      mirrorNodeUrl:
+        hederaTxId && !hederaTxId.startsWith('ERROR:')
+          ? `https://hashscan.io/testnet/transaction/${hederaTxId}`
+          : undefined,
     };
   }
 
@@ -508,40 +475,21 @@ export class WarehouseService {
   /**
    * Reject delivery
    */
-  async rejectDelivery(incomingDeliveryId: number, reason: string) {
-    const incomingDelivery = await this.prisma.incomingDelivery.findUnique({
-      where: { id: incomingDeliveryId },
-    });
-
-    if (!incomingDelivery) {
-      throw new NotFoundException('Incoming delivery not found');
+  async rejectDelivery(deliveryId: number, reason: string) {
+    const delivery = await this.prisma.delivery.findUnique({ where: { id: deliveryId } });
+    if (!delivery) {
+      throw new NotFoundException('Delivery not found');
     }
-
-    // Update incoming delivery
-    await this.prisma.incomingDelivery.update({
-      where: { id: incomingDeliveryId },
-      data: {
-        status: 'rejected',
-        notes: reason,
-      },
+    await this.prisma.delivery.update({
+      where: { id: deliveryId },
+      data: { status: 'rejected', notes: reason },
     });
-
-    // Update delivery request status
-    await this.prisma.deliveryRequest.update({
-      where: { id: incomingDelivery.deliveryRequestId },
-      data: { status: 'cancelled' },
-    });
-
-    // Log transaction
     await this.transactionService.logTransaction({
       kind: 'delivery_rejected',
-      ref: `incoming_delivery_${incomingDeliveryId}`,
-      entity: 'IncomingDelivery',
-      meta: {
-        reason,
-      },
+      ref: `delivery_${deliveryId}`,
+      entity: 'Delivery',
+      meta: { reason },
     });
-
     return { message: 'Delivery rejected', reason };
   }
 }

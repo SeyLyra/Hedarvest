@@ -3,7 +3,9 @@ import { BlockchainPoolsService } from './blockchain-pools.service';
 
 @Controller('pools')
 export class PoolsController {
-  constructor(private readonly blockchainPoolsService: BlockchainPoolsService) {}
+  constructor(
+    private readonly blockchainPoolsService: BlockchainPoolsService,
+  ) {}
 
   @Get()
   async getAllPools() {
@@ -34,13 +36,13 @@ export class PoolsController {
         success: true,
         poolsCount: pools.length,
         pools: pools,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
       };
     } catch (error) {
       return {
         success: false,
         error: error.message,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
       };
     }
   }
@@ -54,13 +56,13 @@ export class PoolsController {
         success: true,
         poolsInfoCount: poolsInfo.length,
         poolsInfo: poolsInfo,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
       };
     } catch (error) {
       return {
         success: false,
         error: error.message,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS
+        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
       };
     }
   }

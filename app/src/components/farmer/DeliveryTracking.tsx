@@ -39,14 +39,10 @@ interface DeliveryRequest {
   status: string;
   notes?: string;
   createdAt: string;
-  incomingDelivery?: {
-    id: number;
-    weight: number;
-    grade?: string;
-    arrivalDate: string;
-    status: string;
-    storageLocation?: string;
-  };
+  arrivalDate?: string;
+  actualWeight?: number;
+  actualGrade?: string;
+  storageLocation?: string;
 }
 
 export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingProps) {
@@ -64,7 +60,7 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
       const token = localStorage.getItem('token');
 
       const response = await fetch(
-        `http://localhost:3001/warehouse/delivery-requests/farmer/${farmerId}`,
+        `http://localhost:3001/warehouse/deliveries/farmer/${farmerId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -265,8 +261,8 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
         </Card>
       </div>
 
-      {/* Incoming Delivery Info (if received) */}
-      {delivery.incomingDelivery && (
+      {/* Delivery Info (if received) */}
+      {delivery.arrivalDate && (
         <Card className="border-green-200 bg-green-50">
           <CardHeader>
             <CardTitle className="text-lg flex items-center space-x-2">
@@ -277,30 +273,30 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
           <CardContent className="space-y-3">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Actual Weight:</span>
-              <span className="font-medium">{delivery.incomingDelivery.weight} {delivery.unit}</span>
+              <span className="font-medium">{delivery.actualWeight} {delivery.unit}</span>
             </div>
-            {delivery.incomingDelivery.grade && (
+            {delivery.actualGrade && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Verified Grade:</span>
-                <Badge className="bg-green-600 text-white">{delivery.incomingDelivery.grade}</Badge>
+                <Badge className="bg-green-600 text-white">{delivery.actualGrade}</Badge>
               </div>
             )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Arrival Date:</span>
               <span className="font-medium">
-                {new Date(delivery.incomingDelivery.arrivalDate).toLocaleDateString()}
+                {new Date(delivery.arrivalDate).toLocaleDateString()}
               </span>
             </div>
-            {delivery.incomingDelivery.storageLocation && (
+            {delivery.storageLocation && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Storage Location:</span>
-                <span className="font-medium">{delivery.incomingDelivery.storageLocation}</span>
+                <span className="font-medium">{delivery.storageLocation}</span>
               </div>
             )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Warehouse Status:</span>
-              <Badge className={getStatusColor(delivery.incomingDelivery.status)}>
-                {delivery.incomingDelivery.status}
+              <Badge className={getStatusColor(delivery.status)}>
+                {delivery.status}
               </Badge>
             </div>
           </CardContent>

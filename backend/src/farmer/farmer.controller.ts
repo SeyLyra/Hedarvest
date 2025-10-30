@@ -1,6 +1,23 @@
-import { Controller, Get, Post, Body, Param, UseGuards, Request, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  Request,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { FarmerService } from './farmer.service';
-import { RegisterFarmerDto, DepositGrainDto, RedeemDto, FarmerLoginDto, FarmerRegisterDto, DepositCollateralDto, BorrowFundsDto } from './dto';
+import {
+  RegisterFarmerDto,
+  DepositGrainDto,
+  RedeemDto,
+  FarmerLoginDto,
+  FarmerRegisterDto,
+  DepositCollateralDto,
+  BorrowFundsDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
 @Controller('farmers')
@@ -17,7 +34,6 @@ export class FarmerController {
   async depositGrain(@Body() depositGrainDto: DepositGrainDto) {
     return this.farmerService.depositGrain(depositGrainDto);
   }
-
 
   @Post('redeem')
   @UseGuards(JwtAuthGuard)
@@ -46,9 +62,14 @@ export class FarmerController {
   @Post('create-hedera-wallet')
   @UseGuards(JwtAuthGuard)
   async createHederaWallet(@Request() req) {
-    console.log('🔧 Request to create Hedera wallet for farmer ID:', req.user.sub);
+    console.log(
+      '🔧 Request to create Hedera wallet for farmer ID:',
+      req.user.sub,
+    );
     try {
-      const result = await this.farmerService.createHederaWalletForFarmer(req.user.sub);
+      const result = await this.farmerService.createHederaWalletForFarmer(
+        req.user.sub,
+      );
       console.log('✅ Wallet creation result:', result);
       return result;
     } catch (error) {
@@ -102,7 +123,7 @@ export class FarmerController {
     console.log('🔧 Admin request to fix wallet for email:', body.email);
     try {
       const farmer = await this.farmerService.getFarmerByEmail(body.email);
-      
+
       if (farmer.hederaAccountId) {
         return {
           success: true,
@@ -110,8 +131,10 @@ export class FarmerController {
           hederaAccountId: farmer.hederaAccountId,
         };
       }
-      
-      const result = await this.farmerService.createHederaWalletForFarmer(farmer.id);
+
+      const result = await this.farmerService.createHederaWalletForFarmer(
+        farmer.id,
+      );
       console.log('✅ Wallet fixed for farmer:', body.email, result);
       return result;
     } catch (error) {
@@ -121,9 +144,7 @@ export class FarmerController {
   }
 
   @Get(':id')
-  async getFarmerById(@Param('id', ParseIntPipe) id: number) {
-    
-  }
+  async getFarmerById(@Param('id', ParseIntPipe) id: number) {}
 
   @Post('register-with-auth')
   async registerWithAuth(@Body() registerDto: FarmerRegisterDto) {

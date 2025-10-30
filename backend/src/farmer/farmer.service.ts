@@ -181,7 +181,14 @@ export class FarmerService {
   }
 
   async depositGrain(depositGrainDto: DepositGrainDto) {
-    const { farmerId, agentId, grainType, weightKg, qualityGrade, moisturePercent } = depositGrainDto;
+    const {
+      farmerId,
+      warehouseId,
+      grainType,
+      weightKg,
+      qualityGrade,
+      moisturePercent,
+    } = depositGrainDto;
 
     // Verify farmer exists
     const farmer = await this.prisma.farmer.findUnique({
@@ -192,13 +199,17 @@ export class FarmerService {
       throw new NotFoundException('Farmer not found');
     }
 
-    // Verify agent exists
-    const agent = await this.prisma.agent.findUnique({
-      where: { id: agentId },
-    });
+    // Validate input
+    if (!warehouseId || typeof warehouseId !== 'string' || warehouseId.trim().length === 0) {
+      throw new BadRequestException('warehouseId is required');
+    }
 
-    if (!agent) {
-      throw new NotFoundException('Agent not found');
+    // Verify warehouse exists (by warehouseId code)
+    const warehouse = await this.prisma.warehouse.findUnique({
+      where: { warehouseId },
+    });
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
     }
 
     // Calculate tokens to mint (1 token per kg for now)
@@ -208,7 +219,7 @@ export class FarmerService {
     const deposit = await this.prisma.grainDeposit.create({
       data: {
         farmerId,
-        agentId,
+        warehouseId: warehouse.id,
         grainType,
         weightKg,
         qualityGrade,
@@ -225,7 +236,7 @@ export class FarmerService {
       entity: 'GrainDeposit',
       meta: {
         farmerId,
-        agentId,
+        warehouseId: warehouse.warehouseId,
         grainType,
         weightKg,
         qualityGrade,
@@ -337,11 +348,7 @@ export class FarmerService {
     const farmer = await this.prisma.farmer.findUnique({
       where: { id: farmerId },
       include: {
-        deposits: {
-          include: {
-            agent: true,
-          },
-        },
+        deposits: true,
       },
     });
 
@@ -355,9 +362,6 @@ export class FarmerService {
   async getFarmerDeposits(farmerId: number) {
     return this.prisma.grainDeposit.findMany({
       where: { farmerId },
-      include: {
-        agent: true,
-      },
       orderBy: { depositedAt: 'desc' },
     });
   }
@@ -917,13 +921,7 @@ export class FarmerService {
           `Cannot determine farmer EVM address. Need either hederaAccountId or valid walletAddress.`
         );
       }
-      
-      console.log(`🔍 Query Details:`);
-      console.log(`   Crop Type: ${cropType}`);
-      console.log(`   Farmer Hedera Account ID: ${farmer.hederaAccountId || 'NOT SET'}`);
-      console.log(`   Farmer Wallet Address (DB): ${farmer.walletAddress || 'NOT SET'}`);
-      console.log(`   Query EVM Address: ${farmerAddress}`);
-      console.log(`   ⚠️ THIS ADDRESS MUST MATCH THE DEPOSIT msg.sender ADDRESS!`);
+  
       
       // This method computes collateral, price, baseLTV, and maxBorrow on-chain
       const position = await this.hederaService.getFarmerPosition(cropType, farmerAddress);
@@ -932,19 +930,13 @@ export class FarmerService {
         success: true,
         source: 'onchain',
         collateral: position.collateral,
+        borrows: position.borrows,
         collateralValueUSD: position.collateralValueUSD,
         maxBorrowUSD: position.maxBorrow,
-        baseLTV: 0.6, // 60% LTV
+        loanToValue: position.loanToValue, // 18 decimals
       };
     } catch (e: any) {
       const errorMsg = e?.message || String(e);
-      console.error(`❌ On-chain position check failed for ${cropType}:`, errorMsg);
-      console.error(`   Stack:`, e?.stack);
-      console.error(`   Full error object:`, e);
-      
-      // IMPORTANT: We cannot determine collateral from grainDeposit records
-      // because those are from tokenization, not from depositing to the pool.
-      // Collateral must be checked on-chain via the contract.
       // If on-chain check fails, assume no collateral (don't count owned tokens as collateral)
       return {
         success: true,
@@ -1035,8 +1027,8 @@ export class FarmerService {
             ? ContractId.fromSolidityAddress(poolAddress)
             : ContractId.fromString(poolAddress),
         )
-        .setGas(2000000)
-        .setMaxTransactionFee(new Hbar(10))
+        .setGas(3000000)
+        .setMaxTransactionFee(new Hbar(5))
         .setFunction(
           'borrow',
           new ContractFunctionParameters().addUint256(amountInSmallestUnits)

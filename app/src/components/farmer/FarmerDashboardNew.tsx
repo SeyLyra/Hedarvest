@@ -112,6 +112,14 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
   const [selectedPoolForBorrow, setSelectedPoolForBorrow] = useState<{ id: number; grainType: string; maxBorrow?: string } | null>(null);
   const [borrowAmount, setBorrowAmount] = useState<string>("");
   const [isBorrowing, setIsBorrowing] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewMetrics, setOverviewMetrics] = useState<{
+    totalCollateralUSD?: number;
+    totalMaxBorrowUSD?: number;
+    activeLoans?: number;
+  }>({});
+  const [loanPositions, setLoanPositions] = useState<Record<string, { collateralUSD?: string; borrowedUSD?: string; maxBorrowUSD?: string; ltv?: string }>>({});
+  const [loadingLoanPositions, setLoadingLoanPositions] = useState(false);
 
   // Live token balances
   const [isLoadingBalances, setIsLoadingBalances] = useState(false);
@@ -169,6 +177,106 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
 
     fetchBalances();
   }, [hederaAccountId]);
+
+  // Load overview metrics from live pools/allowances
+  useEffect(() => {
+    const loadOverview = async () => {
+      try {
+        setOverviewLoading(true);
+        const token = typeof window !== 'undefined' ? localStorage.getItem('farmerToken') : null;
+        if (!token) {
+          setOverviewMetrics({});
+          return;
+        }
+        const poolsRes = await fetch('/api/pools/list', { cache: 'no-store' });
+        const poolsJson = await poolsRes.json();
+        const pools = poolsJson?.success ? poolsJson.data : [];
+        if (!pools || pools.length === 0) {
+          setOverviewMetrics({});
+          return;
+        }
+        const results = await Promise.all(pools.map(async (p: any) => {
+          const grain = String(p.grainType || '').toLowerCase();
+          const res = await fetch(`/api/farmers/borrow/allowance/${grain}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store',
+          });
+          const json = await res.json();
+          return res.ok ? json : null;
+        }));
+        let totalCollateral = 0;
+        let totalMaxBorrow = 0;
+        let activeLoans = 0;
+        for (const r of results) {
+          if (!r) continue;
+          const coll = r.collateralValueUSD ? Number(r.collateralValueUSD) / 1e18 : 0;
+          const maxB = r.maxBorrowUSD ? Number(r.maxBorrowUSD) / 1e18 : 0;
+          const bor = r.borrows ? Number(r.borrows) / 1e6 : 0; // USDC 6 decimals
+          totalCollateral += coll;
+          totalMaxBorrow += maxB;
+          if (bor > 0) activeLoans += 1;
+        }
+        setOverviewMetrics({
+          totalCollateralUSD: totalCollateral,
+          totalMaxBorrowUSD: totalMaxBorrow,
+          activeLoans,
+        });
+      } catch (_) {
+        setOverviewMetrics({});
+      } finally {
+        setOverviewLoading(false);
+      }
+    };
+    loadOverview();
+  }, []);
+
+  // Load loan positions when entering the loan-status view
+  useEffect(() => {
+    const loadPositions = async () => {
+      if (defiStep !== 'loan-status') return;
+      setLoadingLoanPositions(true);
+      try {
+        const token = typeof window !== 'undefined' ? localStorage.getItem('farmerToken') : null;
+        if (!token) {
+          setLoanPositions({});
+          setLoadingLoanPositions(false);
+          return;
+        }
+        // Fetch live pools to determine available grain types
+        const poolsRes = await fetch('/api/pools/list', { cache: 'no-store' });
+        const poolsJson = await poolsRes.json();
+        const pools = poolsJson?.success ? poolsJson.data : [];
+        const grains: string[] = pools.map((p: any) => String(p.grainType || '').toLowerCase()).filter(Boolean);
+        if (grains.length === 0) {
+          setLoanPositions({});
+          setLoadingLoanPositions(false);
+          return;
+        }
+        const results = await Promise.all(grains.map(async (g) => {
+          const res = await fetch(`/api/farmers/borrow/allowance/${g}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            cache: 'no-store',
+          });
+          const json = await res.json();
+          if (!res.ok) return [g.toUpperCase(), {}] as const;
+          return [g.toUpperCase(), {
+            collateralUSD: json.collateralValueUSD,
+            borrowedUSD: json.borrows,
+            maxBorrowUSD: json.maxBorrowUSD,
+            ltv: json.loanToValue,
+          }] as const;
+        }));
+        const map: Record<string, { collateralUSD?: string; borrowedUSD?: string; maxBorrowUSD?: string; ltv?: string }> = {};
+        for (const [k, v] of results) map[k] = v;
+        setLoanPositions(map);
+      } catch (e) {
+        setLoanPositions({});
+      } finally {
+        setLoadingLoanPositions(false);
+      }
+    };
+    loadPositions();
+  }, [defiStep]);
 
   const refreshBalances = async (account: string) => {
     try {
@@ -291,7 +399,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                 <p className="text-2xl font-bold text-green-900 dark:text-green-100">{farmerStats.totalTokenizedCrops}</p>
                 <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
-                  +2 this week
+                  2 this week
                 </p>
               </div>
               <div className="p-3 bg-green-100 dark:bg-green-800/30 rounded-lg">
@@ -306,7 +414,13 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-blue-700 dark:text-blue-300">Total Value</p>
-                <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">${farmerStats.totalValue.toLocaleString()}</p>
+                {overviewLoading ? (
+                  <p className="text-sm text-blue-700 dark:text-blue-300">Loading…</p>
+                ) : overviewMetrics.totalCollateralUSD !== undefined ? (
+                  <p className="text-2xl font-bold text-blue-900 dark:text-blue-100">${overviewMetrics.totalCollateralUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                ) : (
+                  <p className="text-xs text-blue-600 dark:text-blue-400">Coming soon</p>
+                )}
                 <p className="text-xs text-green-600 dark:text-green-400 flex items-center mt-1">
                   <TrendingUp className="h-3 w-3 mr-1" />
                   +12.5% this month
@@ -324,7 +438,13 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-purple-700 dark:text-purple-300">Available Credit</p>
-                <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">${farmerStats.availableCredit.toLocaleString()}</p>
+                {overviewLoading ? (
+                  <p className="text-sm text-purple-700 dark:text-purple-300">Loading…</p>
+                ) : overviewMetrics.totalMaxBorrowUSD !== undefined ? (
+                  <p className="text-2xl font-bold text-purple-900 dark:text-purple-100">${overviewMetrics.totalMaxBorrowUSD.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                ) : (
+                  <p className="text-xs text-purple-700 dark:text-purple-300">Coming soon</p>
+                )}
                 <p className="text-xs text-blue-600 dark:text-blue-400 flex items-center mt-1">
                   <CreditCard className="h-3 w-3 mr-1" />
                   Ready to borrow
@@ -342,10 +462,16 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-orange-700 dark:text-orange-300">Active Loans</p>
-                <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{farmerStats.activeLoans}</p>
+                {overviewLoading ? (
+                  <p className="text-sm text-orange-700 dark:text-orange-300">Loading…</p>
+                ) : overviewMetrics.activeLoans !== undefined ? (
+                  <p className="text-2xl font-bold text-orange-900 dark:text-orange-100">{overviewMetrics.activeLoans}</p>
+                ) : (
+                  <p className="text-xs text-orange-700 dark:text-orange-300">Coming soon</p>
+                )}
                 <p className="text-xs text-orange-600 dark:text-orange-400 flex items-center mt-1">
                   <Clock className="h-3 w-3 mr-1" />
-                  Next due: {farmerStats.nextRepayment}
+                  Next due: —
                 </p>
               </div>
               <div className="p-3 bg-orange-100 dark:bg-orange-800/30 rounded-lg">
@@ -1053,6 +1179,12 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
             <div>
               {!defiStep || defiStep === "crop-pools" ? (
                 <div className="space-y-6">
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={() => setDefiStep('loan-status')}>
+                      <BarChart3 className="h-4 w-4 mr-2" />
+                      View Loan Position
+                    </Button>
+                  </div>
                   <CropPools
                     onDeposit={async (poolId) => {
                       try {
@@ -1071,7 +1203,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           await refreshBalances(acct);
                         }
                         
-                        setDefiStep("deposit-collateral");
+                      setDefiStep("deposit-collateral");
                       } catch (error) {
                         console.error("Failed to fetch pool:", error);
                         // Use fallback
@@ -1108,7 +1240,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                             grainType: pool.grainType.toUpperCase()
                           });
                         }
-                        setDefiStep("borrow-funds");
+                      setDefiStep("borrow-funds");
                       } catch (error) {
                         console.error("Failed to fetch pool:", error);
                         setSelectedPoolForBorrow({ id: parseInt(poolId), grainType: 'WHEAT' });
@@ -1382,7 +1514,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           <div className="flex-1">
                             <p className="text-sm text-blue-700 dark:text-blue-300">Maximum Borrowable Amount</p>
                             <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
-                              ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                              ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
                             </p>
                             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                               Based on your collateral (60% LTV)
@@ -1408,7 +1540,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           step="0.01"
                         />
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Maximum: ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                          Maximum: ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
                         </p>
                       </div>
 
@@ -1442,7 +1574,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           }
 
                           const maxBorrowNum = selectedPoolForBorrow.maxBorrow 
-                            ? parseFloat(selectedPoolForBorrow.maxBorrow) / 1e6 
+                            ? parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18 
                             : 0;
 
                           if (amount > maxBorrowNum) {
@@ -1518,9 +1650,58 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                   </Card>
                 </div>
               ) : defiStep === "loan-status" ? (
-                <div className="p-8 text-center">
-                  <h3 className="text-lg font-semibold mb-2">Loan Status</h3>
-                  <p className="text-gray-600">Loan status view coming soon...</p>
+                <div className="p-8 max-w-3xl mx-auto">
+                  <div className="mb-6">
+                    <Button variant="ghost" onClick={() => setDefiStep('crop-pools')} className="mb-4">
+                      <ArrowLeft className="h-4 w-4 mr-2" />
+                      Back to Pools
+                    </Button>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Loan Position</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {loadingLoanPositions ? (
+                        <div className="flex items-center text-sm text-slate-600">
+                          <RefreshCw className="h-4 w-4 animate-spin mr-2" />
+                          Loading positions...
+                        </div>
+                      ) : (
+                        Object.keys(loanPositions).map((g) => {
+                          const p = loanPositions[g] || {};
+                          const coll = p.collateralUSD ? (parseFloat(p.collateralUSD) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                          // Borrow value is in underlying token units (USDC), which is 6 decimals
+                          const bor = p.borrowedUSD ? (parseFloat(p.borrowedUSD) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                          const max = p.maxBorrowUSD ? (parseFloat(p.maxBorrowUSD) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                          const ltvPct = p.ltv ? (Number(p.ltv) / 1e16).toFixed(2) : '—';
+                          return (
+                            <div key={g} className="border rounded-lg p-4">
+                              <div className="flex items-center justify-between">
+                                <div className="font-semibold">{g} Pool</div>
+                                <Badge variant="secondary">{ltvPct !== '—' ? `${ltvPct}% LTV` : '—'}</Badge>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 text-sm">
+                                <div>
+                                  <div className="text-slate-500">Collateral Value</div>
+                                  <div className="font-medium">${coll} USDC</div>
+                                </div>
+                                <div>
+                                  <div className="text-slate-500">Borrowed</div>
+                                  <div className={`font-medium ${parseFloat(p.borrowedUSD || '0') > 0 ? 'text-red-600' : ''}`}>${bor} USDC</div>
+                                </div>
+                                <div>
+                                  <div className="text-slate-500">Max Borrow</div>
+                                  <div className="font-medium">${max} USDC</div>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </CardContent>
+                  </Card>
                 </div>
               ) : defiStep === "repay-loan" ? (
                 <div className="p-8 text-center">

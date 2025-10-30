@@ -172,8 +172,9 @@ export class HederaService {
         throw new Error(`Crop type ${cropType} is not whitelisted. Only RICE and WHEAT are supported.`);
       }
 
-      // Convert weight to token amount (1 kg = 1 token with 6 decimals)
-      const tokenAmount = Math.floor(weightKg * 1e6);
+      // Convert weight to token amount (1 kg = 1 token)
+      // Use token decimals = 8 (WHEAT/RICE configured to 8 elsewhere)
+      const tokenAmount = Math.floor(weightKg * 1e8);
 
       this.logger.log(`Minting ${weightKg} kg (${tokenAmount} smallest units) of ${cropType} tokens (${tokenId}) for farmer ${farmerAccountId}`);
 
@@ -878,6 +879,7 @@ export class HederaService {
     borrows: string;
     collateralValueUSD: string;
     maxBorrow: string;
+    loanToValue: string;
   }> {
     try {
       this.logger.log(`🔍 Getting farmer position for ${grainType}, address: ${farmerAddress}`);
@@ -1019,12 +1021,6 @@ export class HederaService {
         throw new Error(`Failed to decode contract response: ${decodeErr.message}`);
       }
 
-      this.logger.log(`   Raw response values before conversion:`);
-      this.logger.log(`     rawCollateral: ${rawCollateral.toString()}`);
-      this.logger.log(`     collateralValueUSD: ${collateralValueUSD.toString()}`);
-      this.logger.log(`     borrows: ${borrows.toString()}`);
-      this.logger.log(`     loanToValue: ${loanToValue.toString()}`);
-
       // Calculate max borrow: (collateralValueUSD * loanToValue) / 1e18
       // loanToValue is in 18 decimals (e.g., 0.6e18 = 60%)
       // Convert Long to string without scientific notation for BigInt conversion
@@ -1032,19 +1028,14 @@ export class HederaService {
       const loanToValueStr = loanToValue.toString(10);
       const maxBorrow = (BigInt(collateralValueStr) * BigInt(loanToValueStr)) / BigInt(10**18);
 
-      this.logger.log(`✅ Contract call results for ${farmerAddress}:`);
-      this.logger.log(`   Raw collateral: ${rawCollateral.toString()}`);
-      this.logger.log(`   Collateral value (USD): ${collateralValueUSD.toString()}`);
-      this.logger.log(`   Borrows: ${borrows.toString()}`);
-      this.logger.log(`   Loan to Value: ${loanToValue.toString()} (${Number(loanToValue.toString()) / 1e18 * 100}%)`);
-      this.logger.log(`   Max borrow: ${maxBorrow.toString()}`);
 
       // Convert Long values to strings without scientific notation
       return {
         collateral: rawCollateral.toString(10),
         borrows: borrows.toString(10),
         collateralValueUSD: collateralValueUSD.toString(10),
-        maxBorrow: maxBorrow.toString()
+        maxBorrow: maxBorrow.toString(),
+        loanToValue: loanToValue.toString(10)
       };
     } catch (error: any) {
       const errorMsg = error?.message || String(error);

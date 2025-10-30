@@ -213,7 +213,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
   useEffect(() => {
     if (!numericIncomingId || Number.isNaN(numericIncomingId)) return;
     // Fire-and-forget; ignore result for UX smoothness
-    fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericIncomingId}/status`, {
+    fetch(`http://localhost:3001/warehouse/deliveries/${numericIncomingId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'inspecting', notes: 'Inspection started' })
@@ -288,28 +288,41 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
 
     setSubmitting(true);
     try {
+      // Just update the delivery status to "inspecting" and save inspection data
+      // Don't verify or mint yet - that happens in the Tokenize tab
+      const inspectionNotes = `Inspection completed by ${inspectionData.inspectorName}
+Quality Grade: ${inspectionData.qualityGrade}
+Moisture: ${inspectionData.moisture}%
+Temperature: ${inspectionData.temperature}°C
+Impurities: ${inspectionData.impurities}%
+Weight: ${inspectionData.measurements?.weight} kg
+${inspectionData.notes || ''}`;
+
       const payload = {
-        finalWeight: inspectionData.measurements?.weight || 0,
-        finalGrade: inspectionData.qualityGrade || 'grade-a',
-        moisturePercent: inspectionData.moisture || 0,
-        notes: inspectionData.notes || '',
+        status: 'inspecting',
+        notes: inspectionNotes,
+        grade: inspectionData.qualityGrade,
+        weight: inspectionData.measurements?.weight,
+        moistureContent: inspectionData.moisture,
+        temperature: inspectionData.temperature,
       };
 
-      const res = await fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericIncomingId}/verify`, {
-        method: 'POST',
+      const res = await fetch(`http://localhost:3001/warehouse/deliveries/${numericIncomingId}/status`, {
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.message || 'Verification failed');
+        throw new Error(err.message || 'Failed to save inspection');
       }
 
       const result = await res.json();
+      alert('✅ Inspection completed! Go to the Tokenize tab to mint tokens.');
       onComplete({ ...(inspectionData as InspectionData) });
     } catch (e: any) {
-      alert(e?.message || 'Failed to verify and mint');
+      alert(e?.message || 'Failed to save inspection');
     } finally {
       setSubmitting(false);
     }

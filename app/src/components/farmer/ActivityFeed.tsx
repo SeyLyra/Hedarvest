@@ -62,7 +62,7 @@ export default function ActivityFeed({ farmerId }: ActivityFeedProps) {
 
       // Fetch deliveries
       const deliveriesResponse = await fetch(
-        `${BACKEND_URL}/warehouse/delivery-requests/farmer/${farmerId}`,
+        `${BACKEND_URL}/warehouse/deliveries/farmer/${farmerId}`,
         { headers: { 'Authorization': `Bearer ${token}` } }
       );
 
@@ -211,8 +211,8 @@ export default function ActivityFeed({ farmerId }: ActivityFeedProps) {
               )}
             </div>
 
-            {/* Incoming Delivery Info */}
-            {delivery.incomingDelivery && (
+            {/* Delivery Receipt Info */}
+            {delivery.arrivalDate && (
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <h4 className="font-semibold text-green-900 mb-2 flex items-center">
                   <Package className="h-4 w-4 mr-2" />
@@ -221,18 +221,18 @@ export default function ActivityFeed({ farmerId }: ActivityFeedProps) {
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div>
                     <span className="text-muted-foreground">Actual Weight: </span>
-                    <span className="font-medium">{delivery.incomingDelivery.weight} {delivery.unit}</span>
+                    <span className="font-medium">{delivery.actualWeight} {delivery.unit}</span>
                   </div>
-                  {delivery.incomingDelivery.grade && (
+                  {delivery.actualGrade && (
                     <div>
                       <span className="text-muted-foreground">Verified Grade: </span>
-                      <Badge className="bg-green-600 text-white">{delivery.incomingDelivery.grade}</Badge>
+                      <Badge className="bg-green-600 text-white">{delivery.actualGrade}</Badge>
                     </div>
                   )}
                   <div className="col-span-2">
                     <span className="text-muted-foreground">Arrival: </span>
                     <span className="font-medium">
-                      {new Date(delivery.incomingDelivery.arrivalDate).toLocaleDateString()}
+                      {new Date(delivery.arrivalDate).toLocaleDateString()}
                     </span>
                   </div>
                 </div>

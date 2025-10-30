@@ -64,7 +64,8 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
         const data = await response.json();
         
         if (data.success) {
-          setPools(data.data || []);
+          const filtered = (data.data || []).filter((p: any) => String(p.grainType || '').toUpperCase() !== 'CORN');
+          setPools(filtered);
         } else {
           setPools([]);
         }
@@ -376,7 +377,7 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                   </div>
                   {collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow && (
                     <p className="text-xs text-green-700 mt-1">
-                      Max borrow: ${(parseFloat(collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow || '0') / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                      Max borrow: ${(parseFloat(collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow || '0') / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
                   </p>
                   )}
                 </div>

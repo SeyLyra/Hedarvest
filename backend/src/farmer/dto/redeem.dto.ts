@@ -11,5 +11,3 @@ export class RedeemDto {
   @IsString()
   pin: string;
 }
-
-

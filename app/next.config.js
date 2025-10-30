@@ -31,6 +31,20 @@ const nextConfig = {
       config.externals = [...(config.externals || []), 'crypto'];
     }
 
+    // Silence noisy dynamic-require warning from hedera-wallet-connect
+    config.ignoreWarnings = [
+      ...(config.ignoreWarnings || []),
+      (warning) => {
+        const msg = String(warning?.message || '');
+        const mod = warning?.module && (warning.module.resource || warning.module.userRequest || '');
+        return (
+          /Critical dependency: require/.test(msg) &&
+          typeof mod === 'string' &&
+          mod.includes('@hashgraph/hedera-wallet-connect')
+        );
+      },
+    ];
+
     return config;
   },
   // Add rewrites for Hedera API proxy

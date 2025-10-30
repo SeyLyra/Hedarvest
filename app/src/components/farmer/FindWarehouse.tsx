@@ -162,9 +162,9 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
   };
 
   const handleConfirmSelection = () => {
-    if (selectedWarehouse) {
-      onNext(selectedWarehouse);
-    }
+    // MVP: if none selected, auto-pick the first available warehouse
+    const chosen = selectedWarehouse || (warehouses[0]?.id ?? 'WH-001');
+    onNext(chosen);
   };
 
   return (

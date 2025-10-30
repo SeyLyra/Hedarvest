@@ -5,7 +5,7 @@ import {
   TokenCreateTransaction,
   TokenType,
   TokenSupplyType,
-  Hbar
+  Hbar,
 } from '@hashgraph/sdk';
 
 /**
@@ -40,7 +40,9 @@ async function createCropTokens() {
   // Check environment variables
   if (!process.env.HEDERA_OPERATOR_ID || !process.env.HEDERA_OPERATOR_KEY) {
     console.error('❌ Missing Hedera credentials in environment variables');
-    console.error('   Please ensure HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY are set in .env');
+    console.error(
+      '   Please ensure HEDERA_OPERATOR_ID and HEDERA_OPERATOR_KEY are set in .env',
+    );
     process.exit(1);
   }
 
@@ -55,7 +57,11 @@ async function createCropTokens() {
   console.log(`✅ Connected to Hedera ${network}`);
   console.log(`📍 Operator Account: ${operatorId.toString()}\n`);
 
-  const createdTokens: Array<{ name: string; symbol: string; tokenId: string }> = [];
+  const createdTokens: Array<{
+    name: string;
+    symbol: string;
+    tokenId: string;
+  }> = [];
 
   for (const token of CROP_TOKENS) {
     try {
@@ -85,7 +91,9 @@ async function createCropTokens() {
 
       console.log(`✅ ${token.symbol} token created successfully!`);
       console.log(`   Token ID: ${tokenId.toString()}`);
-      console.log(`   Transaction: ${tokenCreateResponse.transactionId.toString()}`);
+      console.log(
+        `   Transaction: ${tokenCreateResponse.transactionId.toString()}`,
+      );
 
       createdTokens.push({
         name: token.name,
@@ -94,8 +102,7 @@ async function createCropTokens() {
       });
 
       // Wait a bit to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
+      await new Promise((resolve) => setTimeout(resolve, 2000));
     } catch (error) {
       console.error(`❌ Failed to create ${token.symbol} token:`, error);
       throw error;
@@ -107,24 +114,26 @@ async function createCropTokens() {
   console.log('='.repeat(60) + '\n');
 
   console.log('📝 Add these to your .env file:\n');
-  createdTokens.forEach(token => {
+  createdTokens.forEach((token) => {
     console.log(`${token.symbol}_TOKEN_ID=${token.tokenId}`);
   });
 
   console.log('\n📝 Add these to your frontend .env.local file:\n');
-  createdTokens.forEach(token => {
+  createdTokens.forEach((token) => {
     console.log(`NEXT_PUBLIC_${token.symbol}_TOKEN_ID=${token.tokenId}`);
   });
 
   console.log('\n💡 Token Details:');
   console.log('─'.repeat(60));
-  createdTokens.forEach(token => {
+  createdTokens.forEach((token) => {
     console.log(`\n${token.symbol}:`);
     console.log(`  Name: ${token.name}`);
     console.log(`  Token ID: ${token.tokenId}`);
     console.log(`  Decimals: 8`);
     console.log(`  Supply Type: Infinite (can mint as needed)`);
-    console.log(`  View on HashScan: https://hashscan.io/testnet/token/${token.tokenId}`);
+    console.log(
+      `  View on HashScan: https://hashscan.io/testnet/token/${token.tokenId}`,
+    );
   });
 
   console.log('\n' + '='.repeat(60));

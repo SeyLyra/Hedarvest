@@ -4,8 +4,8 @@ export class DepositGrainDto {
   @IsInt()
   farmerId: number;
 
-  @IsInt()
-  agentId: number;
+  @IsString()
+  warehouseId: string; // e.g., WH001
 
   @IsString()
   grainType: string;

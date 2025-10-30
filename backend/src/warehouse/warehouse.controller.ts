@@ -65,18 +65,18 @@ export class WarehouseController {
   }
 
   /**
-   * Create a new delivery request (called by farmer)
+   * Create a new delivery (called by farmer)
    */
-  @Post('delivery-requests')
+  @Post('deliveries')
   @UseGuards(JwtAuthGuard)
   async createDeliveryRequest(@Body() createDeliveryDto: CreateDeliveryDto) {
     return this.warehouseService.createDeliveryRequest(createDeliveryDto);
   }
 
   /**
-   * Get all delivery requests for a warehouse
+   * Get all deliveries for a warehouse
    */
-  @Get('delivery-requests')
+  @Get('deliveries')
   @UseGuards(JwtAuthGuard)
   async getDeliveryRequests(
     @Request() req,
@@ -88,26 +88,26 @@ export class WarehouseController {
   }
 
   /**
-   * Get delivery requests for a specific farmer
+   * Get deliveries for a specific farmer
    */
-  @Get('delivery-requests/farmer/:farmerId')
+  @Get('deliveries/farmer/:farmerId')
   @UseGuards(JwtAuthGuard)
   async getFarmerDeliveries(@Param('farmerId', ParseIntPipe) farmerId: number) {
     return this.warehouseService.getFarmerDeliveries(farmerId);
   }
 
   /**
-   * Get a specific delivery request
+   * Get a specific delivery
    */
-  @Get('delivery-requests/:id')
+  @Get('deliveries/:id')
   async getDeliveryRequest(@Param('id', ParseIntPipe) id: number) {
     return this.warehouseService.getDeliveryRequest(id);
   }
 
   /**
-   * Update delivery request status
+   * Update delivery status
    */
-  @Put('delivery-requests/:id/status')
+  @Put('deliveries/:id/status')
   async updateDeliveryStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() updateDto: UpdateDeliveryStatusDto,
@@ -116,9 +116,9 @@ export class WarehouseController {
   }
 
   /**
-   * Receive delivery at warehouse (creates IncomingDelivery)
+   * Receive delivery at warehouse (update Delivery with arrival)
    */
-  @Post('delivery-requests/:id/receive')
+  @Post('deliveries/:id/receive')
   async receiveDelivery(
     @Param('id', ParseIntPipe) id: number,
     @Body() receiveDto: ReceiveDeliveryDto,
@@ -127,23 +127,24 @@ export class WarehouseController {
   }
 
   /**
-   * Get all incoming deliveries for warehouse
+   * Get received deliveries for warehouse
    */
-  @Get('incoming-deliveries')
+  @Get('deliveries/received')
   @UseGuards(JwtAuthGuard)
   async getIncomingDeliveries(
     @Request() req,
     @Query('status') status?: string,
   ) {
     // Extract warehouse ID from JWT token
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getIncomingDeliveries(warehouseId, status);
   }
 
   /**
-   * Update incoming delivery status
+   * Update delivery status (post-arrival)
    */
-  @Put('incoming-deliveries/:id/status')
+  @Put('deliveries/:id/status/received')
   async updateIncomingDeliveryStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { status: string; notes?: string },
@@ -158,7 +159,7 @@ export class WarehouseController {
   /**
    * Verify delivery and mint tokens
    */
-  @Post('incoming-deliveries/:id/verify')
+  @Post('deliveries/:id/verify')
   async verifyAndMintTokens(
     @Param('id', ParseIntPipe) id: number,
     @Body() verifyDto: VerifyDeliveryDto,
@@ -169,7 +170,7 @@ export class WarehouseController {
   /**
    * Reject delivery
    */
-  @Post('incoming-deliveries/:id/reject')
+  @Post('deliveries/:id/reject')
   async rejectDelivery(
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { reason: string },

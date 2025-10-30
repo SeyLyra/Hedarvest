@@ -54,13 +54,6 @@ export class TransactionService {
 
         const receipt = await transaction.getReceipt(client);
         this.topicId = receipt.topicId!;
-
-        this.logger.log(
-          `Created new HCS topic for transactions: ${this.topicId.toString()}`,
-        );
-        this.logger.warn(
-          `⚠️  Add this to .env: HCS_TRANSACTION_TOPIC_ID=${this.topicId.toString()}`,
-        );
       }
     } catch (error) {
       this.logger.error('Failed to initialize HCS topic:', error);

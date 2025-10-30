@@ -68,11 +68,14 @@ async function createCustodialWallet(email: string) {
     // Convert to EVM address format
     const evmAddress = `0x${newAccountId.toSolidityAddress()}`;
 
-    console.log(`✅ Created custodial wallet for ${email}: ${newAccountId.toString()}`);
+    console.log(
+      `✅ Created custodial wallet for ${email}: ${newAccountId.toString()}`,
+    );
 
     return {
       accountId: newAccountId.toString(),
       evmAddress,
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string
       privateKey: newAccountPrivateKey.toString(), // Use DER format for consistency
     };
   } catch (error) {
@@ -94,7 +97,7 @@ async function main() {
       name: 'Green Valley Storage',
       email: 'operator@warehouse.com',
       password: '$2b$10$nLq5ixx5LMco2TKs5sbCM.BM0uW6Jk3UxGbf2EB4MP8oUCxxcKJ0K',
-      walletAddress: '0.0.7097157', 
+      walletAddress: '0.0.7097157',
       hederaAccountId: '0.0.7097157',
       encryptedPrivateKey:
         'dc8b393bb5f23162d5844fe5ec67dbaa:e1dc8dfbf001446867167a37a8653937:89ead8c6ad5fcda464a79c49a69a806362610dab568a643aef869e8b30000338ccef11fa35ab60436b2fc32b34c7dcfff2b9eee0d1331a0dd60b46bc138205b1',
@@ -111,6 +114,7 @@ async function main() {
   });
 
   const warehouse1Id = warehouse.warehouseId;
+  const warehousePkId = warehouse.id;
 
   // 2. Create Farmers with Real Hedera Wallets
   console.log('🔧 Creating Hedera wallets for farmers...');
@@ -141,24 +145,18 @@ async function main() {
     farmerData.map(async (farmer) => {
       console.log(`  Creating wallet for ${farmer.email}...`);
       const wallet = await createCustodialWallet(farmer.email);
-      
-      // SECURITY: ALWAYS encrypt private key before storing in database!
-      // The raw privateKey from createCustodialWallet is only in memory temporarily
+
       const encryptedPrivateKey = encryptPrivateKey(wallet.privateKey);
-      
-      // Clear the raw private key from memory (JavaScript doesn't guarantee this, but good practice)
-      // Note: wallet.privateKey is still in the returned object, but we don't use it anymore
-      
+
       return {
         ...farmer,
         accountId: wallet.accountId,
         evmAddress: wallet.evmAddress,
-        // DO NOT include wallet.privateKey in the return - we only store encrypted
         encryptedPrivateKey, // ✅ ENCRYPTED - safe to store
       };
-    })
+    }),
   );
-  
+
   // Now create farmers with real wallet data
   const farmers = await Promise.all(
     wallets.map((walletData) =>
@@ -181,16 +179,16 @@ async function main() {
           password: walletData.password,
           isCustodial: true,
         },
-      })
-    )
+      }),
+    ),
   );
 
   console.log(`✅ Created ${farmers.length} farmers`);
 
-  // 3. Create Delivery Requests
-  console.log('Creating delivery requests...');
+  // 3. Create Deliveries
+  console.log('Creating deliveries...');
   const deliveries = await Promise.all([
-    prisma.deliveryRequest.create({
+    prisma.delivery.create({
       data: {
         farmerId: farmers[0].id,
         warehouseId: warehouse1Id,
@@ -208,7 +206,7 @@ async function main() {
         photos: [],
       },
     }),
-    prisma.deliveryRequest.create({
+    prisma.delivery.create({
       data: {
         farmerId: farmers[0].id,
         warehouseId: warehouse1Id,
@@ -226,7 +224,7 @@ async function main() {
         photos: [],
       },
     }),
-    prisma.deliveryRequest.create({
+    prisma.delivery.create({
       data: {
         farmerId: farmers[1].id,
         warehouseId: warehouse1Id,
@@ -235,7 +233,6 @@ async function main() {
         estimatedWeight: 1800,
         unit: 'kg',
         estimatedGrade: 'grade-a',
-        moistureContent: 11.8,
         scheduledDate: new Date('2025-10-28'),
         location: 'Narok Farm, Section 12',
         status: 'pending',
@@ -244,21 +241,17 @@ async function main() {
     }),
   ]);
 
-  console.log(`✅ Created ${deliveries.length} delivery requests`);
+  console.log(`✅ Created ${deliveries.length} deliveries`);
 
-  // 4. Create Incoming Deliveries (received at warehouse)
-  console.log('Creating incoming deliveries...');
-  const incomingDeliveries = await Promise.all([
-    prisma.incomingDelivery.create({
+  // 4. Update Deliveries with actual arrival data
+  console.log('Updating deliveries with arrival data...');
+  const updatedDeliveries = await Promise.all([
+    prisma.delivery.update({
+      where: { id: deliveries[0].id },
       data: {
-        deliveryRequestId: deliveries[0].id,
-        farmerName: farmers[0].memberNumber,
-        farmerId: farmers[0].id,
-        cropType: 'wheat',
-        weight: 2501.5,
-        unit: 'kg',
-        grade: 'premium',
         arrivalDate: new Date('2025-10-25'),
+        actualWeight: 2501.5,
+        actualGrade: 'premium',
         status: 'verified',
         priority: 'high',
         estimatedValue: 12507.5,
@@ -266,16 +259,12 @@ async function main() {
         notes: 'High quality wheat, verified and tokenized',
       },
     }),
-    prisma.incomingDelivery.create({
+    prisma.delivery.update({
+      where: { id: deliveries[1].id },
       data: {
-        deliveryRequestId: deliveries[1].id,
-        farmerName: farmers[0].memberNumber,
-        farmerId: farmers[0].id,
-        cropType: 'rice',
-        weight: 1090.9,
-        unit: 'kg',
-        grade: 'grade-a',
         arrivalDate: new Date('2025-10-20'),
+        actualWeight: 1090.9,
+        actualGrade: 'grade-a',
         status: 'verified',
         priority: 'medium',
         estimatedValue: 5454.5,
@@ -283,16 +272,12 @@ async function main() {
         notes: 'Premium Basmati rice, verified and tokenized',
       },
     }),
-    prisma.incomingDelivery.create({
+    prisma.delivery.update({
+      where: { id: deliveries[2].id },
       data: {
-        deliveryRequestId: deliveries[2].id,
-        farmerName: farmers[1].memberNumber,
-        farmerId: farmers[1].id,
-        cropType: 'wheat',
-        weight: 1800,
-        unit: 'kg',
-        grade: 'grade-a',
         arrivalDate: new Date('2025-10-28'),
+        actualWeight: 1800,
+        actualGrade: 'grade-a',
         status: 'pending',
         priority: 'high',
         estimatedValue: 9000,
@@ -301,8 +286,7 @@ async function main() {
       },
     }),
   ]);
-
-  console.log(`✅ Created ${incomingDeliveries.length} incoming deliveries`);
+  void updatedDeliveries;
 
   // 5. Create Grain Deposits (verified deliveries)
   console.log('Creating grain deposits...');
@@ -310,6 +294,7 @@ async function main() {
     prisma.grainDeposit.create({
       data: {
         farmerId: farmers[0].id,
+        warehouseId: warehousePkId,
         grainType: 'wheat',
         weightKg: 2501.5,
         qualityGrade: 'premium',
@@ -321,6 +306,7 @@ async function main() {
     prisma.grainDeposit.create({
       data: {
         farmerId: farmers[0].id,
+        warehouseId: warehousePkId,
         grainType: 'rice',
         weightKg: 1090.9,
         qualityGrade: 'grade-a',
@@ -331,25 +317,99 @@ async function main() {
     }),
   ]);
 
-  // Link grain deposits to incoming deliveries
-  await prisma.incomingDelivery.update({
-    where: { id: incomingDeliveries[0].id },
+  // Link grain deposits to deliveries
+  await prisma.delivery.update({
+    where: { id: deliveries[0].id },
     data: { grainDepositId: deposits[0].id },
   });
 
-  await prisma.incomingDelivery.update({
-    where: { id: incomingDeliveries[1].id },
+  await prisma.delivery.update({
+    where: { id: deliveries[1].id },
     data: { grainDepositId: deposits[1].id },
   });
 
   console.log(`✅ Created ${deposits.length} grain deposits`);
 
+  // 6. Extra activity for John Kamau (more realistic history)
+  console.log('Adding extra deliveries and deposits for John Kamau...');
+  const extraDeliveries = await Promise.all([
+    prisma.delivery.create({
+      data: {
+        farmerId: farmers[0].id,
+        warehouseId: warehouse1Id,
+        cropType: 'rice',
+        variety: 'Pishori',
+        estimatedWeight: 1350.75,
+        unit: 'kg',
+        estimatedGrade: 'grade-a',
+        moistureContent: 12.9,
+        temperature: 24.5,
+        scheduledDate: new Date('2025-10-18'),
+        location: 'Mwea, Sector 7',
+        notes: 'Second batch rice',
+        status: 'completed',
+        photos: [],
+      },
+    }),
+    prisma.delivery.create({
+      data: {
+        farmerId: farmers[0].id,
+        warehouseId: warehouse1Id,
+        cropType: 'wheat',
+        variety: 'Kenya Seed 1',
+        estimatedWeight: 920.3,
+        unit: 'kg',
+        estimatedGrade: 'grade-b',
+        moistureContent: 13.1,
+        temperature: 26,
+        scheduledDate: new Date('2025-10-29'),
+        location: 'Narok East',
+        notes: 'Awaiting harvest completion',
+        status: 'pending',
+        photos: [],
+      },
+    }),
+  ]);
+
+  await prisma.delivery.update({
+    where: { id: extraDeliveries[0].id },
+    data: {
+      arrivalDate: new Date('2025-10-18'),
+      actualWeight: 1349.8,
+      actualGrade: 'grade-a',
+      status: 'verified',
+      priority: 'medium',
+      estimatedValue: 6749,
+      storageLocation: 'Bay B-3',
+      notes: 'Verified and queued for tokenization',
+    },
+  });
+
+  const extraDeposits = await Promise.all([
+    prisma.grainDeposit.create({
+      data: {
+        farmerId: farmers[0].id,
+        warehouseId: warehousePkId,
+        grainType: 'rice',
+        weightKg: 1349.8,
+        qualityGrade: 'grade-a',
+        moisturePercent: 12.9,
+        tokensMinted: 1349.8,
+        hederaTxId: '0.0.123456@1234567892.123456789',
+      },
+    }),
+  ]);
+
+  await prisma.delivery.update({
+    where: { id: extraDeliveries[0].id },
+    data: { grainDepositId: extraDeposits[0].id },
+  });
+
   console.log('\n🎉 Seeding complete!');
   console.log('\n📊 Summary:');
   console.log(`  - Warehouse: 1 (${warehouse.name})`);
   console.log(`  - Farmers: ${farmers.length}`);
-  console.log(`  - Delivery Requests: ${deliveries.length}`);
-  console.log(`  - Incoming Deliveries: ${incomingDeliveries.length}`);
+  console.log(`  - Deliveries: ${deliveries.length}`);
   console.log(`  - Grain Deposits: ${deposits.length}`);
   console.log(`\n👤 Test Logins:`);
   console.log(`\n  Farmer 1 (FMR001) - john.kamau@farm.ke:`);

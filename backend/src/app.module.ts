@@ -5,7 +5,6 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { FarmerModule } from './farmer/farmer.module';
-import { AgentModule } from './agent/agent.module';
 import { PoolsModule } from './pools/pools.module';
 import { InvestorModule } from './investor/investor.module';
 import { TransactionModule } from './transaction/transaction.module';
@@ -26,7 +25,6 @@ import { WarehouseModule } from './warehouse/warehouse.module';
     HcsModule,
     AuthModule,
     FarmerModule,
-    AgentModule,
     PoolsModule,
     InvestorModule,
     TransactionModule,

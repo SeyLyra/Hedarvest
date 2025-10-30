@@ -19,46 +19,13 @@ model Farmer {
   encryptedPrivateKey   String?  // Encrypted private key for custodial accounts
   isCustodial           Boolean  @default(false) // True if wallet is managed by platform
   agentId               Int?
-  agent                 Agent?   @relation(fields: [agentId], references: [id])
   otpRequest            OtpRequest?
   deposits              GrainDeposit[]
-  deliveryRequests      DeliveryRequest[]
+  deliveries            Delivery[]
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 }
 
-model Agent {
-  id             Int      @id @default(autoincrement())
-  name           String
-  email          String   @unique
-  passwordHash   String
-  phoneNumber    String?
-  walletAddress  String?  @unique
-  location       String?
-  status         String   @default("pending") // pending, approved, rejected
-  isActive       Boolean  @default(true)
-  commissionRate Decimal  @default(0.05)
-  deposits       GrainDeposit[]
-  farmers        Farmer[]
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-}
-
-
-model GrainDeposit {
-  id              Int      @id @default(autoincrement())
-  farmer          Farmer   @relation(fields: [farmerId], references: [id])
-  farmerId        Int
-  agent           Agent?   @relation(fields: [agentId], references: [id])
-  agentId         Int?
-  grainType       String
-  weightKg        Decimal
-  qualityGrade    String?
-  moisturePercent Decimal?
-  tokensMinted    Decimal   @default(0)
-  hederaTxId      String?
-  depositedAt     DateTime  @default(now())
-}
 
 model Warehouse {
   id                    Int      @id @default(autoincrement())
@@ -80,31 +47,23 @@ model Warehouse {
   status                String   @default("active") // active, inactive, maintenance
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  GrainDeposits         GrainDeposit[]
 }
 
-model Pool {
-  id                    Int      @id @default(autoincrement())
-  grainType             String   @unique
-  poolAddress           String   @unique
-  lendingToken          String
-  lendingTokenAddress   String?
-  collateralToken       String
-  lpToken               String
-  oracleAddress         String?
-  totalLiquidity        Decimal  @default(0)
-  liquidity             Decimal  @default(0) // Alias for totalLiquidity
-  totalBorrows          Decimal  @default(0)
-  totalReserves         Decimal  @default(0)
-  utilizationRate       Decimal  @default(0)
-  currentAPR            Decimal  @default(0)
-  apr                   Decimal  @default(0) // Alias for currentAPR
-  baseLtv               Decimal  @default(0.8)
-  protocolFee           Decimal  @default(0.1)
-  riskPremium           Decimal  @default(0.05)
-  debtCeiling           Decimal  @default(1000000)
-  isActive              Boolean  @default(true)
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+model GrainDeposit {
+  id              Int      @id @default(autoincrement())
+  farmer          Farmer   @relation(fields: [farmerId], references: [id])
+  farmerId        Int
+  warehouse       Warehouse?   @relation(fields: [warehouseId], references: [id])
+  warehouseId     Int
+  agentId         Int?
+  grainType       String
+  weightKg        Decimal
+  qualityGrade    String?
+  moisturePercent Decimal?
+  tokensMinted    Decimal   @default(0)
+  hederaTxId      String?
+  depositedAt     DateTime  @default(now())
 }
 
 model OtpRequest {
@@ -117,46 +76,58 @@ model OtpRequest {
   farmer     Farmer   @relation(fields: [farmerId], references: [id])
 }
 
-model DeliveryRequest {
-  id                Int      @id @default(autoincrement())
-  farmer            Farmer   @relation(fields: [farmerId], references: [id])
-  farmerId          Int
-  warehouseId       String   // Reference to warehouse operator
-  cropType          String
-  variety           String?
-  estimatedWeight   Decimal
-  unit              String   @default("kg")
-  estimatedGrade    String?
-  moistureContent   Decimal?
-  temperature       Decimal?
-  scheduledDate     DateTime
-  location          String?
-  status            String   @default("pending") // pending, confirmed, in_transit, received, completed, cancelled
-  notes             String?
-  photos            Json?    // Array of photo URLs/paths
-  incomingDelivery  IncomingDelivery?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-}
-
-model IncomingDelivery {
+model Delivery {
   id                  Int              @id @default(autoincrement())
-  deliveryRequest     DeliveryRequest  @relation(fields: [deliveryRequestId], references: [id])
-  deliveryRequestId   Int              @unique
-  farmerName          String
+  farmer              Farmer           @relation(fields: [farmerId], references: [id])
   farmerId            Int
+  warehouseId         String           // Reference to warehouse operator (e.g., WH001)
+
+  // Crop information
   cropType            String
-  weight              Decimal          // Actual measured weight
+  variety             String?
   unit                String           @default("kg")
-  grade               String?
-  arrivalDate         DateTime
-  status              String           @default("pending") // pending, inspecting, verified, rejected
+
+  // Estimated data (from farmer)
+  estimatedWeight     Decimal
+  estimatedGrade      String?
+
+  // Actual data (measured at warehouse)
+  actualWeight        Decimal?         // Measured weight at warehouse
+  actualGrade         String?          // Grade after quality inspection
+  moistureContent     Decimal?
+  temperature         Decimal?
+
+  // Scheduling
+  scheduledDate       DateTime
+  arrivalDate         DateTime?        // When it actually arrived
+
+  // Status tracking - combined flow
+  status              String           @default("pending")
+  // Flow: pending → confirmed → in_transit → arrived → inspecting → verified/rejected
+
   priority            String           @default("medium") // low, medium, high
   estimatedValue      Decimal?
   storageLocation     String?
+  location            String?          // Pickup/origin location
   notes               String?
-  qualityInspectionId Int?             // Link to quality inspection record
+  photos              Json?            // Array of photo URLs/paths
+
+  // Links to final records
   grainDepositId      Int?             // Link to final grain deposit after verification
+
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
+}
+
+model Transaction {
+  id          Int      @id @default(autoincrement())
+  kind        String   // delivery_created, delivery_received, inspection_completed, tokens_minted, etc.
+  ref         String   // Reference to related entity (e.g., "delivery_123")
+  entity      String   // Entity type (Delivery, GrainDeposit, etc.)
+  meta        Json?    // Additional metadata
+  createdAt   DateTime @default(now())
+
+  @@index([kind])
+  @@index([ref])
+  @@index([createdAt])
 }

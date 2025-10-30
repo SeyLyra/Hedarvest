@@ -235,7 +235,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     {
       id: "rec001",
       tokenId: "WH-RICE-001",
-      farmerName: "John Smith",
+      farmerName: "John Smithsssssss",
       farmerId: "farmer_001",
       cropType: "Rice",
       grade: "Premium",
@@ -322,7 +322,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`http://localhost:3001/warehouse/delivery-requests/${numericId}/receive`, {
+      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/receive`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -367,24 +367,17 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // Fetch both delivery requests and incoming deliveries
-      const [deliveryRequestsRes, incomingDeliveriesRes] = await Promise.all([
-        fetch(`http://localhost:3001/warehouse/delivery-requests`, { headers }),
-        fetch(`http://localhost:3001/warehouse/incoming-deliveries`, { headers })
-      ]);
+      // Fetch unified deliveries list
+      const deliveriesRes = await fetch(`http://localhost:3001/warehouse/deliveries`, { headers });
 
       const allDeliveries: Delivery[] = [];
+      const deliveriesJson = deliveriesRes.ok ? await deliveriesRes.json() : [];
 
-      // Process delivery requests (pending deliveries)
-      if (deliveryRequestsRes.ok) {
-      const deliveryRequests = await deliveryRequestsRes.json();
-      const transformedRequests: Delivery[] = deliveryRequests
+      // Process pending deliveries (no arrival yet)
+      if (deliveriesRes.ok) {
+      const transformedRequests: Delivery[] = deliveriesJson
           .filter((item: any) => {
-            // Only show delivery requests that haven't been received yet
-            // AND aren't already completed
-            return !item.incomingDelivery &&
-                   item.status !== 'completed' &&
-                   item.status !== 'cancelled';
+            return !item.arrivalDate && item.status !== 'completed' && item.status !== 'cancelled';
           })
           .map((item: any) => {
             // Extract farmer name from email (john.kamau@farm.ke -> John Kamau)
@@ -424,13 +417,11 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         allDeliveries.push(...transformedRequests);
       }
 
-      // Process incoming deliveries (already received but not yet verified)
-      if (incomingDeliveriesRes.ok) {
-        const incomingDeliveries = await incomingDeliveriesRes.json();
-        const transformedIncoming: Delivery[] = incomingDeliveries
+      // Process received/in-progress deliveries (have arrivalDate)
+      if (deliveriesRes.ok) {
+        const transformedIncoming: Delivery[] = deliveriesJson
           .filter((item: any) => {
-            // Only show incoming deliveries that need action (not verified/rejected)
-            return item.status === 'pending' || item.status === 'inspecting';
+            return item.arrivalDate && (item.status === 'pending' || item.status === 'inspecting');
           })
           .map((item: any) => {
             // Extract farmer name from email if available, fallback to memberNumber
@@ -445,22 +436,21 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               farmerName = item.farmer.memberNumber;
             }
 
-            // Use grade from incoming delivery, fallback to delivery request's estimated grade
-            const grade = item.grade || item.deliveryRequest?.estimatedGrade || "Pending";
+            const grade = item.actualGrade || item.estimatedGrade || "Pending";
 
             return {
               id: `del${item.id}`,
               farmerName: farmerName,
               farmerId: `farmer_${item.farmerId}`,
               cropType: item.cropType,
-              weight: parseFloat(item.weight),
-              unit: item.unit,
+              weight: parseFloat(item.actualWeight || item.estimatedWeight),
+              unit: item.unit || 'kg',
               grade: grade,
               arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
               status: item.status as "pending" | "inspecting" | "verified" | "rejected",
               priority: item.priority as "low" | "medium" | "high",
               estimatedValue: parseFloat(item.estimatedValue || "0"),
-              location: item.storageLocation || "Unknown",
+              location: item.storageLocation || item.location || "Unknown",
               notes: item.notes
             };
           });
@@ -487,7 +477,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
 
   const updateDeliveryStatus = async (deliveryId: string, newStatus: string) => {
     try {
-      // Check if it's a delivery request (req) or incoming delivery (del)
+      // Check if it's a pending (req) or received (del) delivery
       if (deliveryId.startsWith('req')) {
         // For delivery requests, we need to receive them first
         showToast('Please use the "Receive" button to accept this delivery first', 'warning');
@@ -495,7 +485,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       }
 
       const numericId = parseInt(deliveryId.replace('del', ''));
-      const response = await fetch(`http://localhost:3001/warehouse/incoming-deliveries/${numericId}/status`, {
+      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/status/received`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -519,6 +509,37 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     } catch (error) {
       console.error('Error updating delivery status:', error);
       showToast('Error updating delivery status', 'error');
+    }
+  };
+
+  // Allow inspection to begin before receiving (for pending requests)
+  const startInspection = async (deliveryId: string) => {
+    try {
+      const numericId = parseInt(deliveryId.replace(/^req|^del/, ''));
+      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'inspecting',
+          notes: 'Inspection started',
+        })
+      });
+
+      if (response.ok) {
+        // Reflect status change locally
+        const updated = recentDeliveries.map(d =>
+          d.id === deliveryId ? { ...d, status: 'inspecting' as const } : d
+        );
+        setRecentDeliveries(updated);
+        showToast('Inspection started', 'success');
+      } else {
+        showToast('Failed to start inspection', 'error');
+      }
+    } catch (error) {
+      console.error('Error starting inspection:', error);
+      showToast('Error starting inspection', 'error');
     }
   };
 
@@ -895,7 +916,17 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                           <Eye className="h-4 w-4" />
                         </Button>
 
-                        {/* Show "Receive" button only for delivery requests (req) */}
+                        {/* For pending requests: allow Inspection first, then Receive */}
+                        {delivery.id.startsWith('req') && delivery.status === 'pending' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => startInspection(delivery.id)}
+                            title="Start Inspection"
+                          >
+                            <FlaskConical className="h-4 w-4" />
+                          </Button>
+                        )}
                         {delivery.id.startsWith('req') && (
                           <Button
                             size="sm"
@@ -924,14 +955,27 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                             >
                               <FlaskConical className="h-4 w-4" />
                             </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => updateDeliveryStatus(delivery.id, delivery.status === 'pending' ? 'inspecting' : 'verified')}
-                              title={delivery.status === 'pending' ? 'Start Inspection' : 'Verify Delivery'}
-                            >
-                              <CheckCircle className="h-4 w-4" />
-                            </Button>
+                            {delivery.status === 'pending' && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => startInspection(delivery.id)}
+                                title="Start Inspection"
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                            )}
+                            {delivery.status === 'inspecting' && (
+                              <Button
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700 text-white"
+                                onClick={() => setCurrentSection('tokenize-receipts')}
+                                title="Go to Tokenize Tab"
+                              >
+                                <Coins className="h-4 w-4 mr-1" />
+                                Tokenize
+                              </Button>
+                            )}
                           </>
                         )}
                       </div>
@@ -1031,6 +1075,11 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-foreground">{receipt.tokensMinted}</div>
+                          {receipt.hederaTxId && (
+                            <div className="text-xs text-green-600 font-mono mt-1" title={receipt.hederaTxId}>
+                              ⛓️ {receipt.hederaTxId.substring(0, 15)}...
+                            </div>
+                          )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-muted-foreground">
                           {new Date(receipt.depositedAt).toLocaleDateString()}
@@ -1042,11 +1091,16 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                           <div className="flex space-x-2">
-                            <Button size="sm" variant="outline">
+                            <Button size="sm" variant="outline" title="View Details">
                               <Eye className="h-4 w-4" />
                             </Button>
                             {receipt.hederaTxId && (
-                              <Button size="sm" variant="outline">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => window.open(`https://hashscan.io/testnet/transaction/${receipt.hederaTxId}`, '_blank')}
+                                title="View on Hashscan"
+                              >
                                 <ExternalLink className="h-4 w-4" />
                               </Button>
                             )}
@@ -1259,7 +1313,6 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             {[
               { id: "overview", label: "Overview", icon: Home },
               { id: "incoming-deliveries", label: "Incoming Deliveries", icon: Truck },
-              { id: "quality-inspection", label: "Quality Inspection", icon: FlaskConical },
               { id: "tokenize-receipts", label: "Tokenize & Issue", icon: Coins },
               { id: "issued-receipts", label: "Issued Receipts", icon: FileText },
               { id: "inventory-stock", label: "Inventory & Stock", icon: Package },
@@ -1389,10 +1442,10 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                 onBack={() => setShowQualityInspection(false)} 
                 onComplete={(data) => {
                   setShowQualityInspection(false);
-                  // After verification + mint, refresh incoming lists
+                  // After inspection, refresh incoming lists
                   setRefreshKey((k: number) => k + 1);
-                  showToast('Delivery verified and tokens minted', 'success');
-                  setCurrentSection("incoming-deliveries");
+                  showToast('Inspection completed! Go to Tokenize tab to mint tokens.', 'success');
+                  setCurrentSection("tokenize-receipts");
                 }} 
               />
             ) : (
@@ -1409,12 +1462,15 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             )
           )}
           {currentSection === "tokenize-receipts" && (
-            <TokenizeReceipts 
-              onBack={() => setCurrentSection("overview")} 
+            <TokenizeReceipts
+              onBack={() => setCurrentSection("overview")}
               onComplete={(data) => {
                 console.log("Tokenization completed:", data);
+                // Refresh data and navigate to issued receipts
+                setRefreshKey((k: number) => k + 1);
                 setCurrentSection("issued-receipts");
-              }} 
+                showToast('Tokens minted successfully! View them in Issued Receipts.', 'success');
+              }}
             />
           )}
           {currentSection === "issued-receipts" && renderIssuedReceipts()}

@@ -19,88 +19,107 @@ export class BlockchainPoolsService {
     try {
       // Check cache first
       const now = Date.now();
-      if (this.poolsCache.length > 0 && now - this.lastCacheUpdate < this.CACHE_DURATION) {
+      if (
+        this.poolsCache.length > 0 &&
+        now - this.lastCacheUpdate < this.CACHE_DURATION
+      ) {
         this.logger.log('Returning cached pools data');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return this.poolsCache;
       }
 
-      this.logger.log('Fetching all pools from blockchain using getAllPoolsWithDetails()...');
+      this.logger.log(
+        'Fetching all pools from blockchain using getAllPoolsWithDetails()...',
+      );
       const poolsInfo = await this.contractService.getAllPoolsInfo();
 
       this.logger.log(`Retrieved ${poolsInfo.length} pools from blockchain`);
 
       if (poolsInfo.length === 0) {
-        this.logger.warn('No pools found from blockchain - this might indicate:');
+        this.logger.warn(
+          'No pools found from blockchain - this might indicate:',
+        );
         this.logger.warn('1. POOL_FACTORY_ADDRESS not set correctly');
         this.logger.warn('2. Smart contracts not deployed');
         this.logger.warn('3. RPC connection issues');
-        this.logger.warn('4. Contract method getAllPoolsWithDetails() not implemented');
+        this.logger.warn(
+          '4. Contract method getAllPoolsWithDetails() not implemented',
+        );
 
         // Return cached data if available, even if stale
         if (this.poolsCache.length > 0) {
           this.logger.log('Returning stale cache as fallback');
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-return
           return this.poolsCache;
         }
         return [];
       }
 
       // Transform poolsInfo to detailed pool format with live data
-      const detailedPools = await Promise.all(poolsInfo.map(async (poolInfo, index) => {
-        try {
-          // Fetch live pool data for each pool
-          const livePoolData = await this.contractService.getPoolInfoFromAddress(poolInfo.poolAddress);
-          
-          return {
-            id: index + 1,
-            assetType: poolInfo.assetType,
-            address: poolInfo.poolAddress,
-            poolAddress: poolInfo.poolAddress,
-            lendingToken: poolInfo.lendingToken,
-            lendingTokenAddress: poolInfo.lendingToken,
-            collateralToken: poolInfo.collateralToken,
-            collateralTokenAddress: poolInfo.collateralToken,
-            baseLtv: poolInfo.baseLTV,
-            liquidationThreshold: poolInfo.liquidationThreshold,
-            liquidationBonus: poolInfo.liquidationBonus,
-            // Live data from contract
-            availableLiquidity: livePoolData.availableLiquidity || "0",
-            totalBorrows: livePoolData.totalBorrows || "0",
-            totalReserves: livePoolData.totalReserves || "0",
-            utilizationRate: livePoolData.utilizationRate || "0",
-            currentAPR: livePoolData.currentAPR || "0",
-            apr: livePoolData.currentAPR || "0",
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-        } catch (error) {
-          this.logger.warn(`Failed to fetch live data for pool ${poolInfo.poolAddress}:`, error);
-          // Return with basic info if live data fetch fails
-          return {
-            id: index + 1,
-            assetType: poolInfo.assetType,
-            address: poolInfo.poolAddress,
-            poolAddress: poolInfo.poolAddress,
-            lendingToken: poolInfo.lendingToken,
-            lendingTokenAddress: poolInfo.lendingToken,
-            collateralToken: poolInfo.collateralToken,
-            collateralTokenAddress: poolInfo.collateralToken,
-            baseLtv: poolInfo.baseLTV,
-            liquidationThreshold: poolInfo.liquidationThreshold,
-            liquidationBonus: poolInfo.liquidationBonus,
-            // Fallback to 0 if live data unavailable
-            availableLiquidity: "0",
-            totalBorrows: "0",
-            totalReserves: "0",
-            utilizationRate: "0",
-            currentAPR: "0",
-            apr: "0",
-            isActive: true,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-          };
-        }
-      }));
+      const detailedPools = await Promise.all(
+        poolsInfo.map(async (poolInfo, index) => {
+          try {
+            // Fetch live pool data for each pool
+            const livePoolData =
+              await this.contractService.getPoolInfoFromAddress(
+                poolInfo.poolAddress,
+              );
+
+            return {
+              id: index + 1,
+              assetType: poolInfo.assetType,
+              address: poolInfo.poolAddress,
+              poolAddress: poolInfo.poolAddress,
+              lendingToken: poolInfo.lendingToken,
+              lendingTokenAddress: poolInfo.lendingToken,
+              collateralToken: poolInfo.collateralToken,
+              collateralTokenAddress: poolInfo.collateralToken,
+              baseLtv: poolInfo.baseLTV,
+              liquidationThreshold: poolInfo.liquidationThreshold,
+              liquidationBonus: poolInfo.liquidationBonus,
+              // Live data from contract
+              availableLiquidity: livePoolData.availableLiquidity || '0',
+              totalBorrows: livePoolData.totalBorrows || '0',
+              totalReserves: livePoolData.totalReserves || '0',
+              utilizationRate: livePoolData.utilizationRate || '0',
+              currentAPR: livePoolData.currentAPR || '0',
+              apr: livePoolData.currentAPR || '0',
+              isActive: true,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          } catch (error) {
+            this.logger.warn(
+              `Failed to fetch live data for pool ${poolInfo.poolAddress}:`,
+              error,
+            );
+            // Return with basic info if live data fetch fails
+            return {
+              id: index + 1,
+              assetType: poolInfo.assetType,
+              address: poolInfo.poolAddress,
+              poolAddress: poolInfo.poolAddress,
+              lendingToken: poolInfo.lendingToken,
+              lendingTokenAddress: poolInfo.lendingToken,
+              collateralToken: poolInfo.collateralToken,
+              collateralTokenAddress: poolInfo.collateralToken,
+              baseLtv: poolInfo.baseLTV,
+              liquidationThreshold: poolInfo.liquidationThreshold,
+              liquidationBonus: poolInfo.liquidationBonus,
+              // Fallback to 0 if live data unavailable
+              availableLiquidity: '0',
+              totalBorrows: '0',
+              totalReserves: '0',
+              utilizationRate: '0',
+              currentAPR: '0',
+              apr: '0',
+              isActive: true,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+          }
+        }),
+      );
 
       // Update cache
       this.poolsCache = detailedPools;
@@ -113,6 +132,7 @@ export class BlockchainPoolsService {
       // Return cached data if available, even if stale
       if (this.poolsCache.length > 0) {
         this.logger.log('Returning stale cache due to error');
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-return
         return this.poolsCache;
       }
 
@@ -123,9 +143,12 @@ export class BlockchainPoolsService {
   // Get pool by asset type from blockchain
   async getPoolByAssetType(assetType: string) {
     try {
-      this.logger.log(`Fetching pool for asset type: ${assetType} from blockchain`);
-      const poolStats = await this.contractService.getPoolStatsByAssetType(assetType);
-      
+      this.logger.log(
+        `Fetching pool for asset type: ${assetType} from blockchain`,
+      );
+      const poolStats =
+        await this.contractService.getPoolStatsByAssetType(assetType);
+
       return {
         assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
@@ -141,17 +164,25 @@ export class BlockchainPoolsService {
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Failed to fetch pool for asset type ${assetType}:`, error);
-      throw new NotFoundException(`Pool not found for asset type: ${assetType}`);
+      this.logger.error(
+        `Failed to fetch pool for asset type ${assetType}:`,
+        error,
+      );
+      throw new NotFoundException(
+        `Pool not found for asset type: ${assetType}`,
+      );
     }
   }
 
   // Get pool stats by asset type
   async getPoolStats(assetType: string) {
     try {
-      this.logger.log(`Fetching pool stats for asset type: ${assetType} from blockchain`);
-      const poolStats = await this.contractService.getPoolStatsByAssetType(assetType);
-      
+      this.logger.log(
+        `Fetching pool stats for asset type: ${assetType} from blockchain`,
+      );
+      const poolStats =
+        await this.contractService.getPoolStatsByAssetType(assetType);
+
       return {
         assetType: poolStats.assetType,
         poolAddress: poolStats.poolAddress,
@@ -164,13 +195,18 @@ export class BlockchainPoolsService {
         currentAPR: poolStats.currentAPR,
         isActive: true,
         // Additional calculated fields
-        totalAssets: (parseFloat(poolStats.availableLiquidity) + parseFloat(poolStats.totalBorrows)).toString(),
+        totalAssets: (
+          parseFloat(poolStats.availableLiquidity) +
+          parseFloat(poolStats.totalBorrows)
+        ).toString(),
         createdAt: new Date(),
         updatedAt: new Date(),
       };
     } catch (error) {
       this.logger.error(`Failed to get pool stats for ${assetType}:`, error);
-      throw new NotFoundException(`Pool stats not found for asset type: ${assetType}`);
+      throw new NotFoundException(
+        `Pool stats not found for asset type: ${assetType}`,
+      );
     }
   }
 
@@ -180,16 +216,21 @@ export class BlockchainPoolsService {
       return await this.contractService.getPoolByAssetType(assetType);
     } catch (error) {
       this.logger.error(`Failed to get pool address for ${assetType}:`, error);
-      throw new NotFoundException(`Pool address not found for asset type: ${assetType}`);
+      throw new NotFoundException(
+        `Pool address not found for asset type: ${assetType}`,
+      );
     }
   }
 
   // Get pool info by address
   async getPoolInfoByAddress(poolAddress: string) {
     try {
-      this.logger.log(`Fetching pool info for address: ${poolAddress} from blockchain`);
-      const poolInfo = await this.contractService.getPoolInfoFromAddress(poolAddress);
-      
+      this.logger.log(
+        `Fetching pool info for address: ${poolAddress} from blockchain`,
+      );
+      const poolInfo =
+        await this.contractService.getPoolInfoFromAddress(poolAddress);
+
       return {
         assetType: poolInfo.assetType,
         poolAddress,
@@ -206,8 +247,13 @@ export class BlockchainPoolsService {
         updatedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Failed to get pool info for address ${poolAddress}:`, error);
-      throw new NotFoundException(`Pool info not found for address: ${poolAddress}`);
+      this.logger.error(
+        `Failed to get pool info for address ${poolAddress}:`,
+        error,
+      );
+      throw new NotFoundException(
+        `Pool info not found for address: ${poolAddress}`,
+      );
     }
   }
 
@@ -222,7 +268,11 @@ export class BlockchainPoolsService {
   }
 
   // Health check method
-  async healthCheck(): Promise<{ status: string; poolsCount: number; lastUpdated: Date }> {
+  async healthCheck(): Promise<{
+    status: string;
+    poolsCount: number;
+    lastUpdated: Date;
+  }> {
     try {
       const pools = await this.getAllPools();
       return {

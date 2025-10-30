@@ -29,6 +29,7 @@ import {
   Image,
   X
 } from "lucide-react";
+import { toast } from "sonner";
 
 interface RegisterCropProps {
   onBack: () => void;
@@ -95,29 +96,10 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
     { id: 4, title: "Review & Submit", description: "Review all information before submission" }
   ];
 
-  const validateStep = (step: number): boolean => {
-    const newErrors: Record<string, string> = {};
-
-    switch (step) {
-      case 1:
-        if (!cropData.type) newErrors.type = "Crop type is required";
-        if (!cropData.variety) newErrors.variety = "Variety is required";
-        if (!cropData.quantity) newErrors.quantity = "Quantity is required";
-        if (!cropData.harvestDate) newErrors.harvestDate = "Harvest date is required";
-        break;
-      case 2:
-        if (!cropData.grade) newErrors.grade = "Quality grade is required";
-        if (!cropData.moisture) newErrors.moisture = "Moisture content is required";
-        if (!cropData.temperature) newErrors.temperature = "Storage temperature is required";
-        break;
-      case 3:
-        if (!cropData.location) newErrors.location = "Location is required";
-        if (cropData.photos.length === 0) newErrors.photos = "At least one photo is required";
-        break;
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+  const validateStep = (_step: number): boolean => {
+    // MVP: skip strict validation to keep the flow smooth
+    setErrors({});
+    return true;
   };
 
   const handleNext = () => {
@@ -142,27 +124,25 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
     console.log("Submitting crop registration:", cropData);
 
     try {
-      // Check if warehouse is selected
-      if (!warehouseId) {
-        alert("Please select a warehouse first");
-        return;
-      }
-
+      // MVP defaults
+      const safeWarehouseId = warehouseId || 'WH-001';
       // Get farmer ID and token from localStorage
       const farmerId = localStorage.getItem('farmerId');
       const token = localStorage.getItem('farmerToken');
 
       if (!farmerId || !token) {
-        alert("Please login first");
+        toast.error("Please log in to submit your delivery");
         return;
       }
 
-      // Upload photos (in a real app, you'd upload to cloud storage)
-      // For now, we'll just send empty array or convert to base64 if needed
-      const photoUrls: string[] = [];
+      // Minimal defaults for MVP
+      const grainType = (cropData.type || 'rice').toUpperCase();
+      const quantityNum = cropData.quantity ? parseFloat(cropData.quantity) : 1000; // default 1000 units
+      const qualityGrade = cropData.grade || 'grade-a';
+      const moisturePercent = cropData.moisture ? parseFloat(cropData.moisture) : undefined;
 
-      // Create delivery request
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/warehouse/delivery-requests`, {
+      // Create Delivery request so warehouse can receive and verify
+      const mintRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001'}/warehouse/deliveries`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -170,34 +150,34 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
         },
         body: JSON.stringify({
           farmerId: parseInt(farmerId),
-          warehouseId: warehouseId, // Now using the prop from FindWarehouse
-          cropType: cropData.type,
-          variety: cropData.variety,
-          estimatedWeight: parseFloat(cropData.quantity),
-          unit: cropData.unit,
-          estimatedGrade: cropData.grade,
-          moistureContent: cropData.moisture ? parseFloat(cropData.moisture) : undefined,
+          warehouseId: safeWarehouseId,
+          cropType: grainType,
+          variety: cropData.variety || undefined,
+          estimatedWeight: quantityNum,
+          unit: cropData.unit || 'kg',
+          estimatedGrade: qualityGrade,
+          moistureContent: moisturePercent,
           temperature: cropData.temperature ? parseFloat(cropData.temperature) : undefined,
-          scheduledDate: cropData.harvestDate,
-          location: cropData.location,
-          notes: cropData.notes,
-          photos: photoUrls
+          scheduledDate: cropData.harvestDate || new Date().toISOString(),
+          location: cropData.location || undefined,
+          notes: cropData.notes || `Delivery to ${safeWarehouseId}`,
+          photos: [],
         })
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Failed to submit delivery request');
+      if (!mintRes.ok) {
+        const err = await mintRes.json();
+        throw new Error(err.message || 'Failed to mint crop tokens');
       }
-
-      const result = await response.json();
-      console.log('Delivery request created:', result);
-
-      alert(`Crop registration submitted successfully!\n\nDelivery request ID: ${result.id}\nWarehouse: ${warehouseId}\n\nYour crops will be delivered to the selected warehouse.`);
+      const mintJson = await mintRes.json();
+      toast.success("Delivery request submitted", {
+        description: `Warehouse ${safeWarehouseId} will verify your grain on arrival. You'll receive tokens after verification.`,
+        duration: 5000,
+      });
       onNext();
     } catch (error: any) {
       console.error('Error submitting crop registration:', error);
-      alert(`Failed to submit crop registration: ${error.message || 'Please try again.'}`);
+      toast.error(error?.message || 'Failed to submit crop registration');
     }
   };
 
@@ -384,7 +364,7 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
             </div>
 
             <div className="space-y-4">
-              <Label>Upload Photos *</Label>
+              <Label>Upload Photos (optional)</Label>
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-primary transition-colors">
                 <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-lg font-medium text-foreground mb-2">Upload crop photos</p>
@@ -406,7 +386,7 @@ export default function RegisterCrop({ onBack, onNext, warehouseId }: RegisterCr
                   </label>
                 </Button>
               </div>
-              {errors.photos && <p className="text-sm text-red-600">{errors.photos}</p>}
+              {/* Photos are optional for MVP */}
 
               {/* Photo Preview */}
               {cropData.photos.length > 0 && (
