@@ -89,6 +89,7 @@ import {
   Droplets as DropletsIcon, 
   Camera as CameraIcon
 } from "lucide-react";
+import { BACKEND_URL } from "@/lib/config";
 
 interface TokenizeReceiptsProps {
   onBack: () => void;
@@ -197,14 +198,13 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
       }
 
       // Fetch inspecting deliveries that are ready to be verified and tokenized
-      const response = await fetch('http://localhost:3001/warehouse/deliveries?status=inspecting', {
+      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries?status=inspecting`, {
         method: 'GET',
         headers
       });
 
       if (response.ok) {
         const data = await response.json();
-        console.log('✅ Fetched inspecting deliveries ready for tokenization:', data);
 
         // Transform the data to match the component's expected format
         const transformedData = data.map((item: any) => {
@@ -291,7 +291,7 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
           const numericId = parseInt(deliveryId.replace('del', ''));
           setCurrentlyMintingId(deliveryId);
 
-          console.log(`🔄 Starting tokenization for delivery ${numericId} (${delivery.farmerName} - ${delivery.cropType})`);
+          
 
           // Get warehouse token from localStorage
           const token = localStorage.getItem('warehouseToken');
@@ -311,31 +311,25 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
             notes: delivery.notes || `Verified and tokenized ${delivery.cropType}`,
           };
 
-          console.log(`📤 Calling API: POST /warehouse/deliveries/${numericId}/verify`, requestBody);
+          
 
           // Call the API to verify delivery and mint tokens
-          const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/verify`, {
+          const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/verify`, {
             method: 'POST',
             headers,
             body: JSON.stringify(requestBody)
           });
 
-          console.log(`📥 Response status: ${response.status} ${response.statusText}`);
+          
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
             const errorMessage = errorData.message || errorData.error || `Failed to mint token (Status: ${response.status})`;
-            console.error('❌ Token minting API error:', {
-              status: response.status,
-              statusText: response.statusText,
-              errorData,
-              errorMessage
-            });
+            
             throw new Error(errorMessage);
           }
 
           const tokenData = await response.json();
-          console.log('Token minting response:', tokenData);
 
           // Extract Hedera transaction details
           const hederaTxId = tokenData.hederaTxId || tokenData.grainDeposit?.hederaTxId;
@@ -374,20 +368,15 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
 
           // Log Hedera minting info
           if (hederaTxId && !hederaTxId.startsWith('ERROR:')) {
-            console.log(`✅ Minted ${tokensMinted} tokens to Hedera!`);
-            console.log(`📋 Transaction ID: ${hederaTxId}`);
-            if (mirrorNodeUrl) {
-              console.log(`🔗 View on Hashscan: ${mirrorNodeUrl}`);
-            }
+            
           } else if (hederaTxId?.startsWith('ERROR:')) {
-            console.error(`❌ Hedera minting failed: ${hederaTxId}`);
+            
           }
 
           setMintedReceipts(prev => [...prev, receiptData]);
           successCount++;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-          console.error('❌ Error minting tokens for delivery:', error);
           setError(`Failed to mint token for ${delivery.farmerName}: ${errorMessage}`);
           // Continue with other deliveries even if one fails
         } finally {

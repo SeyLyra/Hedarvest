@@ -1,3 +1,146 @@
+# Hedarvest
+
+Track: DeFi, Real-World Assets (RWA), Supply Chain on Hedera
+
+Hedarvest tokenizes warehouse receipts for agricultural crops and enables farmers to deposit them as collateral for low-cost credit. Investors fund pools that lend against HTS crop tokens. The system logs key lifecycle events via HCS for transparent, auditable operations.
+
+## Hedera Integration Summary
+
+- HTS (Hedera Token Service): We use existing HTS tokens (per crop type) to represent tokenized grain receipts. HTS gives us native mint/transfer semantics, fast finality, and predictable micro-fees, which are critical when representing many small-value receipts typical in African agriculture.
+- Smart Contracts: We use EVM-compatible contracts for lending pools and risk logic. Contract calls are deterministic and inexpensive on Hedera, and ABFT finality reduces reconciliation risk for lenders and farmers.
+- HCS (Hedera Consensus Service): We log deposit/withdraw and lending events to HCS (or an HCS-backed log), providing an immutable audit trail. We chose HCS because its predictable ~$0.0001 fee per message ensures cost stability for low-margin logistics and makes independent verification easy via Mirror Node.
+
+### Transaction types used
+
+- TokenCreateTransaction (setup phase, if deploying tokens)
+- TokenMintTransaction and token transfers via HTS
+- ContractExecuteTransaction (e.g., depositCollateral, borrow)
+- TopicMessageSubmitTransaction (HCS logging of key events)
+
+### Economic justification
+
+Hedera’s low, predictable fees and ABFT finality lower the cost-to-serve in markets where margins are thin and connectivity is variable. Predictable per-transaction pricing (HTS mints/transfers, contract executes, HCS messages) lets us design farmer- and warehouse-friendly UX without surprise costs. High throughput and rapid finality help us keep investor liquidity and farmer credit access responsive.
+
+## Deployment & Setup Instructions (Testnet)
+
+Prereqs:
+- Node.js 18+
+- pnpm (recommended) or npm
+- A Hedera Testnet account and operator key for contract ops (if deploying)
+
+Clone and install:
+
+```bash
+git clone https://github.com/your-org/hedarvest.git
+cd Hedarvest
+
+# install all workspaces
+pnpm install
+```
+
+Environment configuration:
+
+- Copy and edit example envs
+
+```bash
+# Frontend
+cp app/.env.example app/.env
+# Backend
+cp backend/.env.example backend/.env
+# Contracts (if you will deploy)
+cp contracts/.env.example contracts/.env
+```
+
+Required variables (high-level):
+- Frontend `app/.env`
+  - `NEXT_PUBLIC_BACKEND_URL` (e.g., http://localhost:3001)
+- Backend `backend/.env`
+  - `PORT` (default 3001)
+  - `CORS_ORIGINS` (comma-separated origins, e.g., http://localhost:3000)
+  - `HEDERA_NETWORK` (testnet)
+  - Any service keys you use (never commit secrets)
+- Contracts `contracts/.env` (if deploying)
+  - Operator account and private key for Testnet
+
+Run locally (two terminals):
+
+```bash
+# Terminal 1: Backend (NestJS)
+cd backend
+pnpm prisma:generate
+pnpm prisma:deploy   # applies migrations
+pnpm prisma:seed     # optional: seed realistic test data
+pnpm build
+pnpm start:dev  # starts on http://localhost:3001
+
+# Terminal 2: Frontend (Next.js)
+cd app
+pnpm dev       # starts on http://localhost:3000
+```
+
+Expected running state:
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:3001
+
+Optional (contracts):
+
+```bash
+cd contracts
+pnpm compile
+# Deploy scripts are provided under contracts/scripts
+```
+
+## Architecture Diagram
+
+```
+[User/UI (Next.js)]  <--->  [Backend API (NestJS)]  <--->  [Hedera]
+       |                          |                      /        \
+       |                          |                 [HTS]        [HCS]
+       |                          |                    \        /
+       |                          |                  [EVM Smart Contracts]
+       |                          |                             |
+       |                          +---- Mirror Node (reads) ----+
+
+Flow examples:
+1) UI -> Backend -> HTS (mint/transfer crop tokens)
+2) UI -> Backend -> Contracts (depositCollateral, borrow)
+3) Backend -> HCS (submit event logs) -> Mirror Node (read back to UI)
+```
+
+## Deployed Hedera IDs (Testnet)
+
+Fill with your deployment values:
+- Lending Pool Contract IDs: `0.0.xxxxx`
+- Token IDs (HTS): Wheat `0.0.xxxxx`, Rice `0.0.xxxxx`, Corn `0.0.xxxxx`
+- HCS Topic ID(s): `0.0.xxxxx`
+- Operator / Service Account IDs: `0.0.xxxxx`
+
+## Security & Secrets
+
+- Do NOT commit any private keys or credentials. Use `.env` files locally only.
+- Provide judges with test credentials securely in the DoraHacks submission text field (e.g., “Test account ID and Private Key provided in submission for verification”).
+- Example configuration files are provided as `.env.example` (create your own `.env`).
+
+## Code Quality & Auditability
+
+- TypeScript across frontend and backend.
+- Centralized config for backend URL in `app/src/lib/config.ts`.
+- Endpoints catalog: see `ENDPOINTS.md` for FE-used APIs.
+- Linters/formatters recommended (ESLint/Prettier). Keep core logic files clean and commented where non-obvious (e.g., lending flow, tokenization).
+
+## Quick Test Plan (manual)
+
+1) Start backend and frontend as above.
+2) From the UI, login as warehouse operator and fetch deliveries; verify tokenization flows call Warehouse endpoints.
+3) From investor UI, view pools and portfolio; verify events show under Transaction History (HCS-backed).
+4) Use the faucet routes to mint test tokens on Testnet accounts.
+
+## Troubleshooting
+
+- CORS: Ensure `CORS_ORIGINS` in backend `.env` includes the frontend origin.
+- Env: Ensure `NEXT_PUBLIC_BACKEND_URL` is set in `app/.env`.
+- Hedera connectivity: Verify `HEDERA_NETWORK=testnet` and credentials in backend/contracts `.env`.
+
 # 🌾 Hedarvest
 ### *Decentralized Agricultural Finance Platform on Hedera Hashgraph*
 
@@ -125,23 +268,43 @@ nano backend/.env.local
 
 **Required Environment Variables:**
 ```env
-# Hedera Configuration
+# Hedera Operator (HTS/HCS)
 HEDERA_OPERATOR_ID=0.0.123456
-HEDERA_OPERATOR_KEY=302e020100300506032b657004220420...
+HEDERA_OPERATOR_KEY=3030303
 HEDERA_NETWORK=testnet
-HEDERA_JSON_RPC_URL=https://testnet.hashio.io/api
 
-# EVM Configuration
-EVM_PRIVATE_KEY=0x1234567890abcdef...
+# Hedera EVM JSON-RPC
+HEDERA_JSON_RPC_URL=https://testnet.hashio.io/api
+EVM_PRIVATE_KEY=0xabbbaba
+
+# HTS & HCS (optional seed will create)
+HEDERA_TOPIC_ID=111
 
 # Database
-DATABASE_URL=postgresql://username:password@localhost:5432/hedarvest
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hedarvest?schema=public
 
-# JWT Configuration
-JWT_SECRET=your-super-secret-jwt-key-here
-```
+# Auth / App
+JWT_SECRET=supersupersecre
+FARMER_PIN_SALT=static-saltzw
+NEXT_PUBLIC_APP_URL=http://localhost:3000
 
-### 4. Database Setup
+# ==================================
+# CORE CONTRACT ADDRESSES (UPDATED 2025-10-23)
+# ==================================
+# Deployed with price precision fix - see contracts/PRICE_PRECISION_FIX.md
+# Pool details are fetched dynamically from PoolFactory.getAllPoolsWithDetails()
+POOL_FACTORY_ADDRESS=0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb
+ORACLE_ADDRESS=0x32344dEf5EA9Fa9b83962980C8d447dea81F3685
+INTEREST_RATE_MODEL_ADDRESS=0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588
+USDC_MOCK_TOKEN_ID=0.0.7115536
+
+HEDERA_MIRROR_NODE_URL="https://testnet.mirrornode.hedera.com"
+
+PORT=3001
+# Crop Token IDs
+WHEAT_TOKEN_ID=0.0.7121333
+RICE_TOKEN_ID=0.0.7121334
+
 ```bash
 # Start PostgreSQL with Docker
 docker compose up -d
@@ -410,10 +573,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🏆 Hackathon Submission
 
-**Built for**: [Hackathon Name]  
-**Track**: DeFi / Agriculture / Sustainability  
-**Team**: [Your Team Name]  
-**Duration**: [Hackathon Duration]  
+**Built for**: [Hedera Africa Hackhaton]  
+**Track**: DeFi / Rwa  
+**Team**: [Hedarvest]  
 
 **Key Achievements**:
 - ✅ Complete full-stack application

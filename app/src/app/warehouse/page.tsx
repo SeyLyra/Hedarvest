@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2, Eye, EyeOff, Warehouse } from "lucide-react";
 import WarehouseDashboard from "@/components/warehouse/WarehouseDashboard";
+import { BACKEND_URL } from "@/lib/config";
 
 interface WarehouseLoginProps {
   onLogin: (email: string, password: string) => Promise<void>;
@@ -155,7 +156,7 @@ export default function WarehousePage() {
       if (token && savedOperatorName && savedWarehouseId) {
         // Verify token is still valid by making a test request
         try {
-          const response = await fetch('http://localhost:3001/warehouse/profile', {
+          const response = await fetch(`${BACKEND_URL}/warehouse/profile`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -190,7 +191,7 @@ export default function WarehousePage() {
     setError("");
 
     try {
-      const response = await fetch('http://localhost:3001/warehouse/login', {
+      const response = await fetch(`${BACKEND_URL}/warehouse/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

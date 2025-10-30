@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Controller, Get, Post, Body, Param, Query } from '@nestjs/common';
 import { HcsService } from './hcs.service';
 import { TransactionService } from '../transaction/transaction.service';
@@ -9,24 +10,12 @@ export class HcsController {
     private readonly transactionService: TransactionService,
   ) {}
 
-  @Get('events/stream')
-  async getEventStream(@Query('address') address?: string) {
-    // For now, return mock events since HCS is in mock mode
-    // In production, this would stream real-time HCS events
-    return {
-      success: true,
-      message: 'HCS event stream endpoint',
-      mode: 'mock',
-      topicId: this.hcsService.getTopicId(),
-      events: await this.getMockEvents(address)
-    };
-  }
 
   @Get('events')
   async getEvents(
     @Query('address') address?: string,
     @Query('limit') limit: string = '50',
-    @Query('offset') offset: string = '0'
+    @Query('offset') offset: string = '0',
   ) {
     try {
       // Get events from TransactionService (HCS-backed)
@@ -40,7 +29,9 @@ export class HcsController {
         ? allEvents.filter((event) => {
             const meta = event.meta || {};
             return (
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
               meta.depositorAddress === address ||
+              // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
               meta.farmerAddress === address
             );
           })
@@ -75,71 +66,9 @@ export class HcsController {
     }
   }
 
-  @Get('events/:eventType')
-  async getEventsByType(
-    @Param('eventType') eventType: string,
-    @Query('address') address?: string,
-    @Query('limit') limit: string = '50'
-  ) {
-    try {
-      const kindFilter = this.mapEventTypeToTransactionKind(eventType);
+  // removed unused HCS events by type endpoint
 
-      // Get events from TransactionService (HCS-backed)
-      const allEvents = await this.transactionService.getTransactionsByKind(
-        kindFilter
-      );
-
-      // Filter by address if provided
-      const events = address
-        ? allEvents.filter((event) => {
-            const meta = event.meta || {};
-            return (
-              meta.depositorAddress === address ||
-              meta.farmerAddress === address
-            );
-          })
-        : allEvents;
-
-      // Take limit
-      const limitedEvents = events.slice(0, parseInt(limit));
-
-      const hcsEvents = limitedEvents.map((event) => ({
-        hcsMessageId: event.hcsMessageId,
-        eventType: this.mapTransactionKindToEventType(event.kind),
-        payload: {
-          ...(event.meta || {}),
-          transactionId: event.ref,
-          timestamp: event.timestamp.toISOString(),
-        },
-        timestamp: event.timestamp.toISOString(),
-        transactionId: event.ref,
-      }));
-
-      return {
-        success: true,
-        eventType,
-        events: hcsEvents,
-        total: events.length
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        eventType,
-        events: []
-      };
-    }
-  }
-
-  @Get('status')
-  async getStatus() {
-    return {
-      success: true,
-      mode: this.hcsService.getTopicId() === 'MOCK_TOPIC_ID' ? 'mock' : 'live',
-      topicId: this.hcsService.getTopicId(),
-      status: 'operational'
-    };
-  }
+  // removed unused HCS status endpoint
 
   @Post('log-deposit')
   async logDeposit(@Body() depositData: {

@@ -25,34 +25,5 @@ export class AuthController {
     return this.authService.walletConnect(walletConnectDto);
   }
 
-  @Post('wallet')
-  async authenticateWallet(@Body() walletAuthDto: WalletAuthDto) {
-    const result =
-      await this.walletAuthService.authenticateWallet(walletAuthDto);
-
-    if (!result.success) {
-      return {
-        success: false,
-        message: 'Wallet authentication failed',
-      };
-    }
-
-    return {
-      success: true,
-      token: result.token,
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-      user: result.user,
-      message: 'Wallet authenticated successfully',
-    };
-  }
-
-  @Get('profile')
-  @UseGuards(JwtAuthGuard)
-  // eslint-disable-next-line @typescript-eslint/require-await
-  async getProfile(@Request() req) {
-    return {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
-      user: req.user,
-    };
-  }
+  // removed unused wallet and profile endpoints
 }

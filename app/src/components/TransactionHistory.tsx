@@ -44,7 +44,7 @@ export default function TransactionHistory({ userAddress, transactions }: Transa
     setIsLoading(true);
     setError(null);
     try {
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
       const response = await fetch(`${BACKEND_URL}/hcs/events?address=${userAddress}&limit=50`);
 
       if (response.ok) {
@@ -58,7 +58,6 @@ export default function TransactionHistory({ userAddress, transactions }: Transa
         setError('Failed to connect to HCS service');
       }
     } catch (err) {
-      console.error('Error fetching HCS events:', err);
       setError('Error loading transaction history');
     } finally {
       setIsLoading(false);

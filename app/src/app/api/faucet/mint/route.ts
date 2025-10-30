@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from "@/lib/config";
 
 export async function POST(request: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('🪙 Faucet mint request:', { address, amount, tokenType });
+    
 
     // Call backend faucet API
     const response = await fetch(`${BACKEND_URL}/faucet/mint`, {
@@ -58,7 +58,7 @@ export async function POST(request: NextRequest) {
     const result = await response.json();
 
     if (!response.ok) {
-      console.error('❌ Backend faucet mint failed:', result);
+      
       return NextResponse.json(
         { 
           success: false,
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.log('✅ Faucet mint successful:', result);
+    
 
     return NextResponse.json({
       success: true,
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
     }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ Faucet mint API error:', error);
+    
     return NextResponse.json(
       { error: error instanceof Error ? error.message : 'Internal server error' },
       { status: 500 }

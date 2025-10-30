@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+import { BACKEND_URL } from "@/lib/config";
 
 export async function GET(
   request: NextRequest,
@@ -19,7 +19,7 @@ export async function GET(
     const { searchParams } = new URL(request.url);
     const tokenType = searchParams.get('tokenType') || 'usdc';
 
-    console.log('🔍 Fetching balance for:', { address, tokenType });
+    
 
     // Call backend faucet balance API
     const response = await fetch(`${BACKEND_URL}/faucet/balance/${address}?tokenType=${encodeURIComponent(tokenType)}`, {
@@ -33,14 +33,14 @@ export async function GET(
     const result = await response.json();
 
     if (!response.ok) {
-      console.error('❌ Backend balance fetch failed:', result);
+      
       return NextResponse.json(
         { error: result.message || 'Failed to fetch balance' },
         { status: response.status }
       );
     }
 
-    console.log('✅ Balance fetched:', { tokenType: tokenType, balance: result.balance });
+    
 
     return NextResponse.json({
       success: true,
@@ -53,7 +53,7 @@ export async function GET(
     }, { status: 200 });
 
   } catch (error) {
-    console.error('❌ Balance API error:', error);
+    
     return NextResponse.json(
       { 
         success: false,

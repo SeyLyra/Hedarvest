@@ -33,18 +33,21 @@ export class WarehouseController {
    */
   @Post('login')
   async warehouseLogin(@Body() body: { email: string; password: string }) {
-    const warehouseData = await this.warehouseService.warehouseLogin(body.email, body.password);
-    
+    const warehouseData = await this.warehouseService.warehouseLogin(
+      body.email,
+      body.password,
+    );
+
     // Create a JWT token with warehouse information
-    const payload = { 
+    const payload = {
       sub: 'warehouse_operator',
       email: warehouseData.warehouse.email,
       warehouseId: warehouseData.warehouse.id,
       role: 'warehouse_operator',
     };
-    
+
     const token = this.jwtService.sign(payload);
-    
+
     return {
       accessToken: token,
       warehouse: {
@@ -61,7 +64,7 @@ export class WarehouseController {
   @Get('list')
   async getWarehouses() {
     // For demo, only return WH001 (Green Valley Storage)
-    return WAREHOUSES.filter(w => w.id === 'WH001');
+    return WAREHOUSES.filter((w) => w.id === 'WH001');
   }
 
   /**
@@ -78,10 +81,7 @@ export class WarehouseController {
    */
   @Get('deliveries')
   @UseGuards(JwtAuthGuard)
-  async getDeliveryRequests(
-    @Request() req,
-    @Query('status') status?: string,
-  ) {
+  async getDeliveryRequests(@Request() req, @Query('status') status?: string) {
     // Extract warehouse ID from JWT token
     const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getDeliveryRequests(warehouseId, status);
@@ -94,14 +94,6 @@ export class WarehouseController {
   @UseGuards(JwtAuthGuard)
   async getFarmerDeliveries(@Param('farmerId', ParseIntPipe) farmerId: number) {
     return this.warehouseService.getFarmerDeliveries(farmerId);
-  }
-
-  /**
-   * Get a specific delivery
-   */
-  @Get('deliveries/:id')
-  async getDeliveryRequest(@Param('id', ParseIntPipe) id: number) {
-    return this.warehouseService.getDeliveryRequest(id);
   }
 
   /**
@@ -126,20 +118,6 @@ export class WarehouseController {
     return this.warehouseService.receiveDelivery(id, receiveDto);
   }
 
-  /**
-   * Get received deliveries for warehouse
-   */
-  @Get('deliveries/received')
-  @UseGuards(JwtAuthGuard)
-  async getIncomingDeliveries(
-    @Request() req,
-    @Query('status') status?: string,
-  ) {
-    // Extract warehouse ID from JWT token
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
-    return this.warehouseService.getIncomingDeliveries(warehouseId, status);
-  }
 
   /**
    * Update delivery status (post-arrival)
@@ -168,26 +146,13 @@ export class WarehouseController {
   }
 
   /**
-   * Reject delivery
-   */
-  @Post('deliveries/:id/reject')
-  async rejectDelivery(
-    @Param('id', ParseIntPipe) id: number,
-    @Body() body: { reason: string },
-  ) {
-    return this.warehouseService.rejectDelivery(id, body.reason);
-  }
-
-  /**
    * Get issued receipts (grain deposits) for warehouse
    */
   @Get('issued-receipts')
   @UseGuards(JwtAuthGuard)
-  async getIssuedReceipts(
-    @Request() req,
-    @Query('status') status?: string,
-  ) {
+  async getIssuedReceipts(@Request() req, @Query('status') status?: string) {
     // Extract warehouse ID from JWT token
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access
     const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getIssuedReceipts(warehouseId, status);
   }
@@ -195,12 +160,5 @@ export class WarehouseController {
   /**
    * Get warehouse by ID (MUST be last to avoid catching other routes)
    */
-  @Get(':id')
-  async getWarehouseById(@Param('id') id: string) {
-    const warehouse = WAREHOUSES.find((w) => w.id === id);
-    if (!warehouse) {
-      return { error: 'Warehouse not found' };
-    }
-    return warehouse;
-  }
+  // removed unused GET :id
 }

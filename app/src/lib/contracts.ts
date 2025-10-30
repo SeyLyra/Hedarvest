@@ -15,7 +15,6 @@ export const DEPLOYED_CONTRACTS = {
 export const CROP_TOKEN_IDS = {
   WHEAT: process.env.NEXT_PUBLIC_WHEAT_TOKEN_ID || '0.0.7121333',
   RICE: process.env.NEXT_PUBLIC_RICE_TOKEN_ID || '0.0.7121334',
-  CORN: process.env.NEXT_PUBLIC_CORN_TOKEN_ID || '0.0.7121335',
 };
 
 // USDT Token ID (used for borrowing)
@@ -46,18 +45,6 @@ export const MOCK_POOLS = [
     totalBorrows: '30000',
     utilizationRate: 28.5,
     apr: 9.2,
-  },
-  {
-    id: 3,
-    grainType: 'CORN',
-    address: '0x0000000000000000000000000000000000000002',
-    lendingTokenAddress: USDT_TOKEN_ID,
-    collateralTokenAddress: CROP_TOKEN_IDS.CORN,
-    price: 220.75,
-    availableLiquidity: '40000',
-    totalBorrows: '12000',
-    utilizationRate: 23.0,
-    apr: 7.8,
   },
 ];
 

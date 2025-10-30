@@ -58,7 +58,7 @@ export default function ActivityFeed({ farmerId }: ActivityFeedProps) {
     try {
       setIsLoading(true);
       const token = localStorage.getItem('token');
-      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:3001';
+      const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
       // Fetch deliveries
       const deliveriesResponse = await fetch(

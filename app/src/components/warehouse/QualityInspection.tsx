@@ -76,6 +76,7 @@ import {
   Warehouse as WarehouseIcon, 
   Coins as CoinsIcon
 } from "lucide-react";
+import { BACKEND_URL } from "@/lib/config";
 
 interface QualityInspectionProps {
   deliveryId: string;
@@ -188,7 +189,6 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
 
   // Update form data when deliveryData changes
   useEffect(() => {
-    console.log('QualityInspection received deliveryData:', deliveryData);
     if (deliveryData) {
       setInspectionData(prev => ({
         ...prev,
@@ -205,7 +205,6 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
           texture: prev.measurements?.texture || ""
         }
       }));
-      console.log('Updated inspectionData with deliveryData');
     }
   }, [deliveryData]);
 
@@ -213,7 +212,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
   useEffect(() => {
     if (!numericIncomingId || Number.isNaN(numericIncomingId)) return;
     // Fire-and-forget; ignore result for UX smoothness
-    fetch(`http://localhost:3001/warehouse/deliveries/${numericIncomingId}/status`, {
+    fetch(`${BACKEND_URL}/warehouse/deliveries/${numericIncomingId}/status`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'inspecting', notes: 'Inspection started' })
@@ -307,7 +306,7 @@ ${inspectionData.notes || ''}`;
         temperature: inspectionData.temperature,
       };
 
-      const res = await fetch(`http://localhost:3001/warehouse/deliveries/${numericIncomingId}/status`, {
+      const res = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericIncomingId}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

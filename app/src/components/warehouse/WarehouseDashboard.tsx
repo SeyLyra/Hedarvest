@@ -134,6 +134,8 @@ import {
 import QualityInspection from "./QualityInspection";
 import TokenizeReceipts from "./TokenizeReceipts";
 import { Toast, ToastType } from "@/components/ui/toast";
+import { BACKEND_URL } from "@/lib/config";
+import { logError } from "@/lib/log";
 
 interface WarehouseDashboardProps {
   operatorName: string;
@@ -284,7 +286,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`http://localhost:3001/warehouse/issued-receipts`, { headers });
+      const response = await fetch(`${BACKEND_URL}/warehouse/issued-receipts`, { headers });
       if (response.ok) {
         const receipts = await response.json();
         setIssuedReceipts(receipts);
@@ -292,7 +294,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         setIssuedReceipts([]);
       }
     } catch (error) {
-      console.error('Error fetching issued receipts:', error);
+      logError('Error fetching issued receipts:', error);
       setIssuedReceipts([]);
     } finally {
       setIsLoadingReceipts(false);
@@ -322,7 +324,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/receive`, {
+      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/receive`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
@@ -349,7 +351,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         showToast(`Failed: ${error.message || 'Unknown error'}`, 'error');
       }
     } catch (error) {
-      console.error('Error receiving delivery:', error);
+      logError('Error receiving delivery:', error);
       showToast('Error receiving delivery', 'error');
     }
   };
@@ -368,7 +370,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       }
 
       // Fetch unified deliveries list
-      const deliveriesRes = await fetch(`http://localhost:3001/warehouse/deliveries`, { headers });
+      const deliveriesRes = await fetch(`${BACKEND_URL}/warehouse/deliveries`, { headers });
 
       const allDeliveries: Delivery[] = [];
       const deliveriesJson = deliveriesRes.ok ? await deliveriesRes.json() : [];
@@ -467,7 +469,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       // Always set the real data (even if empty array)
       setRecentDeliveries(allDeliveries);
     } catch (error) {
-      console.error('Error fetching deliveries:', error);
+      logError('Error fetching deliveries:', error);
       // Don't fall back to mock data, just show empty state
       setRecentDeliveries([]);
     } finally {
@@ -485,7 +487,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       }
 
       const numericId = parseInt(deliveryId.replace('del', ''));
-      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/status/received`, {
+      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/status/received`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -507,7 +509,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         showToast('Failed to update delivery status', 'error');
       }
     } catch (error) {
-      console.error('Error updating delivery status:', error);
+      logError('Error updating delivery status:', error);
       showToast('Error updating delivery status', 'error');
     }
   };
@@ -516,7 +518,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const startInspection = async (deliveryId: string) => {
     try {
       const numericId = parseInt(deliveryId.replace(/^req|^del/, ''));
-      const response = await fetch(`http://localhost:3001/warehouse/deliveries/${numericId}/status`, {
+      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/status`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -538,7 +540,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
         showToast('Failed to start inspection', 'error');
       }
     } catch (error) {
-      console.error('Error starting inspection:', error);
+      logError('Error starting inspection:', error);
       showToast('Error starting inspection', 'error');
     }
   };
@@ -1465,7 +1467,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
             <TokenizeReceipts
               onBack={() => setCurrentSection("overview")}
               onComplete={(data) => {
-                console.log("Tokenization completed:", data);
+                
                 // Refresh data and navigate to issued receipts
                 setRefreshKey((k: number) => k + 1);
                 setCurrentSection("issued-receipts");

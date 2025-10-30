@@ -29,30 +29,6 @@ export class FarmerController {
     return this.farmerService.registerFarmer(registerFarmerDto);
   }
 
-  @Post('deposits')
-  @UseGuards(JwtAuthGuard)
-  async depositGrain(@Body() depositGrainDto: DepositGrainDto) {
-    return this.farmerService.depositGrain(depositGrainDto);
-  }
-
-  @Post('redeem')
-  @UseGuards(JwtAuthGuard)
-  async redeem(@Body() redeemDto: RedeemDto) {
-    return this.farmerService.redeemTokens(redeemDto);
-  }
-
-  @Get('profile')
-  @UseGuards(JwtAuthGuard)
-  async getProfile(@Request() req) {
-    return this.farmerService.getFarmerProfile(req.user.sub);
-  }
-
-  @Get('deposits')
-  @UseGuards(JwtAuthGuard)
-  async getDeposits(@Request() req) {
-    return this.farmerService.getFarmerDeposits(req.user.sub);
-  }
-
   @Get('loans')
   @UseGuards(JwtAuthGuard)
   async getLoans(@Request() req) {
@@ -62,20 +38,7 @@ export class FarmerController {
   @Post('create-hedera-wallet')
   @UseGuards(JwtAuthGuard)
   async createHederaWallet(@Request() req) {
-    console.log(
-      '🔧 Request to create Hedera wallet for farmer ID:',
-      req.user.sub,
-    );
-    try {
-      const result = await this.farmerService.createHederaWalletForFarmer(
-        req.user.sub,
-      );
-      console.log('✅ Wallet creation result:', result);
-      return result;
-    } catch (error) {
-      console.error('❌ Failed to create wallet:', error);
-      throw error;
-    }
+    return this.farmerService.createHederaWalletForFarmer(req.user.sub);
   }
 
   @Post('collateral/deposit')
@@ -120,39 +83,14 @@ export class FarmerController {
 
   @Post('fix-wallet-by-email')
   async fixWalletByEmail(@Body() body: { email: string }) {
-    console.log('🔧 Admin request to fix wallet for email:', body.email);
-    try {
-      const farmer = await this.farmerService.getFarmerByEmail(body.email);
-
-      if (farmer.hederaAccountId) {
-        return {
-          success: true,
-          message: 'Farmer already has Hedera account',
-          hederaAccountId: farmer.hederaAccountId,
-        };
-      }
-
-      const result = await this.farmerService.createHederaWalletForFarmer(
-        farmer.id,
-      );
-      console.log('✅ Wallet fixed for farmer:', body.email, result);
-      return result;
-    } catch (error) {
-      console.error('❌ Failed to fix wallet:', error);
-      return { success: false, error: error.message || 'Unknown error' };
+    const farmer = await this.farmerService.getFarmerByEmail(body.email);
+    if (farmer.hederaAccountId) {
+      return {
+        success: true,
+        message: 'Farmer already has Hedera account',
+        hederaAccountId: farmer.hederaAccountId,
+      };
     }
-  }
-
-  @Get(':id')
-  async getFarmerById(@Param('id', ParseIntPipe) id: number) {}
-
-  @Post('register-with-auth')
-  async registerWithAuth(@Body() registerDto: FarmerRegisterDto) {
-    return this.farmerService.registerFarmerWithAuth(registerDto);
-  }
-
-  @Post('login')
-  async login(@Body() loginDto: FarmerLoginDto) {
-    return this.farmerService.loginFarmer(loginDto);
+    return this.farmerService.createHederaWalletForFarmer(farmer.id);
   }
 }

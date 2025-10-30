@@ -18,6 +18,8 @@ import {
   Eye,
   AlertCircle
 } from "lucide-react";
+import { BACKEND_URL } from "@/lib/config";
+import { logError } from "@/lib/log";
 
 interface DeliveryTrackingProps {
   farmerId: number;
@@ -60,7 +62,7 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
       const token = localStorage.getItem('token');
 
       const response = await fetch(
-        `http://localhost:3001/warehouse/deliveries/farmer/${farmerId}`,
+        `${BACKEND_URL}/warehouse/deliveries/farmer/${farmerId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -72,10 +74,10 @@ export default function DeliveryTracking({ farmerId, onBack }: DeliveryTrackingP
         const data = await response.json();
         setDeliveries(data);
       } else {
-        console.error('Failed to fetch deliveries');
+        logError('Failed to fetch deliveries');
       }
     } catch (error) {
-      console.error('Error fetching deliveries:', error);
+      logError('Error fetching deliveries:', error);
     } finally {
       setIsLoading(false);
     }

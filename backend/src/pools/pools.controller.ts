@@ -12,58 +12,11 @@ export class PoolsController {
     return this.blockchainPoolsService.getAllPools();
   }
 
-  @Get(':assetType')
-  async getPoolByAssetType(@Param('assetType') assetType: string) {
-    return this.blockchainPoolsService.getPoolByAssetType(assetType);
-  }
 
   @Get(':assetType/stats')
   async getPoolStats(@Param('assetType') assetType: string) {
     return this.blockchainPoolsService.getPoolStats(assetType);
   }
 
-  @Get('health/check')
-  async healthCheck() {
-    return this.blockchainPoolsService.healthCheck();
-  }
-
-  @Get('debug/factory')
-  async debugFactory() {
-    try {
-      const contractService = this.blockchainPoolsService['contractService'];
-      const pools = await contractService.getAllPools();
-      return {
-        success: true,
-        poolsCount: pools.length,
-        pools: pools,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
-      };
-    }
-  }
-
-  @Get('debug/pools-info')
-  async debugPoolsInfo() {
-    try {
-      const contractService = this.blockchainPoolsService['contractService'];
-      const poolsInfo = await contractService.getAllPoolsInfo();
-      return {
-        success: true,
-        poolsInfoCount: poolsInfo.length,
-        poolsInfo: poolsInfo,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        factoryAddress: process.env.LENDING_FACTORY_ADDRESS,
-      };
-    }
-  }
+  // removed unused endpoints (asset lookup, health, debug)
 }
