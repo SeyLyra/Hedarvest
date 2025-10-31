@@ -19,76 +19,7 @@ Hedarvest tokenizes warehouse receipts for agricultural crops and enables farmer
 
 ### Economic justification
 
-Hedera’s low, predictable fees and ABFT finality lower the cost-to-serve in markets where margins are thin and connectivity is variable. Predictable per-transaction pricing (HTS mints/transfers, contract executes, HCS messages) lets us design farmer- and warehouse-friendly UX without surprise costs. High throughput and rapid finality help us keep investor liquidity and farmer credit access responsive.
-
-## Deployment & Setup Instructions (Testnet)
-
-Prereqs:
-- Node.js 18+
-- pnpm (recommended) or npm
-- A Hedera Testnet account and operator key for contract ops (if deploying)
-
-Clone and install:
-
-```bash
-git clone https://github.com/your-org/hedarvest.git
-cd Hedarvest
-
-# install all workspaces
-pnpm install
-```
-
-Environment configuration:
-
-- Copy and edit example envs
-
-```bash
-# Frontend
-cp app/.env.example app/.env
-# Backend
-cp backend/.env.example backend/.env
-# Contracts (if you will deploy)
-cp contracts/.env.example contracts/.env
-```
-
-Required variables (high-level):
-- Frontend `app/.env`
-  - `NEXT_PUBLIC_BACKEND_URL` (e.g., http://localhost:3001)
-- Backend `backend/.env`
-  - `PORT` (default 3001)
-  - `CORS_ORIGINS` (comma-separated origins, e.g., http://localhost:3000)
-  - `HEDERA_NETWORK` (testnet)
-  - Any service keys you use (never commit secrets)
-- Contracts `contracts/.env` (if deploying)
-  - Operator account and private key for Testnet
-
-Run locally (two terminals):
-
-```bash
-# Terminal 1: Backend (NestJS)
-cd backend
-pnpm prisma:generate
-pnpm prisma:deploy   # applies migrations
-pnpm prisma:seed     # optional: seed realistic test data
-pnpm build
-pnpm start:dev  # starts on http://localhost:3001
-
-# Terminal 2: Frontend (Next.js)
-cd app
-pnpm dev       # starts on http://localhost:3000
-```
-
-Expected running state:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:3001
-
-Optional (contracts):
-
-```bash
-cd contracts
-pnpm compile
-# Deploy scripts are provided under contracts/scripts
-```
+Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in markets where margins are thin and connectivity is variable. Predictable per-transaction pricing (HTS mints/transfers, contract executes, HCS messages) lets us design farmer- and warehouse-friendly UX without surprise costs. High throughput and rapid finality help us keep investor liquidity and farmer credit access responsive.
 
 ## Architecture Diagram
 
@@ -115,11 +46,7 @@ Fill with your deployment values:
 - HCS Topic ID(s): `0.0.xxxxx`
 - Operator / Service Account IDs: `0.0.xxxxx`
 
-## Security & Secrets
 
-- Do NOT commit any private keys or credentials. Use `.env` files locally only.
-- Provide judges with test credentials securely in the DoraHacks submission text field (e.g., “Test account ID and Private Key provided in submission for verification”).
-- Example configuration files are provided as `.env.example` (create your own `.env`).
 
 ## Code Quality & Auditability
 
@@ -137,9 +64,36 @@ Fill with your deployment values:
 
 ## Troubleshooting
 
-- CORS: Ensure `CORS_ORIGINS` in backend `.env` includes the frontend origin.
-- Env: Ensure `NEXT_PUBLIC_BACKEND_URL` is set in `app/.env`.
-- Hedera connectivity: Verify `HEDERA_NETWORK=testnet` and credentials in backend/contracts `.env`.
+### Common Issues
+
+**CORS Errors:**
+- Ensure `CORS_ORIGINS` in backend `.env` includes the frontend origin (e.g., `http://localhost:3000`)
+- Check that backend is running on the correct port (default: 3001)
+
+**Environment Variables:**
+- Ensure `NEXT_PUBLIC_BACKEND_URL` is set in `app/.env` and matches backend port
+- Verify all required Hedera credentials are set in `backend/.env`
+- Check that contract addresses match your deployment
+
+**Database Connection:**
+- Ensure PostgreSQL is running: `docker compose ps`
+- Verify `DATABASE_URL` in `backend/.env` matches docker-compose settings
+- Run migrations: `cd backend && pnpm prisma:deploy`
+
+**Hedera Connectivity:**
+- Verify `HEDERA_NETWORK=testnet` in backend `.env`
+- Check Hedera operator credentials are correct
+- Ensure `HEDERA_JSON_RPC_URL` is accessible
+
+**Build Issues:**
+- Clear build artifacts: `rm -rf backend/dist app/.next`
+- Reinstall dependencies: `pnpm install` in each workspace
+- Regenerate Prisma client: `cd backend && pnpm prisma:generate`
+
+**Port Already in Use:**
+- Backend: Change `PORT` in `backend/.env`
+- Frontend: Change port: `cd app && PORT=3002 pnpm dev`
+- Database: Change port in `docker-compose.yml`
 
 # 🌾 Hedarvest
 ### *Decentralized Agricultural Finance Platform on Hedera Hashgraph*
@@ -191,7 +145,6 @@ Fill with your deployment values:
 ### 🏢 **For Agents**
 - **Earn Fees**: Commission-based income from transactions
 - **Digital Tools**: Comprehensive dashboard and management tools
-- **Certification Program**: Become a verified Hedarvest agent
 - **Local Network**: Build relationships with farmers and investors
 
 ### 💼 **For Investors**
@@ -199,12 +152,6 @@ Fill with your deployment values:
 - **Transparent Returns**: Real-time tracking of investments
 - **Risk Management**: Diversified, collateralized investments
 - **Impact Investing**: Support sustainable agriculture
-
-### 🛒 **For Buyers**
-- **Verified Grain**: Quality-assured, blockchain-tracked grain
-- **Transparent Pricing**: Fair, market-based pricing
-- **Direct Access**: Connect directly with farmers
-- **Supply Chain Transparency**: Full traceability from farm to table
 
 ---
 
@@ -267,16 +214,56 @@ cd ../contracts && pnpm install
 ```
 
 ### 3. Environment Setup
-```bash
-# Copy environment template
-cp backend/.env.example backend/.env.local
 
-# Edit with your credentials
-nano backend/.env.local
+Create `.env` files for each workspace:
+
+```bash
+# Frontend
+touch app/.env
+
+# Backend
+touch backend/.env
+
+# Contracts (if deploying)
+touch contracts/.env
 ```
 
-**Required Environment Variables:**
+**Frontend Environment Variables (`app/.env`):**
 ```env
+# Backend API URL
+NEXT_PUBLIC_BACKEND_URL=http://localhost:3001
+
+# Smart Contract Addresses
+NEXT_PUBLIC_POOL_FACTORY_ADDRESS=0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb
+NEXT_PUBLIC_ORACLE_ADDRESS=0x32344dEf5EA9Fa9b83962980C8d447dea81F3685
+NEXT_PUBLIC_INTEREST_RATE_MODEL_ADDRESS=0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588
+
+# Hedera Network Configuration
+NEXT_PUBLIC_HEDERA_JSON_RPC_URL=https://testnet.hashio.io/api
+NEXT_PUBLIC_CHAIN_ID=296
+
+# Token IDs
+NEXT_PUBLIC_WHEAT_TOKEN_ID=0.0.7121333
+NEXT_PUBLIC_RICE_TOKEN_ID=0.0.7121334
+NEXT_PUBLIC_USDC_TOKEN_ID=0.0.7115536
+
+# App Configuration
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+NEXT_PUBLIC_APP_NAME=Hedarvest
+NEXT_PUBLIC_APP_DESCRIPTION=Agricultural Investment Platform on Hedera
+NEXT_PUBLIC_HASHCONNECT_PROJECT_ID=fill walletconnect app id
+```
+
+**Backend Environment Variables (`backend/.env`):**
+```env
+# Server Configuration
+PORT=3001
+CORS_ORIGINS=http://localhost:3000,http://localhost:3002
+NODE_ENV=development
+
+# Database
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hedarvest?schema=public
+
 # Hedera Operator (HTS/HCS)
 HEDERA_OPERATOR_ID=0.0.123456
 HEDERA_OPERATOR_KEY=3030303
@@ -286,47 +273,68 @@ HEDERA_NETWORK=testnet
 HEDERA_JSON_RPC_URL=https://testnet.hashio.io/api
 EVM_PRIVATE_KEY=0xabbbaba
 
-# HTS & HCS (optional seed will create)
-HEDERA_TOPIC_ID=111
+# HCS Topic ID (optional, seed will create if not provided)
+HEDERA_TOPIC_ID=
+HCS_TRANSACTION_TOPIC_ID=
 
-# Database
-DATABASE_URL=postgresql://postgres:postgres@localhost:5432/hedarvest?schema=public
+# Hedera Mirror Node
+HEDERA_MIRROR_NODE_URL=https://testnet.mirrornode.hedera.com
 
-# Auth / App
-JWT_SECRET=supersupersecre
-FARMER_PIN_SALT=static-saltzw
-NEXT_PUBLIC_APP_URL=http://localhost:3000
-
-# ==================================
-# CORE CONTRACT ADDRESSES (UPDATED 2025-10-23)
-# ==================================
-# Deployed with price precision fix - see contracts/PRICE_PRECISION_FIX.md
-# Pool details are fetched dynamically from PoolFactory.getAllPoolsWithDetails()
+# Smart Contract Addresses
 POOL_FACTORY_ADDRESS=0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb
 ORACLE_ADDRESS=0x32344dEf5EA9Fa9b83962980C8d447dea81F3685
 INTEREST_RATE_MODEL_ADDRESS=0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588
+LENDING_TOKEN_ADDRESS=
+COLLATERAL_TOKEN_ADDRESS=
+CHAIN_ID=296
+
+# Token IDs
 USDC_MOCK_TOKEN_ID=0.0.7115536
-
-HEDERA_MIRROR_NODE_URL="https://testnet.mirrornode.hedera.com"
-
-PORT=3001
-# Crop Token IDs
+USDC_TOKEN_ID=0.0.7115536
 WHEAT_TOKEN_ID=0.0.7121333
 RICE_TOKEN_ID=0.0.7121334
+CORN_TOKEN_ID=0.0.7121335
 
-#for testing seed purpose, next will be having sprayer gas fee wallet
+# Authentication
+JWT_SECRET=supersupersecre
+FARMER_PIN_SALT=static-saltzw
+ENCRYPTION_KEY=your-encryption-key-here
+
+# App Configuration
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+
+# Testing/Development (for seed purposes)
 HARDCODED_FARMER_ADDRESS=
-HARDCODED_FARMER_PRIVATE_KEY= 
+HARDCODED_FARMER_PRIVATE_KEY=
+```
+
+**Contracts Environment Variables (`contracts/.env`):**
+```env
+# Hedera Network Configuration
+HEDERA_NETWORK=testnet
+HEDERA_OPERATOR_ID=0.0.123456
+HEDERA_OPERATOR_KEY=3030303
+HEDERA_JSON_RPC_URL=https://testnet.hashio.io/api
+```
+
+> **⚠️ Security Note:** Never commit `.env` files to version control. All `.env` files are excluded via `.gitignore`. Replace placeholder values with your actual Hedera testnet credentials.
+
+### 4. Database Setup
 
 ```bash
 # Start PostgreSQL with Docker
 docker compose up -d
 
-# Run database migrations
-cd backend && pnpm prisma:migrate
+# Wait for database to be ready (check health)
+docker compose ps
 
-# Seed initial data
-pnpm seed
+# Run database migrations
+cd backend
+pnpm prisma:generate
+pnpm prisma:deploy
+
+# Seed initial data (optional)
+pnpm prisma:seed
 ```
 
 ### 5. Deploy Smart Contracts
@@ -346,6 +354,86 @@ cd app && pnpm dev
 ```
 
 **🌐 Access the application at:** `http://localhost:3000`
+
+### 7. Restart Services
+
+**Quick Restart:**
+```bash
+# Stop services (Ctrl+C in each terminal)
+
+# Restart Backend
+cd backend
+pnpm start:dev
+
+# Restart Frontend
+cd app
+pnpm dev
+
+# Restart Database (if needed)
+docker compose restart postgres
+```
+
+**Full Restart (clean build):**
+```bash
+# Stop all services
+docker compose down
+
+# Clean build artifacts (optional)
+cd backend && rm -rf dist
+cd ../app && rm -rf .next
+
+# Restart database
+docker compose up -d
+
+# Regenerate Prisma client and run migrations
+cd backend
+pnpm prisma:generate
+pnpm prisma:deploy
+
+# Rebuild and start
+pnpm build
+pnpm start:dev  # Terminal 1
+
+# Start frontend
+cd ../app
+pnpm dev        # Terminal 2
+```
+
+**Complete Clean Restart (if experiencing issues):**
+```bash
+# Stop all services
+docker compose down
+
+# Clean all build artifacts and dependencies
+cd backend && rm -rf dist node_modules
+cd ../app && rm -rf .next node_modules
+cd ../contracts && rm -rf node_modules
+
+# Reinstall dependencies
+pnpm install
+cd backend && pnpm install
+cd ../app && pnpm install
+cd ../contracts && pnpm install
+
+# Restart database
+docker compose up -d
+
+# Wait for database to be ready
+sleep 5
+
+# Regenerate Prisma client and run migrations
+cd backend
+pnpm prisma:generate
+pnpm prisma:deploy
+
+# Rebuild and start
+pnpm build
+pnpm start:dev  # Terminal 1
+
+# Start frontend
+cd ../app
+pnpm dev        # Terminal 2
+```
 
 ---
 
