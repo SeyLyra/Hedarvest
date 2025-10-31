@@ -127,14 +127,38 @@ Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in mark
    UI → Backend → Mirror Node API → HCS Topic → Display Transaction History
 ```
 
-## Deployed Hedera IDs (Testnet)
+## 📍 Deployed Hedera Addresses (Testnet)
 
-Fill with your deployment values:
-- Lending Pool Contract IDs: `0.0.xxxxx`
-- Token IDs (HTS): Wheat `0.0.xxxxx`, Rice `0.0.xxxxx`
-- HCS Topic ID(s): `0.0.xxxxx`
-- Operator / Service Account IDs: `0.0.xxxxx`
+> **Note**: Update these values with your actual deployment addresses after deploying contracts.
 
+### **Smart Contract Addresses** (EVM-Compatible)
+| Contract | Address | Description |
+|----------|---------|-------------|
+| PoolFactory | `0x811EF8ecDf2b9a15BF64F0225bbb3B0860B12Adb` | Factory contract for deploying lending pools |
+| PriceOracle | `0x32344dEf5EA9Fa9b83962980C8d447dea81F3685` | Price feed oracle for agricultural commodities |
+| InterestRateModel | `0x6C90077Ec6364F9aAab9C62EbE950f0653D2d588` | Dynamic interest rate calculation model |
+| WHEAT LendingPool | `0x5CCA4F0F0e4e79b5D3B701B214F502183D3f903a` | Lending pool for WHEAT collateral |
+| RICE LendingPool | `0x8298E55ddFA89Ec942cE7C7e81DD4BbD0d69f00a` | Lending pool for RICE collateral |
+
+### **HTS Token IDs**
+| Token | Token ID | Description |
+|-------|----------|-------------|
+| USDC | `0.0.7115536` | Stablecoin for lending/borrowing |
+| WHEAT | `0.0.7121333` | Tokenized wheat grain |
+| RICE | `0.0.7121334` | Tokenized rice grain |
+
+### **HCS Topic IDs**
+| Topic | Topic ID | Description |
+|-------|----------|-------------|
+| Transaction Logs | `0.0.xxxxx` | Event logging topic (create during deployment) |
+
+### **Lending Pool Native IDs**
+| Pool | Native ID | EVM Address |
+|------|-----------|-------------|
+| WHEAT Pool | `0.0.7115543` | `0x5CCA4F0F0e4e79b5D3B701B214F502183D3f903a` |
+| RICE Pool | `0.0.7115545` | `0x8298E55ddFA89Ec942cE7C7e81DD4BbD0d69f00a` |
+
+> **📝 Deployment Info**: See `contracts/deployed.json` for complete deployment details and configuration.
 
 ## Code Quality & Auditability
 
