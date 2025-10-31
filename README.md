@@ -153,6 +153,15 @@ Fill with your deployment values:
 
 ---
 
+## 🚀 Quick Links
+
+- 🌐 **[Live Demo](https://hedarvest.netlify.app/)** - Experience Hedarvest in action
+- 📺 **[Demo Video](https://youtu.be/MOYNtMmlqt8)** - Watch the platform walkthrough
+- 📊 **[Pitch Deck](https://drive.google.com/file/d/1VxXxQcPSCXy1nqK2hdGTW9DQB8L_dJUe/view?usp=sharing)** - Project presentation
+- 🏆 **[Certificate](https://drive.google.com/file/d/13pBMR1sbK9f44NwK5ETC4Kk8y80mznQb/view?usp=sharing)** - Hackathon participation certificate
+
+---
+
 ## 🎯 Problem Statement
 
 **Agricultural finance faces critical challenges:**
@@ -304,6 +313,10 @@ PORT=3001
 # Crop Token IDs
 WHEAT_TOKEN_ID=0.0.7121333
 RICE_TOKEN_ID=0.0.7121334
+
+#for testing seed purpose, next will be having sprayer gas fee wallet
+HARDCODED_FARMER_ADDRESS=
+HARDCODED_FARMER_PRIVATE_KEY= 
 
 ```bash
 # Start PostgreSQL with Docker
@@ -559,17 +572,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **NestJS Team** for the robust backend framework
 - **Agricultural Community** for inspiration and feedback
 
----
-
-## 📞 Contact & Support
-
-- **Website**: [hedarvest.com](https://hedarvest.com)
-- **Email**: support@hedarvest.com
-- **Discord**: [Join our community](https://discord.gg/hedarvest)
-- **Twitter**: [@Hedarvest](https://twitter.com/hedarvest)
-
----
-
 ## 🏆 Hackathon Submission
 
 **Built for**: [Hedera Africa Hackhaton]  
@@ -582,6 +584,13 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - ✅ Multi-role user interface
 - ✅ Real-time blockchain integration
 - ✅ Sustainable and scalable architecture
+
+### 📎 Submission Resources
+
+- 🌐 **Live Demo**: [hedarvest.netlify.app](https://hedarvest.netlify.app/)
+- 📺 **Demo Video**: [YouTube Walkthrough](https://youtu.be/MOYNtMmlqt8)
+- 📊 **Pitch Deck**: [View Presentation](https://drive.google.com/file/d/1VxXxQcPSCXy1nqK2hdGTW9DQB8L_dJUe/view?usp=sharing)
+- 🏆 **Certificate**: [View Certificate](https://drive.google.com/file/d/13pBMR1sbK9f44NwK5ETC4Kk8y80mznQb/view?usp=sharing)
 
 ---
 
