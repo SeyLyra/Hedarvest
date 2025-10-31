@@ -4,38 +4,127 @@ Track: DeFi, Real-World Assets (RWA), Supply Chain on Hedera
 
 Hedarvest tokenizes warehouse receipts for agricultural crops and enables farmers to deposit them as collateral for low-cost credit. Investors fund pools that lend against HTS crop tokens. The system logs key lifecycle events via HCS for transparent, auditable operations.
 
-## Hedera Integration Summary
+## 🔗 Hedera Integration
 
-- HTS (Hedera Token Service): We use existing HTS tokens (per crop type) to represent tokenized grain receipts. HTS gives us native mint/transfer semantics, fast finality, and predictable micro-fees, which are critical when representing many small-value receipts typical in African agriculture.
-- Smart Contracts: We use EVM-compatible contracts for lending pools and risk logic. Contract calls are deterministic and inexpensive on Hedera, and ABFT finality reduces reconciliation risk for lenders and farmers.
-- HCS (Hedera Consensus Service): We log deposit/withdraw and lending events to HCS (or an HCS-backed log), providing an immutable audit trail. We chose HCS because its predictable ~$0.0001 fee per message ensures cost stability for low-margin logistics and makes independent verification easy via Mirror Node.
+Hedarvest leverages Hedera Hashgraph's native services to create a transparent, efficient agricultural finance platform. Here's how we use each Hedera service:
 
-### Transaction types used
+### **HTS (Hedera Token Service)** - Tokenized Grain Receipts
+- **Purpose**: Represent warehouse receipts as digital tokens
+- **Usage**: 
+  - Create HTS tokens for each crop type (WHEAT, RICE)
+  - Mint tokens when farmers deposit grain at warehouses
+  - Transfer tokens between farmers, investors, and pools
+- **Benefits**: 
+  - Native token support with fast finality (~3-5 seconds)
+  - Predictable micro-fees (~$0.001 per token operation)
+  - No smart contract required for basic token operations
+  - Perfect for representing many small-value receipts
 
-- TokenCreateTransaction (setup phase, if deploying tokens)
-- TokenMintTransaction and token transfers via HTS
-- ContractExecuteTransaction (e.g., depositCollateral, borrow)
-- TopicMessageSubmitTransaction (HCS logging of key events)
+### **Hedera Smart Contracts (EVM-Compatible)** - Lending Logic
+- **Purpose**: Execute complex lending and borrowing logic on Hedera's EVM-compatible network
+- **Usage**:
+  - `LendingPool`: Core lending/borrowing functionality with collateral management
+  - `PoolFactory`: Deploy and manage multiple lending pools
+  - `InterestRateModel`: Calculate dynamic interest rates based on utilization
+  - `PriceOracle`: Provide real-time price feeds for collateral valuation
+- **Benefits**:
+  - Hedera's EVM compatibility allows using standard Solidity tools
+  - Deterministic execution guarantees with ABFT finality
+  - Low-cost contract calls (~$0.0001 per call)
+  - Fast finality (~3-5 seconds) reduces reconciliation risk
+  - Full compatibility with existing Ethereum tooling
 
-### Economic justification
+### **HCS (Hedera Consensus Service)** - Immutable Audit Trail
+- **Purpose**: Log all critical events for transparency and auditability
+- **Usage**:
+  - Log grain deposits and withdrawals
+  - Record lending and borrowing transactions
+  - Track collateral deposits and liquidations
+  - Store transaction history for verification
+- **Benefits**:
+  - Immutable event log (~$0.0001 per message)
+  - Queryable via Mirror Node API
+  - Independent verification possible
+  - Cost-effective for high-volume logging
 
-Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in markets where margins are thin and connectivity is variable. Predictable per-transaction pricing (HTS mints/transfers, contract executes, HCS messages) lets us design farmer- and warehouse-friendly UX without surprise costs. High throughput and rapid finality help us keep investor liquidity and farmer credit access responsive.
+### **Transaction Types Used**
 
-## Architecture Diagram
+| Transaction Type | Purpose | Example |
+|----------------|---------|---------|
+| `TokenCreateTransaction` | Setup phase (if deploying new tokens) | Create WHEAT/RICE tokens |
+| `TokenMintTransaction` | Mint tokens for grain deposits | Mint 1000 WHEAT tokens for farmer |
+| `TokenTransferTransaction` | Transfer tokens between accounts | Transfer tokens to lending pool |
+| `ContractExecuteTransaction` | Execute smart contract functions | `depositCollateral()`, `borrow()` |
+| `TopicMessageSubmitTransaction` | Log events to HCS | Log deposit event to topic |
+
+### **Why Hedera?**
+
+Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in markets where margins are thin and connectivity is variable. Predictable per-transaction pricing lets us design farmer- and warehouse-friendly UX without surprise costs. High throughput and rapid finality help us keep investor liquidity and farmer credit access responsive.
+
+## 📐 System Architecture
+
+### **High-Level Architecture Diagram**
 
 ```
-[User/UI (Next.js)]  <--->  [Backend API (NestJS)]  <--->  [Hedera]
-       |                          |                      /        \
-       |                          |                 [HTS]        [HCS]
-       |                          |                    \        /
-       |                          |                  [EVM Smart Contracts]
-       |                          |                             |
-       |                          +---- Mirror Node (reads) ----+
+┌─────────────────────────────────────────────────────────────────┐
+│                         User Interface                          │
+│                      (Next.js Frontend)                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
+│  │ Farmers  │  │Investors │  │Warehouse │    │
+│  └──────────┘  └──────────┘  └──────────┘    │
+└───────────────────────┬────────────────────────────────────────┘
+                        │ HTTP/REST API
+                        │
+┌───────────────────────▼────────────────────────────────────────┐
+│                    Backend API Layer                           │
+│                    (NestJS + PostgreSQL)                        │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
+│  │   Auth       │  │  Farmer API   │  │ Investor API │       │
+│  │   Service    │  │  Warehouse API│  │  Pool API    │       │
+│  └──────────────┘  └──────────────┘  └──────────────┘       │
+└───────────────────────┬────────────────────────────────────────┘
+                        │
+        ┌───────────────┼───────────────┐
+        │               │               │
+┌───────▼──────┐ ┌──────────────▼──────┐ ┌─────▼──────┐
+│  Hedera HTS  │ │  Hedera Smart        │ │  Hedera    │
+│   (Tokens)   │ │  Contracts           │ │  HCS       │
+│              │ │  (EVM-Compatible)    │ │  (Logs)    │
+└──────────────┘ └──────────────────────┘ └────────────┘
+        │               │               │
+        └───────────────┼───────────────┘
+                        │
+            ┌───────────▼───────────┐
+            │   Hedera Network      │
+            │   (Testnet/Mainnet)    │
+            └───────────┬───────────┘
+                        │
+            ┌───────────▼───────────┐
+            │   Mirror Node API      │
+            │   (Read Transactions)   │
+            └───────────────────────┘
+```
 
-Flow examples:
-1) UI -> Backend -> HTS (mint/transfer crop tokens)
-2) UI -> Backend -> Contracts (depositCollateral, borrow)
-3) Backend -> HCS (submit event logs) -> Mirror Node (read back to UI)
+### **Data Flow Examples**
+
+1. **Grain Tokenization Flow**:
+   ```
+   Farmer → Warehouse → Backend → HTS (Mint Tokens) → HCS (Log Event) → Mirror Node
+   ```
+
+2. **Lending Flow**:
+   ```
+   Farmer → Backend → Hedera Smart Contract (Deposit Collateral) → HTS (Transfer Tokens) → HCS (Log Event)
+   ```
+
+3. **Investment Flow**:
+   ```
+   Investor → Backend → Hedera Smart Contract (Deposit Liquidity) → HTS (Transfer USDC) → HCS (Log Event)
+   ```
+
+4. **Audit/Verification Flow**:
+   ```
+   UI → Backend → Mirror Node API → HCS Topic → Display Transaction History
 ```
 
 ## Deployed Hedera IDs (Testnet)
@@ -45,7 +134,6 @@ Fill with your deployment values:
 - Token IDs (HTS): Wheat `0.0.xxxxx`, Rice `0.0.xxxxx`
 - HCS Topic ID(s): `0.0.xxxxx`
 - Operator / Service Account IDs: `0.0.xxxxx`
-
 
 
 ## Code Quality & Auditability
@@ -103,7 +191,7 @@ Fill with your deployment values:
 [![Solidity](https://img.shields.io/badge/Solidity-^0.8.19-363636?style=for-the-badge&logo=solidity&logoColor=white)](https://soliditylang.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 
-> **Revolutionizing agricultural finance through blockchain technology, connecting farmers, agents, and investors in a transparent, efficient ecosystem.**
+> **Revolutionizing agricultural finance through blockchain technology, connecting farmers and investors in a transparent, efficient ecosystem.**
 
 ---
 
@@ -140,12 +228,6 @@ Fill with your deployment values:
 - **Fair Pricing**: Transparent, market-driven grain pricing
 - **Secure Storage**: Blockchain-verified grain deposits
 - **Digital Wallet**: Easy-to-use mobile interface
-- **Agent Network**: Connect with certified local agents
-
-### 🏢 **For Agents**
-- **Earn Fees**: Commission-based income from transactions
-- **Digital Tools**: Comprehensive dashboard and management tools
-- **Local Network**: Build relationships with farmers and investors
 
 ### 💼 **For Investors**
 - **Agricultural Investments**: Invest in verified grain pools
@@ -155,32 +237,55 @@ Fill with your deployment values:
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Component Architecture
 
-### **Frontend** (Next.js 15 + TypeScript)
-- Modern, responsive web application
-- Real-time data visualization
-- Wallet integration with HashConnect
-- Multi-role dashboards (Farmer, Agent, Investor, Buyer)
+### **Frontend Layer** (Next.js 15 + TypeScript)
+- **Framework**: Next.js 15 with App Router
+- **State Management**: TanStack Query for server state
+- **Wallet Integration**: HashConnect for Hedera wallet connections
+- **UI Components**: Radix UI + Custom components
+- **Styling**: Tailwind CSS
+- **Features**:
+  - Multi-role dashboards (Farmer, Investor, Warehouse)
+  - Real-time data visualization with Recharts
+  - Responsive mobile-first design
 
-### **Backend** (NestJS + PostgreSQL)
-- RESTful API with comprehensive endpoints
-- JWT-based authentication
+### **Backend Layer** (NestJS + PostgreSQL)
+- **Framework**: NestJS (Node.js)
+- **Database**: PostgreSQL with Prisma ORM
+- **Authentication**: JWT + Passport.js
+- **API**: RESTful endpoints with comprehensive validation
+- **Features**:
+  - JWT-based authentication system
 - Real-time notifications
-- Database management with Prisma ORM
+  - Hedera SDK integration (@hashgraph/sdk)
+  - Smart contract interaction via ethers.js
+  - HCS topic management
+  - Mirror Node API integration
 
-### **Smart Contracts** (Solidity + Hedera)
-- **LendingPool**: Core lending and borrowing functionality
-- **PoolFactory**: Deploy and manage lending pools
-- **InterestRateModel**: Dynamic interest rate calculations
-- **PriceOracle**: Real-time price feeds
-- **Token Contracts**: USDC, WHEAT, RICE tokens
+### **Smart Contract Layer** (Hedera EVM-Compatible)
+- **Language**: Solidity ^0.8.19
+- **Framework**: Hardhat
+- **Blockchain**: Hedera Hashgraph (EVM-compatible)
+- **Key Contracts**:
+  - **`PoolFactory`**: Deploys and manages lending pools for different grain types
+  - **`LendingPool`**: Core lending/borrowing functionality with share-based accounting
+  - **`InterestRateModel`**: Dynamic interest rate calculations based on utilization
+  - **`MockPriceOracle`**: Price feed for agricultural commodities
+- **Deployment**: All contracts deployed on Hedera Testnet/Mainnet via EVM-compatible network
 
-### **Blockchain** (Hedera Hashgraph)
-- Fast, low-cost transactions
-- Sustainable, energy-efficient consensus
-- Native token support
-- EVM compatibility
+### **Blockchain Layer** (Hedera Hashgraph)
+- **Network**: Hedera Testnet/Mainnet
+- **Services Used**:
+  - **HTS**: Native token service for grain tokens
+  - **Smart Contracts**: EVM-compatible contract execution
+  - **HCS**: Immutable event logging
+  - **Mirror Node**: Read-only transaction history API
+- **Benefits**:
+  - Fast finality (~3-5 seconds)
+  - Low, predictable fees
+  - Energy-efficient consensus (ABFT)
+  - Carbon-negative operations
 
 ---
 
@@ -305,7 +410,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 # Testing/Development (for seed purposes)
 HARDCODED_FARMER_ADDRESS=
-HARDCODED_FARMER_PRIVATE_KEY=
+HARDCODED_FARMER_PRIVATE_KEY= 
 ```
 
 **Contracts Environment Variables (`contracts/.env`):**
@@ -337,12 +442,14 @@ pnpm prisma:deploy
 pnpm prisma:seed
 ```
 
-### 5. Deploy Smart Contracts
+### 5. Deploy Hedera Smart Contracts
 ```bash
 cd contracts
 pnpm hardhat compile
 pnpm hardhat run scripts/deploy.js --network hederaTestnet
 ```
+
+> **Note**: Contracts are deployed on Hedera's EVM-compatible network, allowing use of standard Solidity and Ethereum tooling while benefiting from Hedera's fast finality and low fees.
 
 ### 6. Start the Application
 ```bash
@@ -441,17 +548,9 @@ pnpm dev        # Terminal 2
 
 ### **Farmer Journey**
 1. **Register** → Create account and verify identity
-2. **Find Agent** → Connect with local certified agent
-3. **Deposit Grain** → Submit grain for tokenization
-4. **Get Cash** → Receive immediate payment
-5. **Track Status** → Monitor grain and payments
-
-### **Agent Journey**
-1. **Apply** → Submit agent application
-2. **Get Certified** → Complete verification process
-3. **Connect Farmers** → Build local farmer network
-4. **Process Deposits** → Handle grain tokenization
-5. **Earn Fees** → Receive transaction commissions
+2. **Deposit Grain** → Submit grain for tokenization
+3. **Get Cash** → Receive immediate payment
+4. **Track Status** → Monitor grain and payments
 
 ### **Investor Journey**
 1. **Connect Wallet** → Link Hedera wallet
@@ -471,7 +570,6 @@ pnpm dev        # Terminal 2
 - **UI Components**: Radix UI + Custom components
 - **State Management**: TanStack Query
 - **Wallet Integration**: HashConnect
-- **Charts**: Recharts
 
 ### **Backend**
 - **Framework**: NestJS
@@ -485,9 +583,10 @@ pnpm dev        # Terminal 2
 ### **Smart Contracts**
 - **Language**: Solidity ^0.8.19
 - **Framework**: Hardhat
-- **Blockchain**: Hedera Hashgraph
+- **Blockchain**: Hedera Hashgraph (EVM-compatible)
 - **Token Standard**: Hedera Token Service (HTS)
 - **Libraries**: OpenZeppelin Contracts
+- **Deployment**: Deployed on Hedera's EVM-compatible network
 
 ### **Infrastructure**
 - **Database**: PostgreSQL
@@ -497,7 +596,7 @@ pnpm dev        # Terminal 2
 
 ---
 
-## 📊 Smart Contract Architecture
+## 📊 Hedera Smart Contract Architecture
 
 ```mermaid
 graph TB
@@ -527,7 +626,7 @@ graph TB
 
 - **`PoolFactory`**: Deploys and manages lending pools for different grain types
 - **`LendingPool`**: Core lending/borrowing with **share-based accounting**
-  - Uses internal share tracking instead of separate ERC20 tokens
+  - Uses internal share tracking instead of separate tokens
   - `userLPShares(address)`: Track liquidity provider positions
   - `userDebtShares(address)`: Track borrower debt positions
   - `liquidityIndex`: Tracks LP share appreciation from interest
@@ -569,7 +668,6 @@ Instead of minting separate LP and Debt tokens, our lending pools use an efficie
 
 ### **Revenue Streams**
 - **Transaction Fees**: Small percentage on each transaction
-- **Agent Commissions**: Fees for agent services
 - **Interest Spread**: Difference between lending and borrowing rates
 - **Premium Features**: Advanced analytics and tools
 
