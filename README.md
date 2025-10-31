@@ -125,7 +125,6 @@ Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in mark
 4. **Audit/Verification Flow**:
    ```
    UI → Backend → Mirror Node API → HCS Topic → Display Transaction History
-```
 
 ## 📍 Deployed Hedera Addresses (Testnet)
 
