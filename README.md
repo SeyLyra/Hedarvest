@@ -526,9 +526,8 @@ Instead of minting separate LP and Debt tokens, our lending pools use an efficie
 - [x] Basic user flows
 
 ### **🔄 In Progress**
-- [ ] Token association fixes
 - [ ] Advanced analytics
-- [ ] Mobile optimization
+- [ ] Smooth Dashboard
 - [ ] Testing suite
 
 ### **📋 Roadmap**
