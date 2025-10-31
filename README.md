@@ -158,7 +158,7 @@ Fill with your deployment values:
 - 🌐 **[Live Demo](https://hedarvest.netlify.app/)** - Experience Hedarvest in action
 - 📺 **[Demo Video](https://youtu.be/MOYNtMmlqt8)** - Watch the platform walkthrough
 - 📊 **[Pitch Deck](https://drive.google.com/file/d/1VxXxQcPSCXy1nqK2hdGTW9DQB8L_dJUe/view?usp=sharing)** - Project presentation
-- 🏆 **[Certificate](https://drive.google.com/file/d/13pBMR1sbK9f44NwK5ETC4Kk8y80mznQb/view?usp=sharing)** - Hackathon participation certificate
+- 🏆 **[Certificate](https://drive.google.com/file/d/13pBMR1sbK9f44NwK5ETC4Kk8y80mznQb/view?usp=sharing)** - Hashgraph Course certificate
 
 ---
 
