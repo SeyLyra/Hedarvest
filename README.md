@@ -1,8 +1,18 @@
-# Hedarvest
+# 🌾 Hedarvest
+### *Decentralized Agricultural Finance Platform on Hedera Hashgraph*
 
 Track: DeFi, Real-World Assets (RWA), Supply Chain on Hedera
 
+[![Hedera](https://img.shields.io/badge/Built%20on-Hedera%20Hashgraph-00C4B4?style=for-the-badge&logo=hedera&logoColor=white)](https://hedera.com)
+[![Next.js](https://img.shields.io/badge/Next.js-15.5.3-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
+[![Solidity](https://img.shields.io/badge/Solidity-^0.8.19-363636?style=for-the-badge&logo=solidity&logoColor=white)](https://soliditylang.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+
+> **Revolutionizing agricultural finance through blockchain technology, connecting farmers and investors in a transparent, efficient ecosystem.**
+
 Hedarvest tokenizes warehouse receipts for agricultural crops and enables farmers to deposit them as collateral for low-cost credit. Investors fund pools that lend against HTS crop tokens. The system logs key lifecycle events via HCS for transparent, auditable operations.
+
+---
 
 ## 🔗 Hedera Integration
 
@@ -125,6 +135,7 @@ Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in mark
 4. **Audit/Verification Flow**:
    ```
    UI → Backend → Mirror Node API → HCS Topic → Display Transaction History
+   ```
 
 ## 📍 Deployed Hedera Addresses (Testnet)
 
@@ -205,16 +216,6 @@ Hedera's low, predictable fees and ABFT finality lower the cost-to-serve in mark
 - Backend: Change `PORT` in `backend/.env`
 - Frontend: Change port: `cd app && PORT=3002 pnpm dev`
 - Database: Change port in `docker-compose.yml`
-
-# 🌾 Hedarvest
-### *Decentralized Agricultural Finance Platform on Hedera Hashgraph*
-
-[![Hedera](https://img.shields.io/badge/Built%20on-Hedera%20Hashgraph-00C4B4?style=for-the-badge&logo=hedera&logoColor=white)](https://hedera.com)
-[![Next.js](https://img.shields.io/badge/Next.js-15.5.3-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org)
-[![Solidity](https://img.shields.io/badge/Solidity-^0.8.19-363636?style=for-the-badge&logo=solidity&logoColor=white)](https://soliditylang.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7.3-blue?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
-
-> **Revolutionizing agricultural finance through blockchain technology, connecting farmers and investors in a transparent, efficient ecosystem.**
 
 ---
 
