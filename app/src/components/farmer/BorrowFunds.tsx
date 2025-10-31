@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { BACKEND_URL } from "@/lib/config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -156,15 +157,6 @@ interface LoanData {
   poolName: string;
 }
 
-const mockCollateralData = {
-  totalValue: 5500,
-  maxBorrowAmount: 4125,
-  collateralRatio: 0.75,
-  poolName: "RICE Pool",
-  poolId: "rice-pool",
-  interestRate: 8.5
-};
-
 const loanTerms = [
   { value: 30, label: "30 days", interestRate: 8.5 },
   { value: 60, label: "60 days", interestRate: 9.0 },
@@ -176,16 +168,41 @@ const loanTerms = [
 export default function BorrowFunds({ onBack, onComplete, userAddress, hashconnect, collateralData }: BorrowFundsProps) {
   const [borrowAmount, setBorrowAmount] = useState("");
   const [selectedTerm, setSelectedTerm] = useState(30);
+  const [poolAddress, setPoolAddress] = useState<string>("");
   const { borrow, isLoading: isBorrowing } = useCollateralDeposit();
+
+  // Use collateralData prop - required
+  const collateral = collateralData;
+
+  // Fetch pool address from API
+  useEffect(() => {
+    if (collateral?.poolId && !poolAddress) {
+      fetch(`${BACKEND_URL}/pools/${collateral.poolId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data?.address) {
+            setPoolAddress(data.address);
+          }
+        })
+        .catch(err => {
+          console.error('Failed to fetch pool address:', err);
+        });
+    }
+  }, [collateral?.poolId, poolAddress]);
 
   const selectedTermData = loanTerms.find(term => term.value === selectedTerm);
   const borrowAmountNum = parseFloat(borrowAmount) || 0;
   const interestAmount = borrowAmountNum * (selectedTermData?.interestRate || 0) / 100 * (selectedTerm / 365);
   const totalRepayment = borrowAmountNum + interestAmount;
-  const newCollateralRatio = borrowAmountNum / mockCollateralData.totalValue;
+  const newCollateralRatio = collateral ? borrowAmountNum / collateral.totalValue : 0;
 
   const handleBorrow = async () => {
-    if (borrowAmountNum <= 0 || borrowAmountNum > mockCollateralData.maxBorrowAmount) {
+    if (!collateral) {
+      console.error('No collateral data available');
+      return;
+    }
+
+    if (borrowAmountNum <= 0 || borrowAmountNum > collateral.maxBorrowAmount) {
       return;
     }
 
@@ -194,9 +211,14 @@ export default function BorrowFunds({ onBack, onComplete, userAddress, hashconne
       return;
     }
 
+    if (!poolAddress) {
+      console.error('Pool address not available');
+      return;
+    }
+
     // Call the smart contract to borrow
     const result = await borrow({
-      poolAddress: mockCollateralData.poolAddress || '0x0000000000000000000000000000000000000000', // Use actual pool address
+      poolAddress: poolAddress,
       amount: borrowAmount,
       userAddress,
       hashconnect,
@@ -208,14 +230,14 @@ export default function BorrowFunds({ onBack, onComplete, userAddress, hashconne
         id: `loan_${Date.now()}`,
         amount: borrowAmountNum,
         interestRate: selectedTermData?.interestRate || 0,
-        collateralValue: mockCollateralData.totalValue,
+        collateralValue: collateral.totalValue,
         collateralRatio: newCollateralRatio,
         loanTerm: selectedTerm,
         borrowDate: new Date().toISOString().split('T')[0],
         dueDate: new Date(Date.now() + selectedTerm * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
         status: "active",
-        poolId: mockCollateralData.poolId,
-        poolName: mockCollateralData.poolName
+        poolId: collateral.poolId,
+        poolName: collateral.poolName
       };
 
       onComplete(loanData);
@@ -261,15 +283,15 @@ export default function BorrowFunds({ onBack, onComplete, userAddress, hashconne
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Total Collateral Value</p>
-              <p className="text-2xl font-bold text-foreground">${mockCollateralData.totalValue.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground">${collateral?.totalValue.toLocaleString() || 0}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Max Borrow Amount</p>
-              <p className="text-2xl font-bold text-green-600">${mockCollateralData.maxBorrowAmount.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600">${collateral?.maxBorrowAmount.toLocaleString() || 0}</p>
             </div>
             <div className="text-center">
               <p className="text-sm text-muted-foreground">Pool</p>
-              <p className="text-lg font-semibold text-foreground">{mockCollateralData.poolName}</p>
+              <p className="text-lg font-semibold text-foreground">{collateral?.poolName || 'N/A'}</p>
             </div>
           </div>
         </CardContent>
@@ -295,11 +317,11 @@ export default function BorrowFunds({ onBack, onComplete, userAddress, hashconne
                 value={borrowAmount}
                 onChange={(e) => setBorrowAmount(e.target.value)}
                 className="pl-10"
-                max={mockCollateralData.maxBorrowAmount}
+                max={collateral?.maxBorrowAmount || 0}
               />
             </div>
             <p className="text-sm text-muted-foreground">
-              Maximum: ${mockCollateralData.maxBorrowAmount.toLocaleString()}
+              Maximum: ${collateral?.maxBorrowAmount.toLocaleString() || 0}
             </p>
           </div>
 
@@ -434,7 +456,7 @@ export default function BorrowFunds({ onBack, onComplete, userAddress, hashconne
         </Button>
         <Button 
           onClick={handleBorrow}
-          disabled={borrowAmountNum <= 0 || borrowAmountNum > mockCollateralData.maxBorrowAmount || isBorrowing}
+          disabled={!collateral || borrowAmountNum <= 0 || borrowAmountNum > (collateral?.maxBorrowAmount || 0) || isBorrowing}
           className="bg-green-600 hover:bg-green-700"
         >
           {isBorrowing ? (
