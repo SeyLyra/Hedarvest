@@ -12,11 +12,8 @@ export class PoolsController {
     return this.blockchainPoolsService.getAllPools();
   }
 
-
   @Get(':assetType/stats')
   async getPoolStats(@Param('assetType') assetType: string) {
     return this.blockchainPoolsService.getPoolStats(assetType);
   }
-
-  // removed unused endpoints (asset lookup, health, debug)
 }

@@ -23,7 +23,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
   const [amount, setAmount] = useState<string>("1000");
   const [isMinting, setIsMinting] = useState(false);
   const [lastMintTime, setLastMintTime] = useState<Date | null>(null);
-  const [usdtBalance, setUsdtBalance] = useState<string>("0");
+  const [USDCBalance, setUSDCBalance] = useState<string>("0");
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
   const [isTokenAssociated, setIsTokenAssociated] = useState(false);
   const [mintHistory, setMintHistory] = useState<Array<{
@@ -33,8 +33,8 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
     txHash: string;
   }>>([]);
 
-  // Fetch USDT balance
-  const fetchUsdtBalance = async () => {
+  // Fetch USDC balance
+  const fetchUSDCBalance = async () => {
     if (!userAddress) return;
     
     setIsLoadingBalance(true);
@@ -42,7 +42,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       const response = await fetch(`/api/faucet/balance/${userAddress}`);
       if (response.ok) {
         const result = await response.json();
-        setUsdtBalance(result.balance || "0");
+        setUSDCBalance(result.balance || "0");
       }
     } catch (error) {
     } finally {
@@ -53,7 +53,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
   // Fetch balance on component mount
   useEffect(() => {
     if (userAddress) {
-      fetchUsdtBalance();
+      fetchUSDCBalance();
       checkTokenAssociation();
     }
   }, [userAddress]);
@@ -69,7 +69,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
         const result = await response.json();
         const isAssociated = result.isAssociated === true;
         setIsTokenAssociated(isAssociated);
-        setUsdtBalance(result.balance || "0");
+        setUSDCBalance(result.balance || "0");
         
         if (isAssociated) {
           toast.success('✅ Token IS associated! You can mint now!', { duration: 3000 });
@@ -178,12 +178,12 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
       
       // Refresh balance after successful mint
       setTimeout(() => {
-        fetchUsdtBalance();
+        fetchUSDCBalance();
         if (onBalanceUpdate) onBalanceUpdate();
       }, 2000); // Wait 2 seconds for transaction to be confirmed
       
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Failed to mint USDT. Please try again.');
+      toast.error(error instanceof Error ? error.message : 'Failed to mint USDC. Please try again.');
     } finally {
       setIsMinting(false);
     }
@@ -223,7 +223,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
           <h1 className="text-4xl font-bold bg-gradient-to-r from-emerald-700 via-teal-600 to-green-700 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent">
             Test Token Faucet
           </h1>
-          <p className="text-emerald-600/80 dark:text-emerald-300/70 text-lg">Get free USDT tokens for testing on Hedera testnet</p>
+          <p className="text-emerald-600/80 dark:text-emerald-300/70 text-lg">Get free USDC tokens for testing on Hedera testnet</p>
           <div className="flex items-center gap-2 mt-2">
             <div className="w-2 h-2 bg-emerald-400 dark:bg-emerald-500 rounded-full animate-pulse"></div>
             <span className="text-sm text-emerald-600/80 dark:text-emerald-300/80 font-medium">Connected to Hedera Testnet</span>
@@ -245,16 +245,16 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-teal-600/80 dark:text-teal-300/80">USDT Balance</p>
+              <p className="text-sm text-teal-600/80 dark:text-teal-300/80">USDC Balance</p>
               <p className="text-2xl font-bold text-teal-800 dark:text-teal-200 font-mono flex items-center gap-2">
                 {isLoadingBalance ? (
                   <Loader2 className="w-5 h-5 animate-spin" />
                 ) : (
-                  <>💵 {usdtBalance}</>
+                  <>💵 {USDCBalance}</>
                 )}
               </p>
               <button
-                onClick={fetchUsdtBalance}
+                onClick={fetchUSDCBalance}
                 className="text-xs text-teal-600 dark:text-teal-400 hover:underline mt-1"
               >
                 Refresh
@@ -275,7 +275,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                   <div className="flex-1">
                     <h3 className="font-bold text-red-900 dark:text-red-200 mb-3 text-2xl">🚨 DO THIS FIRST - TAKES 10 SECONDS!</h3>
                     <p className="text-base text-red-800 dark:text-red-300 mb-4 font-semibold">
-                      You MUST associate the USDT token in HashPack before you can mint. This is a ONE-TIME Hedera requirement.
+                      You MUST associate the USDC token in HashPack before you can mint. This is a ONE-TIME Hedera requirement.
                     </p>
                     <div className="bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl p-6 shadow-2xl mb-4">
                       <p className="text-2xl text-white font-black mb-6 text-center animate-pulse">
@@ -317,7 +317,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                       </p>
                     </div>
                     <p className="text-base text-red-700 dark:text-red-400 mt-4 font-black text-center bg-red-100 dark:bg-red-900/30 p-3 rounded-lg">
-                      💡 ONE TIME = 10 SECONDS → Then mint UNLIMITED USDT forever!
+                      💡 ONE TIME = 10 SECONDS → Then mint UNLIMITED USDC forever!
                     </p>
                   </div>
                 </div>
@@ -336,7 +336,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                   <div className="flex-1">
                     <h3 className="font-bold text-green-900 dark:text-green-200 mb-1 text-xl">✅ Perfect! Token is Associated!</h3>
                     <p className="text-sm text-green-800 dark:text-green-300 font-medium">
-                      You're all set! You can now mint USDT tokens using the form below. 🎉
+                      You're all set! You can now mint USDC tokens using the form below. 🎉
                     </p>
                   </div>
                 </div>
@@ -349,7 +349,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-emerald-800 dark:text-emerald-200">
             <Droplets className="w-6 h-6" />
-            Mint Test USDT Tokens
+            Mint Test USDC Tokens
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -368,7 +368,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                 className="text-lg"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Maximum: 10,000 USDT per transaction
+                Maximum: 10,000 USDC per transaction
               </p>
             </div>
             
@@ -418,7 +418,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
             ) : (
               <>
                 <Droplets className="w-5 h-5 mr-2" />
-                Mint {formatCurrency(parseFloat(amount) || 0)} USDT
+                Mint {formatCurrency(parseFloat(amount) || 0)} USDC
               </>
             )}
           </Button>
@@ -430,10 +430,10 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
               <div className="text-sm text-blue-800 dark:text-blue-200">
                 <p className="font-medium">Test Token Information:</p>
                 <ul className="mt-1 space-y-1 text-xs text-blue-700 dark:text-blue-300">
-                  <li>• Real Hedera testnet USDT tokens (Token ID: 0.0.7115536)</li>
+                  <li>• Real Hedera testnet USDC tokens (Token ID: 0.0.7115536)</li>
                   <li>• Uses Hedera SDK for minting & transfer</li>
                   <li>• 5-minute cooldown between mints</li>
-                  <li>• Maximum 10,000 USDT per transaction</li>
+                  <li>• Maximum 10,000 USDC per transaction</li>
                   <li>• Free testnet tokens - no real value</li>
                 </ul>
               </div>
@@ -461,7 +461,7 @@ export default function FaucetPage({ userAddress, onBalanceUpdate, hashconnect }
                     </div>
                     <div>
                       <p className="font-medium text-emerald-800">
-                        {formatCurrency(mint.amount)} USDT
+                        {formatCurrency(mint.amount)} USDC
                       </p>
                       <p className="text-xs text-emerald-600">
                         {formatTime(mint.timestamp)}

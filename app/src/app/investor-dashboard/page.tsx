@@ -19,8 +19,8 @@ const API_BASE_URL = typeof window !== 'undefined'
   ? (window as any).location?.origin || 'http://localhost:3000'
   : 'http://localhost:3000';
 
-// USDT Token ID (from backend environment)
-const USDT_TOKEN_ID = '0.0.7115536';
+// USDC Token ID (from backend environment)
+const USDC_TOKEN_ID = '0.0.7115536';
 
 // Helper to get topic from HashConnect session
 const getTopicFromSession = (hc: any): string | null => {
@@ -47,7 +47,7 @@ export default function InvestorDashboard() {
   const { deposit, withdraw, isLoading: isLendingPoolLoading } = useLendingPool();
   const [userAddress, setUserAddress] = useState<string>("");
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [usdtBalance, setUsdtBalance] = useState<string>("0");
+  const [USDCBalance, setUSDCBalance] = useState<string>("0");
   const [isLoadingBalance, setIsLoadingBalance] = useState(false);
 
   // Ensure we're on the client side
@@ -59,12 +59,12 @@ export default function InvestorDashboard() {
   useEffect(() => {
     if (address) {
       setUserAddress(address);
-      fetchUsdtBalance(address);
+      fetchUSDCBalance(address);
     }
   }, [address]);
 
-  // Fetch USDT balance
-  const fetchUsdtBalance = async (walletAddress: string) => {
+  // Fetch USDC balance
+  const fetchUSDCBalance = async (walletAddress: string) => {
     if (!walletAddress) return;
     
     setIsLoadingBalance(true);
@@ -72,7 +72,7 @@ export default function InvestorDashboard() {
       const response = await fetch(`/api/faucet/balance/${walletAddress}`);
       if (response.ok) {
         const result = await response.json();
-        setUsdtBalance(result.balance || "0");
+        setUSDCBalance(result.balance || "0");
       }
     } catch (error) {
     } finally {
@@ -108,13 +108,13 @@ export default function InvestorDashboard() {
       amount,
       userAddress,
       hashconnect,
-      usdtTokenId: USDT_TOKEN_ID
+      USDCTokenId: USDC_TOKEN_ID
     });
 
     if (result?.success) {
       // Refresh balance after successful deposit
       setTimeout(() => {
-        fetchUsdtBalance(userAddress);
+        fetchUSDCBalance(userAddress);
       }, 3000);
     }
   };
@@ -135,7 +135,7 @@ export default function InvestorDashboard() {
     if (result?.success) {
       // Refresh balance after successful withdrawal
       setTimeout(() => {
-        fetchUsdtBalance(userAddress);
+        fetchUSDCBalance(userAddress);
       }, 3000);
     }
   };
@@ -247,7 +247,7 @@ export default function InvestorDashboard() {
                           {isLoadingBalance ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
                           ) : (
-                            <span>💵 {usdtBalance} USDT</span>
+                            <span>💵 {USDCBalance} USDC</span>
                           )}
                         </div>
                       </div>

@@ -438,20 +438,54 @@ export class ContractService {
 
       // Calculate derived values
       const totalAssets = totalCash + totalBorrowed;
-      // Convert from token units to human-readable (USDT has 6 decimals)
+      // Convert from token units to human-readable (USDC has 6 decimals)
       const availableLiquidity = (Number(totalCash) / 1e6).toString();
       const totalBorrowsHuman = (Number(totalBorrowed) / 1e6).toString();
       // Calculate utilization rate as percentage (0-100)
       const utilizationRate = totalAssets > 0 ? ((Number(totalBorrowed) * 100) / Number(totalAssets)).toFixed(2) : '0';
       
-      // Fetch borrow rate from pool details
+      // Fetch borrow rate and calculate supply APR (what investors earn)
+      // Supply APR = Borrow Rate * Utilization * (1 - Reserve Factor)
       let currentAPR = '5'; // Default fallback
       try {
         const poolDetails = await pool.getPoolDetails();
         const borrowRate = poolDetails.borrowRate;
-        currentAPR = ((Number(borrowRate) / 1e18) * 100).toFixed(2);
+        const borrowRateNumber = Number(borrowRate);
+        
+        // Get reserve factor if available, default to 10% (0.1)
+        let reserveFactor = 0.1; // 10% default
+        try {
+          const rf = await pool.reserveFactor();
+          reserveFactor = Number(rf) / 1e18;
+        } catch (rfError) {
+          this.logger.warn('Could not fetch reserve factor, using default 10%');
+        }
+        
+        // Check if borrowRate is valid (non-zero and reasonable)
+        if (borrowRateNumber > 0 && borrowRateNumber < 1e30) {
+          const borrowRatePercent = borrowRateNumber / 1e18;
+          const utilizationDecimal = parseFloat(utilizationRate) / 100;
+          
+          // Calculate supply APR: Borrow Rate * Utilization * (1 - Reserve Factor)
+          // This represents what investors earn from lending
+          const supplyAPR = (borrowRatePercent * utilizationDecimal * (1 - reserveFactor)) * 100;
+          
+          // Ensure APR is reasonable (between 0.01% and 100%)
+          if (supplyAPR >= 0.01 && supplyAPR <= 100) {
+            currentAPR = supplyAPR.toFixed(2);
+            this.logger.log(`Supply APR calculated: ${currentAPR}% (borrowRate: ${(borrowRatePercent * 100).toFixed(4)}%, utilization: ${utilizationRate}%, reserveFactor: ${(reserveFactor * 100).toFixed(1)}%)`);
+          } else {
+            // APR calculation resulted in invalid value, use dynamic calculation
+            this.logger.warn(`Calculated supply APR ${supplyAPR}% is out of valid range, using dynamic calculation`);
+            throw new Error('Invalid supply APR calculated');
+          }
+        } else {
+          // Borrow rate is 0 or invalid, use dynamic calculation
+          this.logger.warn(`Borrow rate from contract is ${borrowRateNumber}, using dynamic APR calculation`);
+          throw new Error('Borrow rate is zero or invalid');
+        }
       } catch (rateError) {
-        this.logger.warn('Could not fetch borrow rate, calculating dynamic APR:', rateError);
+        this.logger.warn('Could not fetch valid borrow rate, calculating dynamic APR:', rateError);
 
         // Calculate dynamic APR based on utilization rate
         // Base APR: 3%, increases with utilization up to 15%

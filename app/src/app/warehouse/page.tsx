@@ -115,14 +115,6 @@ function WarehouseLogin({ onLogin, isLoading = false, error }: WarehouseLoginPro
             </Button>
           </form>
           
-          {/* Demo Credentials */}
-          <div className="mt-6 p-4 bg-green-50 rounded-lg border border-green-200">
-            <h4 className="text-sm font-semibold text-green-800 mb-2">Demo Credentials</h4>
-            <div className="space-y-1 text-xs text-green-700">
-              <p><strong>Email:</strong> operator@warehouse.com</p>
-              <p><strong>Password:</strong> password</p>
-            </div>
-          </div>
           
           <div className="mt-4 text-center">
             <p className="text-sm text-muted-foreground">
@@ -149,38 +141,53 @@ export default function WarehousePage() {
   // Restore session from localStorage on mount
   useEffect(() => {
     const checkAuth = async () => {
-      const token = localStorage.getItem('warehouseToken');
-      const savedOperatorName = localStorage.getItem('warehouseOperatorName');
-      const savedWarehouseId = localStorage.getItem('warehouseId');
+      try {
+        const token = localStorage.getItem('warehouseToken');
+        const savedOperatorName = localStorage.getItem('warehouseOperatorName');
+        const savedWarehouseId = localStorage.getItem('warehouseId');
 
-      if (token && savedOperatorName && savedWarehouseId) {
-        // Verify token is still valid by making a test request
-        try {
-          const response = await fetch(`${BACKEND_URL}/warehouse/profile`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-            },
-          });
+        if (token && savedOperatorName && savedWarehouseId) {
+          // Verify token is still valid by making a test request
+          try {
+            if (!BACKEND_URL) {
+              console.warn('BACKEND_URL is not defined');
+              // If no backend URL, just use saved session data
+              setOperatorName(savedOperatorName);
+              setWarehouseId(savedWarehouseId);
+              setIsLoggedIn(true);
+              setIsCheckingAuth(false);
+              return;
+            }
 
-          if (response.ok) {
+            const response = await fetch(`${BACKEND_URL}/warehouse/profile`, {
+              headers: {
+                'Authorization': `Bearer ${token}`,
+              },
+            });
+
+            if (response.ok) {
+              setOperatorName(savedOperatorName);
+              setWarehouseId(savedWarehouseId);
+              setIsLoggedIn(true);
+            } else {
+              // Token is invalid, clear it
+              localStorage.removeItem('warehouseToken');
+              localStorage.removeItem('warehouseOperatorName');
+              localStorage.removeItem('warehouseId');
+            }
+          } catch (error) {
+            // Network error - if backend is not available, use saved session
+            console.warn('Backend connection failed, using cached session:', error);
             setOperatorName(savedOperatorName);
             setWarehouseId(savedWarehouseId);
             setIsLoggedIn(true);
-          } else {
-            // Token is invalid, clear it
-            localStorage.removeItem('warehouseToken');
-            localStorage.removeItem('warehouseOperatorName');
-            localStorage.removeItem('warehouseId');
           }
-        } catch (error) {
-          // Network error, just trust the token
-          setOperatorName(savedOperatorName);
-          setWarehouseId(savedWarehouseId);
-          setIsLoggedIn(true);
         }
+      } catch (error) {
+        console.error('Error during auth check:', error);
+      } finally {
+        setIsCheckingAuth(false);
       }
-
-      setIsCheckingAuth(false);
     };
 
     checkAuth();

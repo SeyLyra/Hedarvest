@@ -97,7 +97,7 @@ export const DepositModal = ({ isOpen, onClose, pool, onDeposit }: DepositModalP
 
           {/* Amount Input */}
           <div className="space-y-2">
-            <Label htmlFor="amount">Deposit Amount (USDT)</Label>
+            <Label htmlFor="amount">Deposit Amount (USDC)</Label>
             <div className="relative">
               <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
               <Input

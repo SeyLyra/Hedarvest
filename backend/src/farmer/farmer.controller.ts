@@ -29,6 +29,11 @@ export class FarmerController {
     return this.farmerService.registerFarmer(registerFarmerDto);
   }
 
+  @Post('login')
+  async loginFarmer(@Body() farmerLoginDto: FarmerLoginDto) {
+    return this.farmerService.loginFarmer(farmerLoginDto);
+  }
+
   @Get('loans')
   @UseGuards(JwtAuthGuard)
   async getLoans(@Request() req) {

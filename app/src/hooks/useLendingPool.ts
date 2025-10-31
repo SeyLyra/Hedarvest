@@ -15,7 +15,7 @@ interface DepositParams {
   amount: string;
   userAddress: string;
   hashconnect: any;
-  usdtTokenId: string; // HTS token ID like "0.0.7115536"
+  USDCTokenId: string; // HTS token ID like "0.0.7115536"
 }
 
 interface WithdrawParams {
@@ -29,12 +29,12 @@ export const useLendingPool = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   /**
-   * Deposit USDT into a lending pool
+   * Deposit USDC into a lending pool
    * Uses HTS 2-step pattern:
-   * 1. Transfer USDT to pool via Hedera SDK
+   * 1. Transfer USDC to pool via Hedera SDK
    * 2. Call deposit() contract function
    */
-  const deposit = async ({ poolAddress, amount, userAddress, hashconnect, usdtTokenId }: DepositParams) => {
+  const deposit = async ({ poolAddress, amount, userAddress, hashconnect, USDCTokenId }: DepositParams) => {
     if (!userAddress || !hashconnect) {
       toast.error('Please connect your wallet first');
       return { success: false, error: 'Wallet not connected' };
@@ -49,15 +49,15 @@ export const useLendingPool = () => {
     setIsLoading(true);
 
     try {
-      toast.info(`💰 Depositing ${depositAmount} USDT...`, { duration: 3000 });
+      toast.info(`💰 Depositing ${depositAmount} USDC...`, { duration: 3000 });
 
-      // Convert amount to token units (USDT has 6 decimals)
+      // Convert amount to token units (USDC has 6 decimals)
       const amountInUnits = Math.floor(depositAmount * 1e6);
 
       // Validate minimum deposit
-      const MIN_DEPOSIT = 1e6; // 1 USDT
+      const MIN_DEPOSIT = 1e6; // 1 USDC
       if (amountInUnits < MIN_DEPOSIT) {
-        throw new Error(`Minimum deposit is 1 USDT. You entered: ${depositAmount} USDT`);
+        throw new Error(`Minimum deposit is 1 USDC. You entered: ${depositAmount} USDC`);
       }
 
       // Get contract ID from mirror node
@@ -77,7 +77,7 @@ export const useLendingPool = () => {
       }
 
       // Check if token is associated first
-      const tokenId = TokenId.fromString(usdtTokenId);
+      const tokenId = TokenId.fromString(USDCTokenId);
       const userAccountId = AccountId.fromString(userAddress);
 
       try {
@@ -85,18 +85,18 @@ export const useLendingPool = () => {
           `https://testnet.mirrornode.hedera.com/api/v1/accounts/${userAddress}/tokens`
         );
         const balanceData = await balanceQuery.json();
-        const isAssociated = balanceData.tokens?.some((token: any) => token.token_id === usdtTokenId);
+        const isAssociated = balanceData.tokens?.some((token: any) => token.token_id === USDCTokenId);
         
         if (!isAssociated) {
-          throw new Error(`Token ${usdtTokenId} is not associated with your account. Please associate the token first using the faucet page or HashPack wallet.`);
+          throw new Error(`Token ${USDCTokenId} is not associated with your account. Please associate the token first using the faucet page or HashPack wallet.`);
         }
       } catch (checkError) {
         console.warn('Could not check token association:', checkError);
         // Continue anyway - let the transfer attempt tell us if there's an issue
       }
 
-      // Step 1: Transfer USDT tokens to pool via HTS
-      toast.info('Step 1/2: Transferring USDT to pool...');
+      // Step 1: Transfer USDC tokens to pool via HTS
+      toast.info('Step 1/2: Transferring USDC to pool...');
 
       const { TransferTransaction } = await import('@hashgraph/sdk');
       const poolAccountId = AccountId.fromString(contractId);
@@ -131,7 +131,7 @@ export const useLendingPool = () => {
 
       toast.success(`✅ Successfully deposited ${depositAmount} USDT!`, {
         duration: 5000,
-        description: '🎉 Step 3/3 complete - Your funds are now earning yield!'
+        description: '🎉 Your funds are now earning yield!'
       });
 
       // Log event to HCS (fire and forget - don't block on this)
@@ -143,7 +143,7 @@ export const useLendingPool = () => {
             poolAddress,
             amount: depositAmount,
             depositorAddress: userAddress,
-            contractTxHash: depositResult.transactionId || 'unknown',
+            contractTxHash: 'pending',
             timestamp: new Date().toISOString()
           })
         });
@@ -229,7 +229,7 @@ export const useLendingPool = () => {
             poolAddress,
             shares: withdrawShares,
             depositorAddress: userAddress,
-            contractTxHash: withdrawResult.transactionId || 'unknown',
+            contractTxHash: 'pending',
             timestamp: new Date().toISOString()
           })
         });

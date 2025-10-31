@@ -129,12 +129,21 @@ async function main() {
   // 2. Create Farmers with Real Hedera Wallets
   console.log('🔧 Creating Hedera wallets for farmers...');
 
+  // Hardcoded farmer credentials (stored as-is, no encryption when inserting)
+  // NOTE: Replace these with your actual hardcoded values
+  const HARDCODED_FARMER_ADDRESS = process.env.HARDCODED_FARMER_ADDRESS || ''; // e.g., "0.0.1234567"
+  const HARDCODED_FARMER_PRIVATE_KEY = process.env.HARDCODED_FARMER_PRIVATE_KEY || ''; // Plain text private key
+  
   const farmerData = [
     {
       memberNumber: 'FMR001',
       phoneNumber: '+254701234567',
       email: 'john.kamau@farm.ke',
       password: '$2b$10$BprF3xqmpb4bVRSzar0JJ.FQnrSdqnxiEEhWuLDyy75YMjEJOoZJi', // hashed "password123"
+      // Hardcoded values - store private key as-is (no encryption)
+      useHardcoded: true,
+      hardcodedAccountId: HARDCODED_FARMER_ADDRESS,
+      hardcodedPrivateKey: HARDCODED_FARMER_PRIVATE_KEY,
     },
     {
       memberNumber: 'FMR002',
@@ -150,20 +159,44 @@ async function main() {
     },
   ];
 
-  // Create wallets first
+  // Create wallets - first farmer uses hardcoded, others create new wallets
   const wallets = await Promise.all(
-    farmerData.map(async (farmer) => {
-      console.log(`  Creating wallet for ${farmer.email}...`);
-      const wallet = await createCustodialWallet(farmer.email);
+    farmerData.map(async (farmer, index) => {
+      if (farmer.useHardcoded && farmer.hardcodedAccountId && farmer.hardcodedPrivateKey) {
+        console.log(`  Using hardcoded wallet for ${farmer.email}...`);
+        // For hardcoded: convert account ID to EVM address and store private key as-is (no encryption)
+        let evmAddress: string;
+        try {
+          const { AccountId } = await import('@hashgraph/sdk');
+          const accountId = AccountId.fromString(farmer.hardcodedAccountId);
+          evmAddress = `0x${accountId.toSolidityAddress()}`;
+        } catch {
+          // If it's already an EVM address, use it as-is
+          evmAddress = farmer.hardcodedAccountId.startsWith('0x') 
+            ? farmer.hardcodedAccountId 
+            : `0x${farmer.hardcodedAccountId}`;
+        }
 
-      const encryptedPrivateKey = encryptPrivateKey(wallet.privateKey);
+        return {
+          ...farmer,
+          accountId: farmer.hardcodedAccountId.startsWith('0.0.') 
+            ? farmer.hardcodedAccountId 
+            : `0.0.${farmer.hardcodedAccountId.replace(/^0x/, '')}`,
+          evmAddress,
+          encryptedPrivateKey: farmer.hardcodedPrivateKey, // Store as-is, no encryption
+        };
+      } else {
+        console.log(`  Creating wallet for ${farmer.email}...`);
+        const wallet = await createCustodialWallet(farmer.email);
+        const encryptedPrivateKey = encryptPrivateKey(wallet.privateKey);
 
-      return {
-        ...farmer,
-        accountId: wallet.accountId,
-        evmAddress: wallet.evmAddress,
-        encryptedPrivateKey, // ✅ ENCRYPTED - safe to store
-      };
+        return {
+          ...farmer,
+          accountId: wallet.accountId,
+          evmAddress: wallet.evmAddress,
+          encryptedPrivateKey, // Encrypted for dynamically created wallets
+        };
+      }
     }),
   );
 

@@ -26,7 +26,7 @@ const InvestorAdvantageSection = () => {
           <div className="bg-card rounded-2xl p-6 shadow-card border border-border/50 text-center">
             <TrendingUp className="w-12 h-12 text-agricultural-green mx-auto mb-4" />
             <h3 className="text-lg font-semibold text-foreground mb-3">Predictable Yields</h3>
-            <p className="text-muted-foreground text-sm">8-12% APY from agricultural operations</p>
+            <p className="text-muted-foreground text-sm">1-10% APY from agricultural operations</p>
           </div>
           
           <div className="bg-card rounded-2xl p-6 shadow-card border border-border/50 text-center">

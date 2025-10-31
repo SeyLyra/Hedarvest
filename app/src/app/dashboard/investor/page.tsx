@@ -334,7 +334,7 @@ export default function InvestorDashboard() {
 
       if (response.ok) {
         const result = await response.json();
-        toast.success(`Successfully deposited ${amount} USDT to ${grainType} pool`);
+        toast.success(`Successfully deposited ${amount} USDC to ${grainType} pool`);
         toast.info(`Transaction Hash: ${result.transactions?.contractTxHash || 'Processing...'}`);
         setAmounts(prev => ({ ...prev, [grainType]: "" }));
         // Refresh pools to get updated liquidity
@@ -515,7 +515,7 @@ export default function InvestorDashboard() {
                    0.0000 <span className="text-xs text-blue-600 dark:text-blue-400">HBAR</span>
                  </div>
                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300">
-                   0.00 <span className="text-xs text-blue-600 dark:text-blue-400">USDT</span>
+                   0.00 <span className="text-xs text-blue-600 dark:text-blue-400">USDC</span>
                  </div>
                </>
              )}

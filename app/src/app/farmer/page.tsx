@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useState, useEffect } from "react";
 import FarmerLogin from "@/components/farmer/FarmerLogin";
 import FarmerDashboardNew from "@/components/farmer/FarmerDashboardNew";
+import { BACKEND_URL } from "@/lib/config";
 import {
   Wheat,
   DollarSign,
@@ -46,7 +47,7 @@ export default function FarmerPage() {
       if (token && storedEmail) {
         // Verify token is still valid by making a test request
         try {
-          const response = await fetch('/api/farmers/profile', {
+          const response = await fetch(`${BACKEND_URL}/farmers/profile`, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -95,7 +96,7 @@ export default function FarmerPage() {
     setError("");
 
     try {
-      const response = await fetch('/api/farmers/login', {
+      const response = await fetch(`${BACKEND_URL}/farmers/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

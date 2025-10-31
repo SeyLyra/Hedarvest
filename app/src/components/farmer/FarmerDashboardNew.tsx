@@ -215,8 +215,10 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
         let activeLoans = 0;
         for (const r of results) {
           if (!r) continue;
-          const coll = r.collateralValueUSD ? Number(r.collateralValueUSD) / 1e18 : 0;
-          const maxB = r.maxBorrowUSD ? Number(r.maxBorrowUSD) / 1e18 : 0;
+          // collateralValueUSD is now in human-readable format from backend
+          const coll = r.collateralValueUSD ? parseFloat(r.collateralValueUSD) : 0;
+          // maxBorrowUSD is now in human-readable format from backend
+          const maxB = r.maxBorrowUSD ? parseFloat(r.maxBorrowUSD) : 0;
           const bor = r.borrows ? Number(r.borrows) / 1e6 : 0; // USDC 6 decimals
           totalCollateral += coll;
           totalMaxBorrow += maxB;
@@ -896,8 +898,6 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
     );
   };
 
-  // removed mock crop pools section
-
   const renderMobileMenu = () => (
     <div className="lg:hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm">
       <div className="fixed left-0 top-0 h-full w-80 bg-background shadow-xl">
@@ -1428,13 +1428,37 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                               return;
                             }
 
+                            // Get transaction ID from result
+                            const txId = result.contractTxId || result.hederaTxId || result.transactionId || result.mirrorNodeUrl?.split('/').pop();
+                            const hashScanUrl = txId ? `https://hashscan.io/testnet/transaction/${txId}` : null;
+                            const mirrorUrl = txId ? `https://testnet.mirrornode.hedera.com/api/v1/transactions/${txId}` : null;
+
+                            // Show success toast with transaction links
+                            const toastDescription = txId 
+                              ? `Transaction: ${txId.substring(0, 20)}...`
+                              : 'Transaction submitted successfully';
+                            
                             toast.success(`Successfully deposited ${amount} ${selectedPoolForDeposit.grainType} tokens as collateral!`, {
-                              duration: 5000,
-                              action: result.mirrorNodeUrl ? {
+                              duration: 8000,
+                              description: toastDescription,
+                              action: hashScanUrl ? {
                                 label: 'View on HashScan',
-                                onClick: () => window.open(result.mirrorNodeUrl, '_blank')
+                                onClick: () => window.open(hashScanUrl, '_blank')
                               } : undefined,
                             });
+
+                            // Also show a second toast for Mirror Node link if available
+                            if (mirrorUrl && txId) {
+                              setTimeout(() => {
+                                toast.info('View transaction details', {
+                                  duration: 6000,
+                                  action: {
+                                    label: 'View in Mirror',
+                                    onClick: () => window.open(mirrorUrl, '_blank')
+                                  },
+                                });
+                              }, 500);
+                            }
                             
                             // Reset form and go back to pools
                             setDepositAmount("");
@@ -1515,7 +1539,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           <div className="flex-1">
                             <p className="text-sm text-blue-700 dark:text-blue-300">Maximum Borrowable Amount</p>
                             <p className="text-2xl font-bold text-blue-900 dark:text-blue-100 mt-1">
-                              ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                              ${selectedPoolForBorrow?.maxBorrow ? parseFloat(selectedPoolForBorrow.maxBorrow).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
                             </p>
                             <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
                               Based on your collateral (60% LTV)
@@ -1541,7 +1565,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           step="0.01"
                         />
                         <p className="text-xs text-slate-500 dark:text-slate-400">
-                          Maximum: ${selectedPoolForBorrow?.maxBorrow ? (parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
+                          Maximum: ${selectedPoolForBorrow?.maxBorrow ? parseFloat(selectedPoolForBorrow.maxBorrow).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00'} USDC
                         </p>
                       </div>
 
@@ -1575,7 +1599,7 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                           }
 
                           const maxBorrowNum = selectedPoolForBorrow.maxBorrow 
-                            ? parseFloat(selectedPoolForBorrow.maxBorrow) / 1e18 
+                            ? parseFloat(selectedPoolForBorrow.maxBorrow)
                             : 0;
 
                           if (amount > maxBorrowNum) {
@@ -1610,13 +1634,37 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                               return;
                             }
 
+                            // Get transaction ID from result
+                            const txId = result.contractTxId || result.hederaTxId || result.transactionId || result.mirrorNodeUrl?.split('/').pop();
+                            const hashScanUrl = txId ? `https://hashscan.io/testnet/transaction/${txId}` : null;
+                            const mirrorUrl = txId ? `https://testnet.mirrornode.hedera.com/api/v1/transactions/${txId}` : null;
+
+                            // Show success toast with transaction links
+                            const toastDescription = txId 
+                              ? `Transaction: ${txId.substring(0, 20)}...`
+                              : 'Transaction submitted successfully';
+                            
                             toast.success(`Successfully borrowed ${amount} USDC!`, {
-                              duration: 5000,
-                              action: result.mirrorNodeUrl ? {
+                              duration: 8000,
+                              description: toastDescription,
+                              action: hashScanUrl ? {
                                 label: 'View on HashScan',
-                                onClick: () => window.open(result.mirrorNodeUrl, '_blank')
+                                onClick: () => window.open(hashScanUrl, '_blank')
                               } : undefined,
                             });
+
+                            // Also show a second toast for Mirror Node link if available
+                            if (mirrorUrl && txId) {
+                              setTimeout(() => {
+                                toast.info('View transaction details', {
+                                  duration: 6000,
+                                  action: {
+                                    label: 'View in Mirror',
+                                    onClick: () => window.open(mirrorUrl, '_blank')
+                                  },
+                                });
+                              }, 500);
+                            }
 
                             // Update mock USDC balance locally (or re-fetch)
                             setUsdcBalance((prev) => prev + amount);
@@ -1679,10 +1727,10 @@ export default function FarmerDashboardNew({ farmerName, farmerId, onLogout, hed
                       ) : (
                         Object.keys(loanPositions).map((g) => {
                           const p = loanPositions[g] || {};
-                          const coll = p.collateralUSD ? (parseFloat(p.collateralUSD) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                          const coll = p.collateralUSD ? parseFloat(p.collateralUSD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
                           // Borrow value is in underlying token units (USDC), which is 6 decimals
                           const bor = p.borrowedUSD ? (parseFloat(p.borrowedUSD) / 1e6).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
-                          const max = p.maxBorrowUSD ? (parseFloat(p.maxBorrowUSD) / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
+                          const max = p.maxBorrowUSD ? parseFloat(p.maxBorrowUSD).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '0.00';
                           const ltvPct = p.ltv ? (Number(p.ltv) / 1e16).toFixed(2) : '—';
                           return (
                             <div key={g} className="border rounded-lg p-4">

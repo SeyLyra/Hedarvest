@@ -155,7 +155,7 @@ export const WithdrawModal = ({ isOpen, onClose, pool, onWithdraw }: WithdrawMod
               <div className="text-sm">
                 <p className="font-medium text-blue-800">Withdrawal Notice</p>
                 <p className="text-blue-700">
-                  Withdrawals are processed immediately. You will receive USDT based on current pool price.
+                  Withdrawals are processed immediately. You will receive USDC based on current pool price.
                 </p>
               </div>
             </div>

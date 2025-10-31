@@ -1022,20 +1022,39 @@ export class HederaService {
       }
 
       // Calculate max borrow: (collateralValueUSD * loanToValue) / 1e18
-      // loanToValue is in 18 decimals (e.g., 0.6e18 = 60%)
-      // Convert Long to string without scientific notation for BigInt conversion
       const collateralValueStr = collateralValueUSD.toString(10);
       const loanToValueStr = loanToValue.toString(10);
-      const maxBorrow = (BigInt(collateralValueStr) * BigInt(loanToValueStr)) / BigInt(10**18);
+      const maxBorrowRaw = (BigInt(collateralValueStr) * BigInt(loanToValueStr)) / BigInt(10**18);
+      
+      // Convert from 18 decimals to human-readable USD (divide by 1e18)
+      // The contract already returns the correct value in 18 decimals, just divide by 1e18
+      const maxBorrowHumanReadable = Number(maxBorrowRaw) / 1e18;
+      const collateralValueHumanReadable = Number(collateralValueUSD) / 1e18;
 
+      // Log the raw values for debugging
+      this.logger.log(
+        `📊 Farmer position for ${farmerAddress} (${grainType}):`,
+      );
+      this.logger.log(
+        `   Raw collateral: ${rawCollateral.toString(10)} (in token smallest units)`,
+      );
+      this.logger.log(
+        `   Raw collateralValueUSD: ${collateralValueUSD.toString(10)} (in 18 decimals)`,
+      );
+      this.logger.log(
+        `   Human-readable collateralValueUSD: ${collateralValueHumanReadable.toString()}`,
+      );
+      this.logger.log(
+        `   Max borrow (raw): ${maxBorrowRaw.toString()}, (human-readable): ${maxBorrowHumanReadable.toString()}`,
+      );
 
       // Convert Long values to strings without scientific notation
       return {
         collateral: rawCollateral.toString(10),
         borrows: borrows.toString(10),
-        collateralValueUSD: collateralValueUSD.toString(10),
-        maxBorrow: maxBorrow.toString(),
-        loanToValue: loanToValue.toString(10)
+        collateralValueUSD: collateralValueHumanReadable.toString(), // Return in human-readable format
+        maxBorrow: maxBorrowHumanReadable.toString(), // Return in human-readable format
+        loanToValue: loanToValue.toString(10),
       };
     } catch (error: any) {
       const errorMsg = error?.message || String(error);

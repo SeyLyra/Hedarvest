@@ -44,9 +44,10 @@ interface CropPoolsProps {
   onDeposit: (poolId: string) => void;
   onViewDetails: (poolId: string) => void;
   onBorrow?: (poolId: string) => void;
+  refreshKey?: number; // Key to force refetch
 }
 
-export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPoolsProps) {
+export default function CropPools({ onDeposit, onViewDetails, onBorrow, refreshKey }: CropPoolsProps) {
   const [pools, setPools] = useState<CropPool[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
@@ -55,12 +56,12 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
   const [collateralByGrain, setCollateralByGrain] = useState<Record<string, { hasCollateral: boolean; maxBorrow?: string }>>({});
   const [checkingCollateral, setCheckingCollateral] = useState(false);
 
-  // Fetch pools data on component mount (live only)
+  // Fetch pools data on component mount and when key changes
   useEffect(() => {
     const fetchPools = async () => {
       try {
         setLoading(true);
-        const response = await fetch('/api/pools/list');
+        const response = await fetch('/api/pools/list', { cache: 'no-store' });
         const data = await response.json();
         
         if (data.success) {
@@ -78,7 +79,7 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
     };
 
     fetchPools();
-  }, []);
+  }, [refreshKey]); // Refetch when refreshKey changes
 
   // Fetch per-pool collateral status (has collateral -> show Borrow)
   useEffect(() => {
@@ -377,7 +378,7 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                   </div>
                   {collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow && (
                     <p className="text-xs text-green-700 mt-1">
-                      Max borrow: ${(parseFloat(collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow || '0') / 1e18).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
+                      Max borrow: ${parseFloat(collateralByGrain[pool.grainType.toUpperCase()]?.maxBorrow || '0').toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USDC
                   </p>
                   )}
                 </div>
@@ -430,6 +431,7 @@ export default function CropPools({ onDeposit, onViewDetails, onBorrow }: CropPo
                     <Button 
                       className="flex-1 bg-green-600 hover:bg-green-700" 
                       onClick={() => onBorrow?.(pool.id.toString())}
+                      disabled={checkingCollateral}
                     >
                       <DollarSign className="h-4 w-4 mr-2" />
                       Borrow Funds

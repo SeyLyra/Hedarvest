@@ -260,6 +260,8 @@ export default function DepositCollateral({ onBack, onComplete, userAddress, has
   const [selectedTokens, setSelectedTokens] = useState<string[]>([]);
   const [depositAmount, setDepositAmount] = useState<string>("");
   const [isDepositing, setIsDepositing] = useState(false);
+  const [depositSuccess, setDepositSuccess] = useState(false);
+  const [txId, setTxId] = useState<string | null>(null);
 
   const availableTokens = mockCropTokens.filter(token => token.status === "available");
   const selectedPoolData = mockPools.find(pool => pool.id === selectedPool) || initialPoolData;
@@ -340,8 +342,10 @@ export default function DepositCollateral({ onBack, onComplete, userAddress, has
 
       const result = await response.json();
 
-      // Show success message
-      alert(`Collateral deposited successfully!\n\nTransaction ID: ${result.contractTxId}\n\nYou can now borrow against your ${poolInfo.cropType} collateral.`);
+      // Get transaction ID and build links
+      const transactionId = result.contractTxId || result.hederaTxId || result.transactionId;
+      setTxId(transactionId);
+      setDepositSuccess(true);
 
       // Create collateral data for completion callback
       const collateralData: CollateralData = {
@@ -607,30 +611,112 @@ export default function DepositCollateral({ onBack, onComplete, userAddress, has
         </Card>
       )}
 
+      {/* Success Modal */}
+      {depositSuccess && (
+        <Card className="bg-green-50 border-green-200">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2 text-green-700">
+              <CheckCircle className="h-6 w-6" />
+              <span>Collateral Deposited Successfully!</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-foreground">
+              You can now borrow against your {selectedPoolData?.cropType} collateral.
+            </p>
+            
+            {txId && (
+              <div className="bg-white p-4 rounded-lg space-y-3">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Transaction ID:</p>
+                  <p className="font-mono text-sm break-all">{txId}</p>
+                </div>
+                
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => window.open(`https://hashscan.io/testnet/transaction/${txId}`, '_blank')}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View on HashScan
+                  </Button>
+                  <Button
+                    onClick={() => window.open(`https://testnet.mirrornode.hedera.com/api/v1/transactions/${txId}`, '_blank')}
+                    variant="outline"
+                    className="flex-1"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View in Mirror
+                  </Button>
+                </div>
+              </div>
+            )}
+            
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDepositSuccess(false);
+                  setTxId(null);
+                  setDepositAmount("");
+                  setSelectedPool("");
+                }}
+                className="flex-1"
+              >
+                Make Another Deposit
+              </Button>
+              <Button
+                onClick={() => {
+                  setDepositSuccess(false);
+                  setTxId(null);
+                  onComplete({
+                    id: `collateral_${Date.now()}`,
+                    poolId: selectedPool,
+                    poolName: selectedPoolData?.name || '',
+                    tokenIds: [selectedPoolData?.cropType || ''],
+                    totalValue: parseFloat(depositAmount),
+                    collateralRatio: selectedPoolData?.collateralRatio || 0,
+                    maxBorrowAmount: parseFloat(depositAmount) * (selectedPoolData?.collateralRatio || 0),
+                    depositDate: new Date().toISOString().split('T')[0],
+                    status: "active"
+                  });
+                }}
+                className="flex-1 bg-green-600 hover:bg-green-700"
+              >
+                Continue to Borrow
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Navigation */}
-      <div className="flex justify-between">
-        <Button variant="outline" onClick={onBack}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back to Pools
-        </Button>
-        <Button
-          onClick={handleDeposit}
-          disabled={!selectedPool || !depositAmount || isDepositing}
-          className="bg-orange-600 hover:bg-orange-700"
-        >
-          {isDepositing ? (
-            <>
-              <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-              Depositing...
-            </>
-          ) : (
-            <>
-              <Lock className="h-4 w-4 mr-2" />
-              Deposit Collateral
-            </>
-          )}
-        </Button>
-      </div>
+      {!depositSuccess && (
+        <div className="flex justify-between">
+          <Button variant="outline" onClick={onBack}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Back to Pools
+          </Button>
+          <Button
+            onClick={handleDeposit}
+            disabled={!selectedPool || !depositAmount || isDepositing}
+            className="bg-orange-600 hover:bg-orange-700"
+          >
+            {isDepositing ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Depositing...
+              </>
+            ) : (
+              <>
+                <Lock className="h-4 w-4 mr-2" />
+                Deposit Collateral
+              </>
+            )}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

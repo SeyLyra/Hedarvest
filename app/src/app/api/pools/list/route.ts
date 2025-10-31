@@ -4,9 +4,10 @@ import { BACKEND_URL } from "@/lib/config"
 
 export async function GET() {
   try {
-    // Fetch real pool data from backend with shorter timeout for better UX
+    // Fetch real pool data from backend with longer timeout
+    // Backend might need time to query blockchain contracts
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000); // Reduced from 10s to 5s
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 seconds timeout
     const response = await fetch(`${BACKEND_URL}/pools`, {
       method: 'GET',
       headers: {
@@ -48,6 +49,30 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Failed to fetch pools from backend:", error);
+    
+    // Check if it's a timeout/abort error
+    if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
+      console.error("Backend request timed out after 30 seconds");
+      return NextResponse.json({
+        success: false,
+        error: "Backend request timed out. The blockchain query may be taking longer than expected. Please try again.",
+        timeout: true
+      }, {
+        status: 504 // Gateway Timeout
+      });
+    }
+
+    // Check if it's a connection error
+    if (error instanceof Error && (error.message.includes('ECONNREFUSED') || error.message.includes('fetch failed'))) {
+      console.error("Cannot connect to backend server");
+      return NextResponse.json({
+        success: false,
+        error: "Cannot connect to backend server. Please ensure the backend is running on port 3001.",
+        connectionError: true
+      }, {
+        status: 503 // Service Unavailable
+      });
+    }
 
     return NextResponse.json({
       success: false,

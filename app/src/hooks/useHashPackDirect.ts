@@ -7,6 +7,7 @@ interface HashPackDirectHook {
   accountId: string | null;
   error: string | null;
   isLoading: boolean;
+  isInitialized: boolean;
   connect: () => Promise<void>;
   disconnect: () => void;
   checkConnection: () => Promise<void>;
@@ -26,6 +27,7 @@ export function useHashPackDirect(): HashPackDirectHook {
       accountId: null,
       error: null,
       isLoading: false,
+      isInitialized: false,
       connect: async () => {},
       disconnect: () => {},
       checkConnection: async () => {},
@@ -39,6 +41,7 @@ export function useHashPackDirect(): HashPackDirectHook {
   const [accountId, setAccountId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const [hbarBalance, setHbarBalance] = useState<string | null>(null);
 
@@ -127,6 +130,7 @@ export function useHashPackDirect(): HashPackDirectHook {
         // Initialize
         await hc.init();
         setHashconnect(hc);
+        setIsInitialized(true);
         
         // Add console filter to suppress attestation errors, null URL errors, and stale proposal errors
         const originalError = console.error;
@@ -272,17 +276,28 @@ export function useHashPackDirect(): HashPackDirectHook {
   }, []);
 
   const connect = useCallback(async () => {
-    if (!hashconnect) {
-      setError('HashConnect not initialized');
-      return;
-    }
-
     // Clear any previous errors
     setError(null);
     setIsLoading(true);
 
     try {
-      
+      // Wait for hashconnect to initialize if it's not ready yet
+      let hc = hashconnect;
+      if (!hc) {
+        // Wait up to 3 seconds for initialization
+        const startTime = Date.now();
+        while (!hc && Date.now() - startTime < 3000) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+          hc = hashconnect;
+        }
+        
+        if (!hc) {
+          setError('HashConnect is initializing. Please wait a moment and try again.');
+          setIsLoading(false);
+          return;
+        }
+      }
+
       // Check if already connected
       if (connectionStatus === 'Connected') {
         setIsLoading(false);
@@ -294,7 +309,7 @@ export function useHashPackDirect(): HashPackDirectHook {
       sessionStorage.removeItem('hashpack_session');
       
       // Open pairing modal
-      await hashconnect.openPairingModal();
+      await hc.openPairingModal();
       
       // Set a shorter timeout to prevent long waits
       setTimeout(() => {
@@ -418,6 +433,7 @@ export function useHashPackDirect(): HashPackDirectHook {
     accountId,
     error,
     isLoading,
+    isInitialized,
     connect,
     disconnect,
     checkConnection,

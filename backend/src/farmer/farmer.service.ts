@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   NotFoundException,
   BadRequestException,
   UnauthorizedException,
@@ -33,6 +34,7 @@ import {
 
 @Injectable()
 export class FarmerService {
+  private readonly logger = new Logger(FarmerService.name);
   private readonly ENCRYPTION_KEY: Buffer;
   private readonly ENCRYPTION_ALGORITHM = 'aes-256-gcm';
 
@@ -72,24 +74,61 @@ export class FarmerService {
 
   /**
    * Decrypt private key for transaction signing
+   * Handles both encrypted (iv:authTag:encrypted) and plain text keys
+   *
+   * When you store a plain text key, it will be returned as-is.
+   * When you store an encrypted key, it will be decrypted.
    */
   private decryptPrivateKey(encryptedData: string): string {
-    const [ivHex, authTagHex, encrypted] = encryptedData.split(':');
+    if (!encryptedData) {
+      throw new BadRequestException('Private key is missing');
+    }
 
-    const iv = Buffer.from(ivHex, 'hex');
-    const authTag = Buffer.from(authTagHex, 'hex');
+    // Check if it's encrypted format (iv:authTag:encrypted - exactly 3 parts with colons)
+    const parts = encryptedData.split(':');
+    const isEncryptedFormat =
+      parts.length === 3 &&
+      parts[0].length > 0 &&
+      parts[1].length > 0 &&
+      parts[2].length > 0;
 
-    const decipher = crypto.createDecipheriv(
-      this.ENCRYPTION_ALGORITHM,
-      this.ENCRYPTION_KEY,
-      iv,
-    );
-    decipher.setAuthTag(authTag);
+    if (isEncryptedFormat) {
+      try {
+        const [ivHex, authTagHex, encrypted] = parts;
 
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+        // Validate hex format - if any part is not hex, it's plain text
+        if (
+          !/^[0-9a-fA-F]+$/.test(ivHex) ||
+          !/^[0-9a-fA-F]+$/.test(authTagHex) ||
+          !/^[0-9a-fA-F]+$/.test(encrypted)
+        ) {
+          // Not valid hex, probably plain text that happens to have colons
+          return encryptedData;
+        }
 
-    return decrypted;
+        const iv = Buffer.from(ivHex, 'hex');
+        const authTag = Buffer.from(authTagHex, 'hex');
+
+        const decipher = crypto.createDecipheriv(
+          this.ENCRYPTION_ALGORITHM,
+          this.ENCRYPTION_KEY,
+          iv,
+        );
+        decipher.setAuthTag(authTag);
+
+        let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+        decrypted += decipher.final('utf8');
+
+        return decrypted;
+      } catch {
+        // If decryption fails (wrong format, wrong key, etc.), assume it's plain text
+        this.logger.warn('Decryption failed, treating as plain text key');
+        return encryptedData;
+      }
+    }
+
+    // Not in encrypted format (no colons or wrong format) - return as plain text
+    return encryptedData;
   }
 
   /**
@@ -969,17 +1008,47 @@ export class FarmerService {
     const amountInSmallestUnits = Math.floor(amount * 1e6);
 
     try {
-      // Initialize Hedera client - CRITICAL: Use farmer's account, not operator!
+      // Initialize Hedera client - Use operator account initially for HBAR transfer
       const farmerAccountId = AccountId.fromString(farmer.hederaAccountId);
       const network = process.env.HEDERA_NETWORK || 'testnet';
 
       const Client = await import('@hashgraph/sdk').then((m) => m.Client);
+      const { AccountBalanceQuery } = await import('@hashgraph/sdk');
       const client = Client.forName(network);
 
-      // Parse farmer key BEFORE setting operator
+      // Use operator account to check farmer balance and transfer HBAR if needed
+      const operatorId = AccountId.fromString(process.env.HEDERA_OPERATOR_ID!);
+      const operatorKey = PrivateKey.fromString(
+        process.env.HEDERA_OPERATOR_KEY!,
+      );
+      client.setOperator(operatorId, operatorKey);
+
+      // Check farmer's HBAR balance
+      const balanceQuery = new AccountBalanceQuery().setAccountId(
+        farmerAccountId,
+      );
+      const balance = await balanceQuery.execute(client);
+      const hbarBalance = balance.hbars.toTinybars().toNumber();
+
+      // Ensure farmer has at least 0.1 HBAR (10000000 tinybars) for transaction fees
+      const minHbarRequired = 10000000; // 0.1 HBAR in tinybars
+      if (hbarBalance < minHbarRequired) {
+        const hbarToTransfer = new Hbar(0.2); // Transfer 0.2 HBAR
+        const transferTx = new TransferTransaction()
+          .addHbarTransfer(operatorId, hbarToTransfer.negated())
+          .addHbarTransfer(farmerAccountId, hbarToTransfer)
+          .freezeWith(client);
+
+        const transferTxSigned = await transferTx.sign(operatorKey);
+        const transferResponse = await transferTxSigned.execute(client);
+        await transferResponse.getReceipt(client);
+      }
+
+      // Parse farmer key for signing the contract transaction
       const farmerKey = this.parsePrivateKey(farmerPrivateKey);
 
-      // Set client operator to FARMER account so msg.sender is correct
+      // Now set operator to FARMER account so msg.sender is correct in the contract
+      // The farmer account now has enough HBAR to pay for the transaction
       client.setOperator(farmerAccountId, farmerKey);
 
       // Calculate the EVM address that will be used as msg.sender

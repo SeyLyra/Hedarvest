@@ -24,6 +24,4 @@ export class AuthController {
   async walletConnect(@Body() walletConnectDto: WalletConnectDto) {
     return this.authService.walletConnect(walletConnectDto);
   }
-
-  // removed unused wallet and profile endpoints
 }

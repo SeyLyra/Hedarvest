@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { BACKEND_URL } from "@/lib/config";
 import { 
   MapPin, 
   Search, 
@@ -80,7 +81,7 @@ export default function FindWarehouse({ onBack, onNext }: FindWarehouseProps) {
     const fetchWarehouses = async () => {
       try {
         setIsLoading(true);
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/warehouse/list`);
+        const response = await fetch(`${BACKEND_URL}/warehouse/list`);
         if (response.ok) {
           const data = await response.json();
           // Calculate distance from user's location (mock for now)

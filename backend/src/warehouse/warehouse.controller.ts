@@ -9,11 +9,12 @@ import {
   ParseIntPipe,
   UseGuards,
   Request,
+  NotFoundException,
 } from '@nestjs/common';
 import { WarehouseService } from './warehouse.service';
 import {
   CreateDeliveryDto,
-  UpdateDeliveryStatusDto,
+  UpdateDeliveryStatUSDCo,
   ReceiveDeliveryDto,
   VerifyDeliveryDto,
 } from './dto';
@@ -54,6 +55,32 @@ export class WarehouseController {
         id: warehouseData.warehouse.id,
         name: warehouseData.warehouse.name,
         operator: warehouseData.warehouse.manager || 'Warehouse Operator',
+      },
+    };
+  }
+
+  /**
+   * Get warehouse profile (for auth verification)
+   */
+  @Get('profile')
+  @UseGuards(JwtAuthGuard)
+  getProfile(@Request() req: any) {
+    // Extract warehouse ID from JWT token
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-assignment
+    const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
+    const warehouse = WAREHOUSES.find((w) => w.id === warehouseId);
+
+    if (!warehouse) {
+      throw new NotFoundException('Warehouse not found');
+    }
+
+    return {
+      warehouse: {
+        id: warehouse.id,
+        name: warehouse.name,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        email: req.user.email,
+        operator: warehouse.contact?.manager || 'Warehouse Operator',
       },
     };
   }
@@ -102,7 +129,7 @@ export class WarehouseController {
   @Put('deliveries/:id/status')
   async updateDeliveryStatus(
     @Param('id', ParseIntPipe) id: number,
-    @Body() updateDto: UpdateDeliveryStatusDto,
+    @Body() updateDto: UpdateDeliveryStatUSDCo,
   ) {
     return this.warehouseService.updateDeliveryStatus(id, updateDto);
   }
@@ -156,9 +183,4 @@ export class WarehouseController {
     const warehouseId = req.user.warehouseId || 'WH001'; // Default for demo
     return this.warehouseService.getIssuedReceipts(warehouseId, status);
   }
-
-  /**
-   * Get warehouse by ID (MUST be last to avoid catching other routes)
-   */
-  // removed unused GET :id
 }

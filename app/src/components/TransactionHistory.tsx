@@ -203,7 +203,7 @@ export default function TransactionHistory({ userAddress, transactions }: Transa
                   </div>
 
                   <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
-                    {event.payload.amount && `${event.payload.amount} USDT`}
+                    {event.payload.amount && `${event.payload.amount} USDC`}
                     {event.payload.shares && `${event.payload.shares} shares`}
                   </p>
 

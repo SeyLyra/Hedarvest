@@ -44,6 +44,7 @@ export default function InvestorLoginPage() {
     accountId,
     error,
     isLoading,
+    isInitialized,
     connect,
     disconnect,
     checkConnection,
@@ -160,6 +161,7 @@ export default function InvestorLoginPage() {
       accountId,
       error,
       isLoading,
+      isInitialized,
       isClient,
       windowHedera: typeof window !== 'undefined' ? !!window.hedera : false,
       windowHashpack: typeof window !== 'undefined' ? !!(window as any).hashpack : false
@@ -331,115 +333,61 @@ export default function InvestorLoginPage() {
       </div>
 
       {/* Main Content */}
-      <div className="relative z-10 p-8">
-        <div className="max-w-4xl mx-auto">
-          <div className="text-center mb-16">
-            {/* Clean Badge */}
-            <div className="mb-8">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-50/80 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20">
+      <div className="relative z-10 min-h-[calc(100vh-200px)] flex items-center">
+        <div className="max-w-3xl mx-auto w-full px-4">
+          <div className="text-center">
+            {/* Badge */}
+            <div className="mb-12">
+              <div className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-50/90 dark:bg-emerald-500/10 border border-emerald-200/60 dark:border-emerald-500/20 backdrop-blur-sm">
                 <Wheat className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span className="text-emerald-700 dark:text-emerald-300 font-medium">Powered by Hedera Network</span>
               </div>
-              </div>
+            </div>
               
             {/* Main Heading */}
-            <h1 className="text-5xl md:text-6xl font-bold mb-6 leading-tight">
-              <span className="block text-emerald-800 dark:text-emerald-200 mb-4">
-                  Institutional-Grade
+            <h1 className="text-6xl md:text-7xl font-black mb-8 leading-[1.1]">
+              <span className="block text-emerald-900 dark:text-emerald-50 mb-3 tracking-tight">
+                  Agricultural
                 </span>
               <span className="block bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent">
-                  Agricultural Investing
+                  Investing
                 </span>
               </h1>
               
             {/* Subtitle */}
-            <p className="text-xl text-emerald-700 dark:text-emerald-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-                Access a new asset class with predictable returns backed by real-world agricultural operations. 
-                Earn sustainable yields while supporting global food security.
+            <p className="text-2xl md:text-3xl text-emerald-800 dark:text-emerald-200 mb-16 max-w-2xl mx-auto leading-relaxed font-light">
+                Connect your wallet to access institutional-grade agricultural investment opportunities
               </p>
 
             {/* CTA Button */}
-            <div className="mb-16">
+            <div>
                 <Button
                   onClick={connect}
-                  disabled={isLoading}
-                className="bg-gradient-to-r from-emerald-400 to-teal-500 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-500 hover:to-teal-600 dark:hover:from-emerald-600 dark:hover:to-teal-600 text-white font-bold py-4 px-8 rounded-2xl shadow-lg hover:shadow-emerald-400/25 transition-all duration-300 hover:scale-105 text-lg"
+                  disabled={isLoading || !isInitialized}
+                  className="bg-gradient-to-r from-emerald-500 to-teal-600 dark:from-emerald-500 dark:to-teal-500 hover:from-emerald-600 hover:to-teal-700 dark:hover:from-emerald-600 dark:hover:to-teal-600 disabled:from-emerald-400 disabled:to-teal-400 disabled:cursor-not-allowed text-white font-bold py-7 px-16 rounded-2xl shadow-xl hover:shadow-emerald-500/30 transition-all duration-300 hover:scale-105 disabled:hover:scale-100 text-xl group"
                 >
                   {isLoading ? (
                     <>
-                    <Loader2 className="w-5 h-5 mr-3 animate-spin" />
-                    Connecting to HashPack...
+                    <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                    Connecting...
+                    </>
+                  ) : !isInitialized ? (
+                    <>
+                    <Loader2 className="w-6 h-6 mr-3 animate-spin" />
+                    Initializing...
                     </>
                   ) : (
                     <>
-                    <Wheat className="w-5 h-5 mr-3" />
-                    Start Investing Now
-                    <ArrowRight className="w-5 h-5 ml-3" />
+                    <Wallet className="w-6 h-6 mr-3 group-hover:translate-x-1 transition-transform" />
+                    Connect Wallet
+                    <ArrowRight className="w-6 h-6 ml-3 group-hover:translate-x-1 transition-transform" />
                     </>
                   )}
                 </Button>
               </div>
-                          </div>
-              
-          {/* Features Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-16">
-            {[
-              { title: "Real Asset Backing", desc: "100% collateralized by physical crops", emoji: "💎" },
-              { title: "Predictable Yields", desc: "8-12% APY from agricultural operations", emoji: "💰" },
-              { title: "Full Transparency", desc: "Blockchain-verified supply chain tracking", emoji: "👑" },
-              { title: "Diversified Portfolio", desc: "Multiple crops and geographic regions", emoji: "💠" }
-              ].map((item, index) => (
-              <Card key={index} className="group bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:border-emerald-300/60 dark:hover:border-emerald-400/30 transition-all duration-300 hover:scale-105 hover:shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
-                <CardContent className="p-6 text-center">
-                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{item.emoji}</div>
-                  <h3 className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-3 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{item.title}</h3>
-                  <p className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors text-sm">{item.desc}</p>
-                </CardContent>
-              </Card>
-              ))}
-                        </div>
 
-          {/* Why Invest Section */}
-          <Card className="mb-16 bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
-            <CardContent className="p-8">
-              <div className="text-center mb-12">
-                <h2 className="text-4xl font-bold text-emerald-800 dark:text-emerald-200 mb-6">
-                  Why Invest in Agricultural Assets?
-                </h2>
-                <p className="text-xl text-emerald-700 dark:text-emerald-300 max-w-3xl mx-auto">
-                  Traditional markets are volatile, but agriculture provides stable, inflation-resistant returns 
-                  backed by the world's most essential industry.
-                  </p>
-                </div>
-                
-              <div className="grid md:grid-cols-3 gap-8">
-                {[
-                  { emoji: "💎", title: "Stable Returns", desc: "Agricultural assets provide consistent returns regardless of market volatility, as food demand remains constant." },
-                  { emoji: "🌍", title: "Global Impact", desc: "Support sustainable farming practices while earning returns that contribute to global food security." },
-                  { emoji: "⚡", title: "Innovation", desc: "Be part of the blockchain revolution in agriculture, combining traditional farming with cutting-edge technology." }
-                  ].map((item, index) => (
-                  <div key={index} className="text-center group">
-                    <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{item.emoji}</div>
-                    <h3 className="text-2xl font-bold text-emerald-800 dark:text-emerald-200 mb-4 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{item.title}</h3>
-                    <p className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors leading-relaxed">
-                        {item.desc}
-                  </p>
-                </div>
-                  ))}
-                </div>
-            </CardContent>
-          </Card>
-
-          {/* Status Messages */}
-          <div className="text-center mb-16">
-            <h2 className="text-4xl font-bold text-emerald-800 dark:text-emerald-200 mb-6">
-              Ready to Start Investing?
-              </h2>
-            <p className="text-xl text-emerald-700 dark:text-emerald-300 mb-8">
-                Use the Connect HashPack button to connect your wallet and access the investor dashboard
-              </p>
-              
             {/* Status Messages */}
+            <div className="mt-16">
               {error && (
               <Card className="max-w-2xl mx-auto mb-8 bg-red-50/80 dark:bg-red-500/10 border-red-200/60 dark:border-red-500/20">
                 <CardContent className="p-6">
@@ -515,26 +463,7 @@ export default function InvestorLoginPage() {
               </Card>
               )}
             </div>
-
-          {/* Investment Stats */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[
-              { value: "8-12%", label: "Expected APY", desc: "Sustainable returns from agricultural operations", emoji: "💰" },
-              { value: "100%", label: "Asset Backed", desc: "Fully collateralized by physical crops", emoji: "💎" },
-              { value: "24/7", label: "Transparency", desc: "Blockchain-verified supply chain tracking", emoji: "👑" }
-            ].map((stat, index) => (
-              <Card key={index} className="group bg-white/80 dark:bg-[#121a16]/80 backdrop-blur-sm border-emerald-100/60 dark:border-emerald-500/15 hover:border-emerald-300/60 dark:hover:border-emerald-400/30 transition-all duration-300 hover:scale-105 hover:shadow-lg shadow-emerald-100/20 dark:shadow-emerald-500/5">
-                <CardContent className="p-6 text-center">
-                  <div className="text-4xl mb-4 group-hover:scale-110 transition-transform duration-300">{stat.emoji}</div>
-                  <div className="text-4xl font-bold bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 dark:from-emerald-400 dark:via-teal-400 dark:to-green-500 bg-clip-text text-transparent mb-2 group-hover:scale-110 transition-transform">
-                      {stat.value}
-              </div>
-                  <div className="text-lg font-bold text-emerald-800 dark:text-emerald-200 mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{stat.label}</div>
-                  <div className="text-emerald-700 dark:text-emerald-300 group-hover:text-emerald-800 dark:group-hover:text-emerald-200 transition-colors text-sm">{stat.desc}</div>
-                </CardContent>
-              </Card>
-              ))}
-            </div>
+          </div>
         </div>
       </div>
 

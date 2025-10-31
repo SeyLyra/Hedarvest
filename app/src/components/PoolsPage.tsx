@@ -42,7 +42,7 @@ export default function PoolsPage({ onDeposit, onWithdraw, isLoading, onRefreshN
   const fetchPools = async () => {
     setPoolsLoading(true);
     try {
-      console.log('🏊 Fetching pools from /api/pools/list...');
+      console.log('🏊 Fetching pools from backend...');
       const response = await fetch('/api/pools/list');
       console.log('   Response status:', response.status);
       

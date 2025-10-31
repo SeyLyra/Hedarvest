@@ -17,8 +17,8 @@ export const CROP_TOKEN_IDS = {
   RICE: process.env.NEXT_PUBLIC_RICE_TOKEN_ID || '0.0.7121334',
 };
 
-// USDT Token ID (used for borrowing)
-export const USDT_TOKEN_ID = process.env.NEXT_PUBLIC_USDT_TOKEN_ID || '0.0.7115536';
+// USDC Token ID (used for borrowing)
+export const USDC_TOKEN_ID = process.env.NEXT_PUBLIC_USDC_TOKEN_ID || '0.0.7115536';
 
 // Mock pool data (fallback when backend is unavailable)
 export const MOCK_POOLS = [
@@ -26,7 +26,7 @@ export const MOCK_POOLS = [
     id: 1,
     grainType: 'WHEAT',
     address: '0x0000000000000000000000000000000000000000', // Will be replaced with actual pool addresses
-    lendingTokenAddress: USDT_TOKEN_ID,
+    lendingTokenAddress: USDC_TOKEN_ID,
     collateralTokenAddress: CROP_TOKEN_IDS.WHEAT,
     price: 250.50,
     availableLiquidity: '50000',
@@ -38,7 +38,7 @@ export const MOCK_POOLS = [
     id: 2,
     grainType: 'RICE',
     address: '0x0000000000000000000000000000000000000001',
-    lendingTokenAddress: USDT_TOKEN_ID,
+    lendingTokenAddress: USDC_TOKEN_ID,
     collateralTokenAddress: CROP_TOKEN_IDS.RICE,
     price: 280.00,
     availableLiquidity: '75000',

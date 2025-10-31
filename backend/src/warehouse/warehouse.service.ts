@@ -2,7 +2,7 @@ import { Injectable, NotFoundException, BadRequestException, Logger, Unauthorize
 import { PrismaService } from '../lib/prisma';
 import {
   CreateDeliveryDto,
-  UpdateDeliveryStatusDto,
+  UpdateDeliveryStatUSDCo,
   ReceiveDeliveryDto,
   VerifyDeliveryDto,
 } from './dto';
@@ -198,7 +198,7 @@ export class WarehouseService {
   /**
    * Update delivery status
    */
-  async updateDeliveryStatus(id: number, updateDto: UpdateDeliveryStatusDto) {
+  async updateDeliveryStatus(id: number, updateDto: UpdateDeliveryStatUSDCo) {
     const delivery = await this.getDeliveryRequest(id);
 
     const updated = await this.prisma.delivery.update({
@@ -342,11 +342,11 @@ export class WarehouseService {
       },
     });
 
-    // Update delivery with verification results
+    // Update delivery status to 'minted' (tokens are being minted)
     await this.prisma.delivery.update({
       where: { id: deliveryId },
       data: {
-        status: 'verified',
+        status: 'minted',
         actualGrade: verifyDto.finalGrade,
         actualWeight: verifyDto.finalWeight,
         grainDepositId: grainDeposit.id,
@@ -384,9 +384,24 @@ export class WarehouseService {
         },
       });
 
+      // Update delivery status to 'complete' after successful minting
+      await this.prisma.delivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: 'complete',
+        },
+      });
+
       this.logger.log(`Minted ${tokenAmount} ${delivery.cropType} tokens to farmer ${farmerWallet}`);
     } catch (error) {
       this.logger.error('Failed to mint tokens:', error);
+      // Revert status back to 'received' if minting fails
+      await this.prisma.delivery.update({
+        where: { id: deliveryId },
+        data: {
+          status: 'received',
+        },
+      });
       // Continue even if minting fails, but mark it in the logs
       hederaTxId = `ERROR: ${error.message}`;
     }

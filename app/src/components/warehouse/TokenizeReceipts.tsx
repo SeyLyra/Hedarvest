@@ -111,6 +111,7 @@ interface ReceiptData {
   warehouseName: string;
   txHash: string;
   ipfsHash: string;
+  mirrorNodeUrl?: string;
   value: number;
   metadata: {
     moisture: number;
@@ -197,8 +198,8 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
         headers['Authorization'] = `Bearer ${token}`;
       }
 
-      // Fetch inspecting deliveries that are ready to be verified and tokenized
-      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries?status=inspecting`, {
+      // Fetch received deliveries that are ready to be tokenized
+      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries?status=received`, {
         method: 'GET',
         headers
       });
@@ -287,11 +288,8 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
       
       if (delivery) {
         try {
-          // Get the numeric ID from the delivery ID (remove 'del' prefix)
           const numericId = parseInt(deliveryId.replace('del', ''));
           setCurrentlyMintingId(deliveryId);
-
-          
 
           // Get warehouse token from localStorage
           const token = localStorage.getItem('warehouseToken');
@@ -311,16 +309,12 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
             notes: delivery.notes || `Verified and tokenized ${delivery.cropType}`,
           };
 
-          
-
           // Call the API to verify delivery and mint tokens
           const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/verify`, {
             method: 'POST',
             headers,
             body: JSON.stringify(requestBody)
           });
-
-          
 
           if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -351,6 +345,7 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
             warehouseName: "Green Valley Storage",
             txHash: hederaTxId || 'Minting failed - check logs',
             ipfsHash: 'N/A',
+            mirrorNodeUrl: mirrorNodeUrl,
             value: delivery.estimatedValue,
             metadata: {
               moisture: tokenData.grainDeposit?.moisturePercent || delivery.moisture,
@@ -365,24 +360,14 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
             },
             status: "minted"
           };
-
-          // Log Hedera minting info
-          if (hederaTxId && !hederaTxId.startsWith('ERROR:')) {
-            
-          } else if (hederaTxId?.startsWith('ERROR:')) {
-            
-          }
-
           setMintedReceipts(prev => [...prev, receiptData]);
           successCount++;
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
           setError(`Failed to mint token for ${delivery.farmerName}: ${errorMessage}`);
-          // Continue with other deliveries even if one fails
         } finally {
           setCurrentlyMintingId(null);
         }
-
         setMintingProgress(((i + 1) / selectedDeliveries.length) * 100);
       }
     }
@@ -529,7 +514,7 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
           <div className="flex items-center justify-between">
             <CardTitle className="flex items-center space-x-2">
               <CheckCircle className="h-5 w-5 text-blue-600" />
-              <span>Inspected Deliveries Ready for Verification & Tokenization</span>
+              <span>Received Deliveries Ready for Tokenization</span>
             </CardTitle>
             <div className="flex gap-2">
               <Button
@@ -571,14 +556,14 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
           {isLoading ? (
             <div className="flex justify-center items-center p-8">
               <RefreshCw className="h-8 w-8 text-blue-600 animate-spin" />
-              <span className="ml-2">Loading inspected deliveries...</span>
+              <span className="ml-2">Loading received deliveries...</span>
             </div>
           ) : verifiedDeliveries.length === 0 ? (
             <div className="text-center p-8">
               <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
               <h3 className="text-lg font-semibold mb-2">No Deliveries Ready</h3>
               <p className="text-muted-foreground mb-4">
-                There are no inspected deliveries ready for verification and tokenization. Complete quality inspections first.
+                There are no received deliveries ready for tokenization. Complete quality inspections first from the "Quality Inspection" tab.
               </p>
             </div>
           ) : (
@@ -695,6 +680,17 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
                             ⛓️ {receipt.txHash.substring(0, 20)}...
                           </div>
                         )}
+                        {receipt.mirrorNodeUrl && (
+                          <Button
+                            size="sm"
+                            variant="link"
+                            className="text-xs text-blue-600 hover:text-blue-800 p-0 h-auto mt-1"
+                            onClick={() => window.open(receipt.mirrorNodeUrl, '_blank')}
+                            title="View on Mirror Node"
+                          >
+                            🔗 View on Hashscan
+                          </Button>
+                        )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-foreground">{receipt.farmerName}</div>
@@ -722,7 +718,16 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
                           <Button size="sm" variant="outline" title="View Details">
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {receipt.txHash && !receipt.txHash.includes('failed') && !receipt.txHash.includes('Pending') && (
+                          {receipt.mirrorNodeUrl ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => window.open(receipt.mirrorNodeUrl, '_blank')}
+                              title="View on Hashscan (Mirror Node)"
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                            </Button>
+                          ) : receipt.txHash && !receipt.txHash.includes('failed') && !receipt.txHash.includes('Pending') ? (
                             <Button
                               size="sm"
                               variant="outline"
@@ -731,7 +736,7 @@ export default function TokenizeReceipts({ onBack, onComplete }: TokenizeReceipt
                             >
                               <ExternalLink className="h-4 w-4" />
                             </Button>
-                          )}
+                          ) : null}
                           <Button size="sm" variant="outline" title="Generate QR Code">
                             <QrCode className="h-4 w-4" />
                           </Button>

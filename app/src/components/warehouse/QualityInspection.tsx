@@ -251,9 +251,7 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
         // Contaminant testing validation
         break;
       case 4:
-        if (inspectionData.photos?.length === 0) {
-          newErrors.photos = "At least one photo is required";
-        }
+        // Photos are optional, no validation needed
         break;
     }
 
@@ -290,13 +288,14 @@ export default function QualityInspection({ deliveryId, deliveryData, onBack, on
       // Just update the delivery status to "inspecting" and save inspection data
       // Don't verify or mint yet - that happens in the Tokenize tab
       const inspectionNotes = `Inspection completed by ${inspectionData.inspectorName}
-Quality Grade: ${inspectionData.qualityGrade}
-Moisture: ${inspectionData.moisture}%
-Temperature: ${inspectionData.temperature}°C
-Impurities: ${inspectionData.impurities}%
-Weight: ${inspectionData.measurements?.weight} kg
-${inspectionData.notes || ''}`;
+        Quality Grade: ${inspectionData.qualityGrade}
+        Moisture: ${inspectionData.moisture}%
+        Temperature: ${inspectionData.temperature}°C
+        Impurities: ${inspectionData.impurities}%
+        Weight: ${inspectionData.measurements?.weight} kg
+        ${inspectionData.notes || ''}`;
 
+      // Update status to "inspecting" first to mark inspection in progress
       const payload = {
         status: 'inspecting',
         notes: inspectionNotes,
@@ -317,11 +316,34 @@ ${inspectionData.notes || ''}`;
         throw new Error(err.message || 'Failed to save inspection');
       }
 
-      const result = await res.json();
-      alert('✅ Inspection completed! Go to the Tokenize tab to mint tokens.');
+      // After inspection is saved, mark delivery as received (ready for tokenization)
+      const receivedPayload = {
+        status: 'received',
+        notes: inspectionNotes,
+        grade: inspectionData.qualityGrade,
+        weight: inspectionData.measurements?.weight,
+        moistureContent: inspectionData.moisture,
+        temperature: inspectionData.temperature,
+      };
+
+      const receivedRes = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericIncomingId}/status`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(receivedPayload),
+      });
+
+      if (!receivedRes.ok) {
+        const err = await receivedRes.json().catch(() => ({}));
+        throw new Error(err.message || 'Failed to mark delivery as received after inspection');
+      }
+
+      const result = await receivedRes.json();
+      // Inspection completed and delivery marked as received - will navigate to tokenize tab
       onComplete({ ...(inspectionData as InspectionData) });
     } catch (e: any) {
-      alert(e?.message || 'Failed to save inspection');
+      const errorMessage = e?.message || 'Failed to complete inspection';
+      alert(`❌ ${errorMessage}`);
+      console.error('Inspection error:', e);
     } finally {
       setSubmitting(false);
     }
@@ -642,12 +664,12 @@ ${inspectionData.notes || ''}`;
             </div>
 
             <div className="space-y-4">
-              <h4 className="text-lg font-medium text-foreground">Inspection Photos</h4>
+              <h4 className="text-lg font-medium text-foreground">Inspection Photos (Optional)</h4>
               <div className="border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary transition-colors">
                 <Camera className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-lg font-medium text-foreground mb-2">Upload inspection photos</p>
+                <p className="text-lg font-medium text-foreground mb-2">Upload inspection photos (Optional)</p>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Take clear photos of the crop samples and inspection process
+                  Optionally upload photos of the crop samples and inspection process
                 </p>
                 <input
                   type="file"
@@ -657,10 +679,10 @@ ${inspectionData.notes || ''}`;
                   className="hidden"
                   id="photo-upload"
                 />
-                <Button asChild>
+                <Button asChild variant="outline">
                   <label htmlFor="photo-upload" className="cursor-pointer">
                     <Upload className="h-4 w-4 mr-2" />
-                    Choose Photos
+                    Choose Photos (Optional)
                   </label>
                 </Button>
               </div>

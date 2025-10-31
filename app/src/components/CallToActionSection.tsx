@@ -92,7 +92,7 @@ const CallToActionSection = () => {
           <div className="bg-gradient-to-br from-emerald-500/10 to-teal-600/10 rounded-3xl p-8 text-center card-hover group">
             <div className="text-6xl mb-6 group-hover:animate-bounce">🪙</div>
             <h3 className="text-2xl font-bold text-foreground mb-4 group-hover:text-emerald-600 transition-colors">Test Token Faucet</h3>
-            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Get free USDT tokens for testing on Hedera testnet</p>
+            <p className="text-muted-foreground mb-6 group-hover:text-foreground transition-colors">Get free USDC tokens for testing on Hedera testnet</p>
             <Button variant="outline" size="lg" className="w-full group" asChild>
               <a href="/faucet">
                 <span className="group-hover:animate-bounce">🪙</span>

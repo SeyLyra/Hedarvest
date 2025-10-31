@@ -26,7 +26,7 @@ interface DepositCollateralParams {
 
 interface BorrowParams {
   poolAddress: string;
-  amount: string; // Amount to borrow (in USDT)
+  amount: string; // Amount to borrow (in USDC)
   userAddress: string;
   hashconnect: any;
 }
@@ -198,9 +198,9 @@ export const useCollateralDeposit = () => {
     setIsLoading(true);
 
     try {
-      toast.info(`💵 Borrowing ${borrowAmount} USDT...`, { duration: 3000 });
+      toast.info(`💵 Borrowing ${borrowAmount} USDC...`, { duration: 3000 });
 
-      // Convert amount to token units (USDT has 6 decimals)
+      // Convert amount to token units (USDC has 6 decimals)
       const amountInUnits = Math.floor(borrowAmount * 1e6);
 
       // Get contract ID from mirror node
@@ -235,7 +235,7 @@ export const useCollateralDeposit = () => {
         throw new Error(`Borrow failed: ${borrowResult.error || 'Unknown error'}`);
       }
 
-      toast.success(`✅ Successfully borrowed ${borrowAmount} USDT!`, {
+      toast.success(`✅ Successfully borrowed ${borrowAmount} USDC!`, {
         duration: 5000,
         description: '💰 Funds have been transferred to your wallet'
       });

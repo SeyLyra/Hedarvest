@@ -154,7 +154,7 @@ interface Delivery {
   unit: string;
   grade: string;
   arrivalDate: string;
-  status: "pending" | "inspecting" | "verified" | "rejected";
+  status: "pending" | "inspecting" | "received" | "minted" | "complete" | "rejected";
   priority: "low" | "medium" | "high";
   estimatedValue: number;
   location: string;
@@ -211,14 +211,21 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
 
   // Fetch delivery requests and incoming deliveries from API
   useEffect(() => {
-    setIsLoading(true);
-    fetchDeliveriesData();
+    if (warehouseId) {
+      setIsLoading(true);
+      fetchDeliveriesData().catch((error) => {
+        console.error('Error fetching deliveries:', error);
+        setIsLoading(false);
+      });
+    }
   }, [warehouseId, refreshKey]);
 
   // Fetch issued receipts when switching to that section
   useEffect(() => {
-    if (currentSection === "issued-receipts") {
-      fetchIssuedReceipts();
+    if (currentSection === "issued-receipts" && warehouseId) {
+      fetchIssuedReceipts().catch((error) => {
+        console.error('Error fetching receipts:', error);
+      });
     }
   }, [currentSection, warehouseId]);
 
@@ -226,7 +233,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const warehouseStats = {
     totalTokensIssued: issuedReceipts.reduce((sum, r) => sum + (r.tokensMinted || 0), 0),
     pendingDeliveries: recentDeliveries.filter(d => d.status === "pending").length,
-    verifiedToday: recentDeliveries.filter(d => d.status === "verified").length,
+    verifiedToday: recentDeliveries.filter(d => d.status === "complete").length,
     totalValue: recentDeliveries.reduce((sum, d) => sum + d.estimatedValue, 0),
     averageProcessingTime: "2.3 hours", // TODO: Calculate from backend
     staffCount: 8, // TODO: Get from backend
@@ -276,6 +283,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   const fetchIssuedReceipts = async () => {
     setIsLoadingReceipts(true);
     try {
+      if (typeof window === 'undefined' || !BACKEND_URL) {
+        console.warn('Cannot fetch receipts: window or BACKEND_URL not available');
+        setIssuedReceipts([]);
+        setIsLoadingReceipts(false);
+        return;
+      }
+
       // Get warehouse token from localStorage
       const token = localStorage.getItem('warehouseToken');
       const headers: HeadersInit = {
@@ -312,6 +326,11 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
 
   const receiveDeliveryRequest = async (deliveryId: string, delivery: Delivery) => {
     try {
+      if (typeof window === 'undefined' || !BACKEND_URL) {
+        showToast('Cannot receive delivery: backend not available', 'error');
+        return;
+      }
+
       const numericId = parseInt(deliveryId.replace('req', ''));
       
       // Get warehouse token from localStorage
@@ -359,6 +378,13 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
   // Extract fetchDeliveries logic into a separate function for reuse
   const fetchDeliveriesData = async () => {
     try {
+      if (typeof window === 'undefined' || !BACKEND_URL) {
+        console.warn('Cannot fetch deliveries: window or BACKEND_URL not available');
+        setRecentDeliveries([]);
+        setIsLoading(false);
+        return;
+      }
+
       // Get warehouse token from localStorage
       const token = localStorage.getItem('warehouseToken');
       const headers: HeadersInit = {
@@ -423,7 +449,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
       if (deliveriesRes.ok) {
         const transformedIncoming: Delivery[] = deliveriesJson
           .filter((item: any) => {
-            return item.arrivalDate && (item.status === 'pending' || item.status === 'inspecting');
+            return item.arrivalDate && (item.status === 'pending' || item.status === 'inspecting' || item.status === 'received');
           })
           .map((item: any) => {
             // Extract farmer name from email if available, fallback to memberNumber
@@ -449,7 +475,7 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
               unit: item.unit || 'kg',
               grade: grade,
               arrivalDate: new Date(item.arrivalDate).toISOString().split('T')[0],
-              status: item.status as "pending" | "inspecting" | "verified" | "rejected",
+              status: item.status as "pending" | "inspecting" | "received" | "minted" | "complete" | "rejected",
               priority: item.priority as "low" | "medium" | "high",
               estimatedValue: parseFloat(item.estimatedValue || "0"),
               location: item.storageLocation || item.location || "Unknown",
@@ -514,42 +540,16 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
     }
   };
 
-  // Allow inspection to begin before receiving (for pending requests)
-  const startInspection = async (deliveryId: string) => {
-    try {
-      const numericId = parseInt(deliveryId.replace(/^req|^del/, ''));
-      const response = await fetch(`${BACKEND_URL}/warehouse/deliveries/${numericId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          status: 'inspecting',
-          notes: 'Inspection started',
-        })
-      });
-
-      if (response.ok) {
-        // Reflect status change locally
-        const updated = recentDeliveries.map(d =>
-          d.id === deliveryId ? { ...d, status: 'inspecting' as const } : d
-        );
-        setRecentDeliveries(updated);
-        showToast('Inspection started', 'success');
-      } else {
-        showToast('Failed to start inspection', 'error');
-      }
-    } catch (error) {
-      logError('Error starting inspection:', error);
-      showToast('Error starting inspection', 'error');
-    }
-  };
+  // Note: startInspection function removed - now inspection buttons directly open the form
+  // The form will handle status changes when submitted
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case "pending": return "text-yellow-600 bg-yellow-100";
       case "inspecting": return "text-blue-600 bg-blue-100";
-      case "verified": return "text-green-600 bg-green-100";
+      case "received": return "text-cyan-600 bg-cyan-100";
+      case "minted": return "text-purple-600 bg-purple-100";
+      case "complete": return "text-green-600 bg-green-100";
       case "rejected": return "text-red-600 bg-red-100";
       case "active": return "text-green-600 bg-green-100";
       case "pledged": return "text-purple-600 bg-purple-100";
@@ -923,8 +923,12 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => startInspection(delivery.id)}
-                            title="Start Inspection"
+                            onClick={() => {
+                              setSelectedDelivery(delivery);
+                              setShowQualityInspection(true);
+                              setCurrentSection("quality-inspection");
+                            }}
+                            title="Start Quality Inspection"
                           >
                             <FlaskConical className="h-4 w-4" />
                           </Button>
@@ -961,13 +965,17 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => startInspection(delivery.id)}
-                                title="Start Inspection"
+                                onClick={() => {
+                                  setSelectedDelivery(delivery);
+                                  setShowQualityInspection(true);
+                                  setCurrentSection("quality-inspection");
+                                }}
+                                title="Start Quality Inspection"
                               >
-                                <CheckCircle className="h-4 w-4" />
+                                <FlaskConical className="h-4 w-4" />
                               </Button>
                             )}
-                            {delivery.status === 'inspecting' && (
+                            {delivery.status === 'received' && (
                               <Button
                                 size="sm"
                                 className="bg-green-600 hover:bg-green-700 text-white"
@@ -1441,13 +1449,19 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
                   temperature: selectedDelivery.temperature,
                   notes: selectedDelivery.notes
                 } : undefined}
-                onBack={() => setShowQualityInspection(false)} 
+                onBack={() => {
+                  setShowQualityInspection(false);
+                  setCurrentSection("incoming-deliveries");
+                }} 
                 onComplete={(data) => {
                   setShowQualityInspection(false);
-                  // After inspection, refresh incoming lists
+                  // After inspection is completed and verified, refresh data and go to tokenize tab
                   setRefreshKey((k: number) => k + 1);
-                  showToast('Inspection completed! Go to Tokenize tab to mint tokens.', 'success');
-                  setCurrentSection("tokenize-receipts");
+                  showToast('✅ Inspection completed and verified! Navigating to Tokenize tab...', 'success');
+                  // Navigate to tokenize tab after a short delay to show the success message
+                  setTimeout(() => {
+                    setCurrentSection("tokenize-receipts");
+                  }, 1000);
                 }} 
               />
             ) : (
@@ -1465,9 +1479,9 @@ export default function WarehouseDashboard({ operatorName, warehouseId, onLogout
           )}
           {currentSection === "tokenize-receipts" && (
             <TokenizeReceipts
+              key={refreshKey} // Force remount when refreshKey changes to refresh the list
               onBack={() => setCurrentSection("overview")}
               onComplete={(data) => {
-                
                 // Refresh data and navigate to issued receipts
                 setRefreshKey((k: number) => k + 1);
                 setCurrentSection("issued-receipts");

@@ -26,7 +26,7 @@ export const useDeposit = () => {
     setIsLoading(true);
     
     try {
-      toast.info(`💰 Depositing ${depositAmount} USDT to ${grainType} pool...`, { duration: 3000 });
+      toast.info(`💰 Depositing ${depositAmount} USDC to ${grainType} pool...`, { duration: 3000 });
       
       // Get pool address
       const poolsResponse = await fetch('/api/pools/list');
@@ -81,7 +81,7 @@ export const useDeposit = () => {
         throw new Error(`Deposit failed: ${transactionResult.error || 'Unknown error'}`);
       }
 
-      toast.success(`✅ Successfully deposited ${depositAmount} USDT to ${grainType} pool!`, {
+      toast.success(`✅ Successfully deposited ${depositAmount} USDC to ${grainType} pool!`, {
         duration: 5000,
         description: '🎉 Your funds are now earning yield!'
       });

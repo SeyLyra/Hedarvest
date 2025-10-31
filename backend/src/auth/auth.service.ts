@@ -44,8 +44,6 @@ export class AuthService {
     };
   }
 
-  // QR/PIN login removed in favor of OTP flow
-
   async verifyToken(token: string) {
     try {
       const payload = this.jwtService.verify(token);

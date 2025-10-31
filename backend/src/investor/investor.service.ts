@@ -301,7 +301,7 @@ export class InvestorService {
           if (Number(lpShares) > 0) {
             // Calculate REAL position value using liquidity index
             // Formula: (LP shares × liquidityIndex) / 1e27 / 10^decimals = value in underlying token (human-readable)
-            // LP shares are in the same decimals as the underlying token (e.g., USDT = 6 decimals)
+            // LP shares are in the same decimals as the underlying token (e.g., USDC = 6 decimals)
 
             this.logger.log(`=== DETAILED CALCULATION DEBUG ===`);
             this.logger.log(`LP Shares (raw string): "${lpShares}"`);
@@ -322,7 +322,7 @@ export class InvestorService {
             const positionValueInSmallestUnits = product / BigInt(1e27);
             this.logger.log(`After dividing by 1e27: ${positionValueInSmallestUnits.toString()}`);
 
-            // Convert to human-readable using actual token decimals (e.g., USDT has 6 decimals)
+            // Convert to human-readable using actual token decimals (e.g., USDC has 6 decimals)
             const decimalDivisor = Math.pow(10, underlyingDecimals);
             this.logger.log(`Decimal divisor (10^${underlyingDecimals}): ${decimalDivisor}`);
 
